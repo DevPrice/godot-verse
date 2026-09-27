@@ -6,9 +6,12 @@
 #include "Containers/Array.h"
 #include "Containers/StringView.h"
 #include "Containers/UnrealString.h"
+#include "HostScript.h"
+#include "Templates/SharedPointer.h"
 
 namespace uLang {
 class CClass;
+class CDataDefinition;
 class CEnumeration;
 class CNormalType;
 class CSemanticProgram;
@@ -16,6 +19,7 @@ class CTypeBase;
 }
 
 namespace verse_math {
+struct field;
 struct layout;
 }
 
@@ -148,5 +152,160 @@ AUTORTFM_DISABLE FUtf8String QualifiedNameOf(const uLang::CClass& Class);
 
 /// The generated layout of the mirrored math struct of that Verse name, or null.
 AUTORTFM_DISABLE const verse_math::layout* FindStructLayout(FUtf8StringView VerseName);
+
+/// A mirrored struct whose value can cross, and the fields the Godot type is built from.
+///
+/// Order is Godot's, not the declaration's: the wire carries a tuple of numbers and the consumer
+/// rebuilds a Vector2 or a Color by position, so these are the positions. Verse's own struct
+/// declarations in GodotApi.native.verse happen to agree, which is convenient and not the contract.
+// The math types' shapes come from the generator, which builds them from the same list that emits
+// the Verse structs and their packers -- see GodotMathLayout.gen.h. Aliased rather than renamed so
+// that the call sites below read as they did when there were three hand-written entries.
+using FStructLayout = verse_math::layout;
+using FStructField = verse_math::field;
+
+/// What a script's class declares a member as, beyond what the value sitting in the slot can say.
+///
+/// Both marshalling directions need this, for the same reason in two shapes. A read cannot tell a
+/// `?node2d` holding nothing from a `logic` holding false, because Verse spells an empty option and
+/// false with the same cell. A write has to build a value of the member's declared class, and an
+/// empty slot does not name one.
+struct FMemberType
+{
+    /// What ClassifyDeclaredType answered, which is what the converters switch over. A sidecar does
+    /// not carry it: ReadMemberType recovers it from the fields below (RecordedKind).
+    EDeclaredKind Kind = EDeclaredKind::Other;
+    const uLang::CDataDefinition* Member = nullptr;
+    /// Whether the member was declared `var`. The *pointer* above answered this until a runtime
+    /// host had to: `Member->IsVar()` is null there, which read as "every member is read-only" and
+    /// silently dropped every write an exported game made to its own state.
+    bool bIsVar = false;
+    /// The class a reference member or parameter holds, and which package declares it. Null and
+    /// Other for one of any other type.
+    ///
+    /// The *pointer* is the analysis's, and a runtime host has no semantic program to hold one in:
+    /// everything but GetClassSignals reads only the two names, so those are carried beside it and
+    /// are what a description read back out of the sidecar has.
+    const uLang::CClass* ReferenceClass = nullptr;
+    /// `node2d` -- what FindMirroredClass takes. Empty for a type that is not a reference, and the
+    /// test for "is this a reference" everywhere the pointer is not available.
+    FUtf8String ReferenceName;
+    /// `/Godot.org/Godot/node2d` -- what FindGodotClass takes for a script class.
+    FUtf8String ReferenceQualifiedName;
+    EClassOrigin ReferenceOrigin = EClassOrigin::Other;
+    /// Whether it was declared `?node2d` rather than `node2d`. An *exported member* must be optional
+    /// -- the inspector can leave a slot empty, and VH_EXPORT_OBJECT_NOT_OPTIONAL says so -- but a
+    /// method argument always arrives with a value, so both spellings are legal there and the
+    /// difference is only whether the value handed over is wrapped.
+    bool bReferenceIsOption = false;
+    /// The mirrored struct a member is declared as, which is where its field names come from --
+    /// there is nothing in a value to read them off. The layout is a generated table every host
+    /// links, so the name beside it is enough to find it again after a round trip through JSON.
+    const FStructLayout* Struct = nullptr;
+    FUtf8String StructName;
+    /// How many enumerators the declared enum has, or 0 for a member that is not one. The ordinal
+    /// that crosses has to be checked against this, and the value in the slot cannot say: an enum
+    /// over a native UEnum property is stored as the number itself.
+    int32 EnumeratorCount = 0;
+    /// The declared enum's decorated name -- `(/user@localhost:)exports_mode`. A member write finds
+    /// the enumeration through the enumerator already in the slot; a method argument has no slot,
+    /// so it has to be looked up, and this is what by.
+    FUtf8String EnumerationName;
+    /// What the export description makes of the same type. An array's element kind comes from here
+    /// rather than from a classification of its own: the value cannot say -- an empty array has no
+    /// element to look at, and the description is the answer the Godot side was already given.
+    GodotVerse::FExportDesc Described;
+
+    /// For a struct the *project* declares -- never one of Godot's sixteen, which have `Struct`
+    /// above and a generated layout behind it. Held behind a pointer because the layout holds
+    /// FMemberTypes of its own, which a struct with a struct field makes recursive.
+    TSharedPtr<struct FUserStructLayout> UserStruct;
+};
+
+/// A project's own struct, as much of it as building one back from the wire needs.
+///
+/// The mirrored math types have `FStructLayout`, generated from extension_api.json and flat arrays
+/// of scalars. Nothing generates anything for a struct a project declares, so this is read off the
+/// semantic program instead -- and unlike the generated one it can carry any field type, because a
+/// user struct can hold a string or an object where a vector2 cannot.
+struct FUserStructLayout
+{
+    /// Decorated: `(/user@localhost:)strike_report`. What the VM knows it as.
+    FUtf8String DecoratedName;
+    /// Field keys and their declared types, in declaration order, base class first. The order is
+    /// load-bearing twice over: it is the order Godot is told the arguments come in, and the order
+    /// an inbound tuple is read back in. One walk fills both, which is why CollectStructFields
+    /// exists rather than each side doing it.
+    TArray<FUtf8String> FieldKeys;
+    /// The field's own name, which is what Godot is told the argument is called.
+    TArray<FUtf8String> FieldNames;
+    TArray<FMemberType> FieldTypes;
+};
+
+/// The nearest mirrored class in Class's own superclass chain, Class included.
+///
+/// This is what decides how a reference slot is drawn, and a class the project declares cannot answer
+/// it: ClassDB has never heard of the name that class registered with Godot, so asking whether `Mover`
+/// descends from Node gets "no" and the inspector falls back to a resource picker. Its nearest
+/// mirrored ancestor -- `node2d` -- is a name ClassDB does know.
+///
+/// Empty for a chain that reaches `object` without passing a mirror, which is a reference to something
+/// Godot draws no picker for either way.
+AUTORTFM_DISABLE FUtf8String NativeClassOf(const uLang::CClass& Class, const uLang::CSemanticProgram& Program);
+
+/// The generated layout of the math struct that crosses under VariantTag, or null.
+AUTORTFM_DISABLE const FStructLayout* FindStructLayoutByTag(int32 VariantTag);
+
+/// The generated layout of the math struct whose packed array crosses under PackedArrayTag, or null.
+AUTORTFM_DISABLE const FStructLayout* FindStructLayoutByPackedTag(int32 PackedArrayTag);
+
+/// What the inspector can make of a member's declared type: the value's shape on the wire, the
+/// Godot type to rebuild it as, the hint the declaration itself implies, and -- when the answer is
+/// that it cannot be exported at all -- why.
+///
+/// The hint comes from the type wherever the type can carry it. A bounded Verse int or float is
+/// already a range: `type{_X:float where 0.0 <= _X, _X <= 500.0}` normalises to bounds on the type
+/// itself, and the compiler then enforces them at every assignment -- so an inspector slider built
+/// from those bounds and the language agree by construction, rather than because the author wrote
+/// the same two numbers twice. An enum is already a list of choices. A mirrored class is already
+/// the name of the node or resource the slot will accept.
+AUTORTFM_DISABLE void DescribeExportTypeOf(const FDeclaredType& Declared,
+                                           const uLang::CSemanticProgram& Program,
+                                           FExportDesc& OutDesc);
+
+/// DescribeExportTypeOf, over Type's classification.
+AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLang::CSemanticProgram& Program, FExportDesc& OutDesc);
+
+/// The class a parameter, a result or a signal argument names, in the two fields the ABI
+/// carries for one -- vh_param_desc::ClassUtf8 and ClassKind, which document the rule.
+///
+/// The fallback is the whole of what this adds over reading the type: a script class Godot has
+/// not registered is reported as its nearest *mirrored* ancestor, because a consumer can only
+/// name a class Godot can resolve and `Node2D` says more than nothing. That is the same answer
+/// an exported member of that type gets, and for the same reason.
+AUTORTFM_DISABLE void DescribeClassOf(const FMemberType& Type, const uLang::CSemanticProgram& Program,
+                                     FUtf8String& OutName, int32& OutKind);
+
+/// The same description, for a type with no member behind it: a method's parameter or its result.
+///
+/// Everything DescribeMemberType knows comes from the declared type rather than from the
+/// declaration, so a signature can be described exactly as a member is -- which is what lets one
+/// pair of converters serve both field access and dispatch.
+AUTORTFM_DISABLE FMemberType DescribeType(const uLang::CTypeBase* Type, const uLang::CSemanticProgram& Program);
+
+/// Fills OutLayout from Struct's own fields, base class first.
+///
+/// One walk, used by both directions: `DescribePayload` names Godot's arguments from it and
+/// `WireToValue` reads an inbound tuple back with it. Two walks would be two chances to disagree
+/// about order, and a disagreement there is a silent mis-assignment rather than an error.
+AUTORTFM_DISABLE void CollectStructFields(const uLang::CClass& Struct,
+                                          const uLang::CSemanticProgram& Program,
+                                          FUserStructLayout& OutLayout);
+
+/// A struct a payload decomposes into arguments, or null for anything else.
+///
+/// The sixteen mirrored math types are structs too and are *not* decomposed: a vector2 payload is
+/// one Vector2 argument, which is the whole of what Godot wants.
+AUTORTFM_DISABLE const uLang::CClass* PayloadStructClass(const FDeclaredType& Payload);
 
 } // namespace GodotVerse
