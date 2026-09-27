@@ -133,6 +133,18 @@ followed by an indented `{}`. The second keeps the shape GDScript writes, so:
 matching the wording B6 adopts for the template. The `<transacts>` stays: `Subscribe` fixes its
 callback at that effect and a specifier-less handler is wall 8 on the author's first generated line.
 
+**A signal with a payload was still broken**, which the `editor` layer found: the Connect dialog
+hands each argument over as `name: Type`, with a space (`connections_dialog.cpp`), and the type was
+looked up with its leading space, missed, and written `Int:?` — which is not Verse. The two halves
+are trimmed now, an unknown type is a `variant` rather than nothing, an object is an option (a signal
+can carry null for one), and the name is PascalCase with a `Value` suffix where it meets a member of
+the receiver's mirrored ancestry or a Verse library name: `node:?node` is glitch 3588 against the
+class and `Position:vector2` on a node2d is 3532 against the inherited property, both measured with
+`tests/verse_probe`. `_make_function` is handed no class name, so the receiver is the script editor's
+current script, which `ScriptEditor::_add_callback` pushes before asking. The `_make_function` cases
+compile a stub for no payload, `int`, a class, a struct's `int`/`String`/`Vector2` fields, a
+`Variant` and a `RID`.
+
 ## B4. A connected handler gets no gutter icon, and there are two reasons · **fixed, automated**
 
 GDScript draws a Slot icon in the gutter beside a method a persistent connection targets. A Verse

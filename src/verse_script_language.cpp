@@ -4,17 +4,20 @@
 #include "verse_api_lookup.h"
 #include "verse_bindings_gen.h"
 #include "verse_api_skipped.h"
+#include "verse_bindings.h"
 #include "verse_completion.h"
 #include "verse_diagnostic_prose.h"
 #include "verse_hover.h"
 #include "verse_class_decl.h"
 #include "verse_doc_markup.h"
+#include "verse_gd_api.gen.h"
 #include "verse_keywords.h"
 #include "verse_module_map.h"
 #include "verse_resource_format.h"
 #include "verse_runtime.h"
 #include "verse_script.h"
 
+#include <godot_cpp/classes/class_db_singleton.hpp>
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/node.hpp>
@@ -34,7 +37,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <iterator>
+#include <set>
+#include <string>
 
 using namespace godot;
 
@@ -724,16 +730,16 @@ TypedArray<Dictionary> VerseScriptLanguage::_get_built_in_templates(const String
 
 // The Verse spelling of a Godot type as the connect dialog names it (R-SIG-4).
 //
-// Godot hands make_function its arguments as "name:Type" pairs built from the signal's MethodInfo,
-// so the type is a Godot *name* -- `int`, `String`, `Vector2`, `Node2D` -- and never a Verse one.
-// A class goes through the generated table, which is the same inversion _make_template does.
+// Godot hands make_function its arguments as "name: Type" pairs built from the signal's MethodInfo
+// (connections_dialog.cpp), so the type is a Godot *name* -- `int`, `String`, `Vector2`, `Node2D` --
+// and never a Verse one. A class goes through the generated table, which is the same inversion
+// _make_template does, and is an option because a signal can carry null for any object.
 //
-// An unrecognised type answers empty rather than guessing, and the caller drops the parameter's
-// annotation instead. A wrong type in a generated stub is worse than a missing one: the author sees
-// a compile error on a line they did not write.
+// Anything without a spelling is a `variant`, which accepts whatever the signal delivers: Verse has
+// no untyped parameter, so leaving the annotation off is a stub that does not compile.
 static String verse_type_for_godot_type(const String &p_godot_type) {
 	if (p_godot_type.is_empty() || p_godot_type == "Variant") {
-		return String();
+		return String("variant");
 	}
 	if (p_godot_type == "bool") {
 		return String("logic");
@@ -756,9 +762,66 @@ static String verse_type_for_godot_type(const String &p_godot_type) {
 	// The same reverse lookup member_bearing_chain and base_types_for use below, over
 	// verse_api::classes; see verse_api_lookup.h.
 	if (const char *mirrored = mirrored_class(p_godot_type)) {
-		return String(mirrored);
+		return ClassDB::class_exists(p_godot_type) ? String("?") + mirrored : String(mirrored);
 	}
-	return String();
+	return String("variant");
+}
+
+// A Godot argument name as a Verse parameter: PascalCase, the mirror's own spelling for parameters.
+//
+// Godot's snake_case cannot be kept, because a lowercase name meets the mirror's types -- a
+// `node:?node` parameter is glitch 3588 -- and PascalCase meets its members instead: `Position` on
+// a node2d is glitch 3532 against the inherited property. A clash takes the suffix
+// verse_gd_convert gives one.
+static String verse_param_name_for_godot_arg(const String &p_godot_name, int64_t p_index, const std::set<std::string> &p_taken) {
+	std::string name = verse_binding_member_name(p_godot_name.utf8().get_data());
+	if (name.empty()) {
+		name = "Arg" + std::to_string(p_index);
+	}
+	if (p_taken.count(name)) {
+		name += "Value";
+	}
+	return String::utf8(name.c_str());
+}
+
+// Every name a handler's parameter could clash with. make_function is handed no class name
+// (ScriptTextEditor::add_callback passes ""), but ScriptEditor::_add_callback pushes the script to
+// the editor before asking, so the script editor's current script is the receiver. Without one the
+// answer is every mirrored member name, which renames more than it needs to and never too little.
+static std::set<std::string> make_function_taken_names() {
+	std::set<std::string> names;
+	for (const char *stdlib_name : verse_gd_api::module_scope_names) {
+		names.insert(stdlib_name);
+	}
+	Ref<VerseScript> script;
+#ifdef TOOLS_ENABLED
+	if (EditorInterface *editor = verse_editor_interface()) {
+		if (ScriptEditor *script_editor = editor->get_script_editor()) {
+			script = script_editor->get_current_script();
+		}
+	}
+#endif
+	if (script.is_null()) {
+		for (const verse_api::method_mapping &member : verse_api::methods) {
+			names.insert(member.verse_method);
+		}
+		return names;
+	}
+	ClassDBSingleton *db = ClassDBSingleton::get_singleton();
+	for (String cursor = script->get_instance_base_type(); !cursor.is_empty(); cursor = db->get_parent_class(cursor)) {
+		const CharString godot_name = cursor.utf8();
+		for (const verse_api::method_mapping &member : verse_api::methods) {
+			if (std::strcmp(member.godot_class, godot_name.get_data()) == 0) {
+				names.insert(member.verse_method);
+			}
+		}
+	}
+	for (const TypedArray<Dictionary> &list : { script->get_script_method_list(), script->get_script_property_list(), script->get_script_signal_list() }) {
+		for (int64_t i = 0; i < list.size(); i++) {
+			names.insert(String(Dictionary(list[i]).get("name", String())).utf8().get_data());
+		}
+	}
+	return names;
 }
 
 // R-SIG-4's editor half: the handler the Node dock writes when "Make Function" is checked.
@@ -775,16 +838,15 @@ static String verse_type_for_godot_type(const String &p_godot_type) {
 // tripped over most (`dodge-the-creeps.md` wall 8).
 String VerseScriptLanguage::_make_function(const String &p_class_name, const String &p_function_name, const PackedStringArray &p_function_args) const {
 	String out = String("\t") + p_function_name + String("<public>(");
+	const std::set<std::string> taken = p_function_args.is_empty() ? std::set<std::string>() : make_function_taken_names();
 	for (int64_t i = 0; i < p_function_args.size(); i++) {
 		const String arg = p_function_args[i];
-		const String name = arg.get_slice(":", 0);
-		const String verse_type = verse_type_for_godot_type(arg.get_slice(":", 1));
+		const String name = verse_param_name_for_godot_arg(arg.get_slice(":", 0).strip_edges(), i, taken);
+		const String verse_type = verse_type_for_godot_type(arg.get_slice(":", 1).strip_edges());
 		if (i > 0) {
 			out += String(", ");
 		}
-		// A parameter Godot named but whose type has no Verse spelling still gets its name, so the
-		// author has something to edit rather than a stub they have to re-derive from the dialog.
-		out += name + (verse_type.is_empty() ? String(":?") : String(":") + verse_type);
+		out += name + String(":") + verse_type;
 	}
 	// `{}` is Verse's `pass`, and the stub does not compile without it: a comment is not an
 	// expression, so `= \n\t\t# TODO` is "Dangling `=` assignment with no expressions or empty

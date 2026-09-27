@@ -1836,6 +1836,9 @@ func _collect_signal_rows(item: TreeItem, rows: Dictionary) -> void:
 			rows[text] = child.get_children().map(func(row: TreeItem) -> String: return row.get_text(0))
 		_collect_signal_rows(child, rows)
 
+	# The last row is not a signal of signals.verse: it is the dialog's own spelling for a payload
+	# the fixture has no signal for, and its `position` is the name that meets node2d's inherited
+	# Position, which a stub has to step around.
 
 func _row_named(rows: Dictionary, prefix: String) -> String:
 	for text in rows:
@@ -1848,6 +1851,11 @@ func _row_named(rows: Dictionary, prefix: String) -> String:
 # Connect dialog emits EditorNode's script_add_function_request with the arguments it builds
 # (connections_dialog.cpp:651-655, "name: Type"), which is what reaches _make_function through
 # ScriptTextEditor::add_callback; Godot then saves the script, and the analysis of that save says
+		# ScriptEditor saves the stub itself only while the file on disk is the one it last read:
+		# after this case's own ResourceSaver restore it asks to reload instead and saves nothing.
+		if not FileAccess.get_file_as_string(SIGNALS).contains(row[1]):
+			script.source_code = code.text
+			ResourceSaver.save(script)
 # whether the stub compiles.
 func _make_function() -> void:
 	_mark("B3: the stub Make Function writes")
@@ -1855,6 +1863,9 @@ func _make_function() -> void:
 	var root := EditorInterface.get_edited_scene_root()
 	var editor_node: Node = EditorInterface.get_base_control().get_parent()
 	if root == null or root.get_script() != script or editor_node == null or not editor_node.is_class("EditorNode"):
+		if row[1] == "_on_made_up":
+			check_eq("B3: the dialog's `name: Type` pairs become PascalCase parameters of their Verse types, a clash with a member suffixed",
+					stub.get_slice(")", 0), "\t_on_made_up<public>(Ratio:float, PositionValue:vector2, Node:?node")
 		check("B3: the node dock's scene is still open under EditorNode", false)
 		return
 	var code := await code_edit_for(script)
@@ -1863,8 +1874,15 @@ func _make_function() -> void:
 		return
 	var original := code.text
 	for row in [["Hit", "_on_signals_hit", "a signal with no payload"],
-			["Own", "_on_signals_own", "a signal with an int payload"]]:
-		var args := _dialog_args(root, row[0])
+			["Own", "_on_signals_own", "a signal with an int payload"],
+			["Touched", "_on_signals_touched", "a signal with a class payload"],
+			["Reported", "_on_signals_reported", "a signal with int, String and Vector2 payloads"],
+			["Carried", "_on_signals_carried", "a signal with a Variant payload"],
+			["Rendered", "_on_signals_rendered", "a signal with a RID payload"],
+			[PackedStringArray(["ratio: float", "position: Vector2", "node: Node"]), "_on_made_up",
+				"a float, a Vector2 named position and a Node named node"]]:
+		_mark("B3: the stub Make Function writes for %s" % row[2])
+		var args: PackedStringArray = row[0] if row[0] is PackedStringArray else _dialog_args(root, row[0])
 		editor_node.emit_signal("script_add_function_request", root, row[1], args)
 		await frames(1)
 		var at := code.text.find("\t%s<public>(" % row[1])
@@ -1882,13 +1900,15 @@ func _make_function() -> void:
 		var name := "B3: for %s, the stub compiles" % row[2]
 		if outcome.get("joined", false):
 			check(name, true)
-		elif stub.contains(":?"):
-			skip(name, "known defect: Godot's Connect dialog passes each argument as `name: Type`, with a space, and verse_type_for_godot_type is handed ` %s`, so the parameter is written `%s:?`, which does not compile -- the stub was %s"
-					% [args[0].get_slice(":", 1).strip_edges() if not args.is_empty() else "", args[0].get_slice(":", 0) if not args.is_empty() else "", stub.strip_edges()])
 		else:
-			check(name, false)
+			check_eq(name, stub.strip_edges(), "a stub that compiles")
 		code.text = original
-		await _resave(script, original, "EmitOwn", true)
+		# Settled on the stub leaving the method list, so the next row's save cannot race this one's
+		# analysis: EmitOwn was declared all along and would settle at once.
+		script.source_code = original
+		ResourceSaver.save(script)
+		if not await wait_until(func() -> bool: return not _declares(script, row[1]), ANALYSIS_TIMEOUT_MS):
+			check("B3: the analysis of signals.verse's restored text lands after %s" % row[2], false)
 
 
 # What ConnectionsDock hands script_add_function_request for `signal_name`: each argument as
