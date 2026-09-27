@@ -16,7 +16,7 @@ namespace GodotVerse {
 /// as each unit item 5 splits out of HostScript.cpp takes the type.
 enum class EHostFailure : uint8
 {
-    /// Nothing that could answer has been analysed yet: no program, no AST, or no snapshot.
+    /// No analysis has left a snapshot to answer from.
     NotAnalysed,
     /// An analysis is in flight, and the program it is rebuilding is the one the question reads.
     AnalysisRunning,

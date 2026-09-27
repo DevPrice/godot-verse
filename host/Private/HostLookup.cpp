@@ -499,10 +499,12 @@ AUTORTFM_DISABLE TResult<FLookupDesc> LookupSymbol(FUtf8StringView Path, int32 L
     {
         return EHostFailure::InvalidPosition;
     }
+    // Past the gates above an analysis has run, so a program with no AST is one whose parse lost the
+    // whole file: nothing is there, and asking for the same analysis again would not change that.
     uLang::CSemanticProgram* const Program = CurrentSemanticProgram();
     if (!Program || !Program->_AstProject)
     {
-        return EHostFailure::NotAnalysed;
+        return EHostFailure::NothingAtPosition;
     }
 
     FLookupDesc OutDesc;
@@ -1374,7 +1376,7 @@ AUTORTFM_DISABLE TResult<TArray<FCompleteItem>> Complete(FUtf8StringView Path,
     uLang::CSemanticProgram* const Program = CurrentSemanticProgram();
     if (!Program || !Program->_AstProject)
     {
-        return EHostFailure::NotAnalysed;
+        return EHostFailure::NothingAtPosition;
     }
 
     TArray<FCompleteItem> OutItems;
@@ -1712,7 +1714,7 @@ AUTORTFM_DISABLE TResult<FSignatureDesc> SignatureAt(FUtf8StringView Path,
     uLang::CSemanticProgram* const Program = CurrentSemanticProgram();
     if (!Program || !Program->_AstProject)
     {
-        return EHostFailure::NotAnalysed;
+        return EHostFailure::NothingAtPosition;
     }
 
     FSignatureDesc OutDesc;
