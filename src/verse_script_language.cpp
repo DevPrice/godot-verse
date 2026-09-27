@@ -380,25 +380,6 @@ String verse_base_class_for(const String &p_godot_class) {
 	return String("node");
 }
 
-String formatted_diagnostic(const Dictionary &p_error) {
-	return String(p_error["path"]) + ":" + String::num_int64((int64_t)p_error["line"]) + ":"
-			+ String::num_int64((int64_t)p_error["column"]) + ": " + String(p_error["message"]);
-}
-
-// Every diagnostic in one comparable list. Dictionary's own == is reference equality, so telling
-// one analysis' results from the next means flattening them.
-PackedStringArray flattened_diagnostics(const Dictionary &p_errors_by_path) {
-	PackedStringArray flattened;
-	const Array paths = p_errors_by_path.keys();
-	for (int64_t i = 0; i < paths.size(); i++) {
-		const TypedArray<Dictionary> errors = p_errors_by_path[paths[i]];
-		for (int64_t e = 0; e < errors.size(); e++) {
-			flattened.push_back(formatted_diagnostic(errors[e]));
-		}
-	}
-	return flattened;
-}
-
 #ifdef TOOLS_ENABLED
 
 // Everything the editor drew from an analysis older than the one that just landed.
@@ -799,13 +780,13 @@ Dictionary VerseScriptLanguage::_validate(const String &p_script, const String &
 	// paid anyway and the extra sections are free. A clean file gets the warning below instead.
 	PackedStringArray broken_elsewhere;
 	TypedArray<Dictionary> elsewhere;
-	const Array other_paths = diagnostics_by_path.keys();
+	const Array other_paths = project_state.diagnostics_by_path.keys();
 	for (int64_t i = 0; i < other_paths.size(); i++) {
 		const String other_path = other_paths[i];
 		if (other_path == p_path) {
 			continue;
 		}
-		const TypedArray<Dictionary> filed = TypedArray<Dictionary>(diagnostics_by_path[other_path]);
+		const TypedArray<Dictionary> filed = TypedArray<Dictionary>(project_state.diagnostics_by_path[other_path]);
 		if (filed.is_empty()) {
 			continue;
 		}
@@ -815,8 +796,8 @@ Dictionary VerseScriptLanguage::_validate(const String &p_script, const String &
 		// line before the editor displays it (see diagnostics_fitted_to above). No entry means no
 		// analysis has read that file yet; pass its diagnostics through rather than fit them to the
 		// wrong buffer.
-		if (analyzed_source_by_path.has(other_path)) {
-			elsewhere.append_array(diagnostics_fitted_to(filed, String(analyzed_source_by_path[other_path])));
+		if (project_state.analyzed_source_by_path.has(other_path)) {
+			elsewhere.append_array(diagnostics_fitted_to(filed, String(project_state.analyzed_source_by_path[other_path])));
 		} else {
 			elsewhere.append_array(filed);
 		}
@@ -2309,7 +2290,7 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 	HashSet<String> host_offered_names;
 
 	VerseRuntime *runtime = get_runtime();
-	const bool host_can_answer = project_built && runtime != nullptr && runtime->is_host_loaded();
+	const bool host_can_answer = project_state.project_built && runtime != nullptr && runtime->is_host_loaded();
 
 	// The buffer as the compiler should see it: marker gone, and the identifier being typed
 	// standing in for whatever it will become. The same text for every prefix of one identifier,
@@ -2350,7 +2331,7 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 			bool have_signature = signature_cache_source == source
 					&& signature_cache_line == (int32_t)line
 					&& signature_cache_column == (int32_t)column
-					&& signature_cache_epoch == analysis_epoch.current();
+					&& signature_cache_epoch == project_state.analysis_epoch_value();
 			if (!have_signature) {
 				const String globalized = ProjectSettings::get_singleton()->globalize_path(p_path);
 				bool not_ready = false;
@@ -2359,13 +2340,13 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 					// The host has never analysed this buffer, and since ABI v7 it will not do it
 					// here. Queue it and draw no hint; the analysis lands in a later _frame, which
 					// asks the editor to complete again and arrives back here with an answer.
-					request_check(p_path, source, true);
+					project_state.request_check(p_path, source, true);
 				} else {
 					signature_cache = answer;
 					signature_cache_source = source;
 					signature_cache_line = (int32_t)line;
 					signature_cache_column = (int32_t)column;
-					signature_cache_epoch = analysis_epoch.current();
+					signature_cache_epoch = project_state.analysis_epoch_value();
 					have_signature = true;
 				}
 			}
@@ -2443,7 +2424,7 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 
 		bool have_options = completion_cache_source == source && completion_cache_line == (int32_t)line
 				&& completion_cache_column == (int32_t)column && completion_cache_mode == mode
-				&& completion_cache_epoch == analysis_epoch.current();
+				&& completion_cache_epoch == project_state.analysis_epoch_value();
 		if (!have_options) {
 			const String globalized = ProjectSettings::get_singleton()->globalize_path(p_path);
 			bool not_ready = false;
@@ -2453,14 +2434,14 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 				// Queue the completion buffer and answer now with whatever is free. This is the
 				// whole of the change ABI v7 bought: the analysis still costs ~1.3 s, but it is the
 				// host's thread that spends it rather than the keystroke.
-				request_check(p_path, source, true);
+				project_state.request_check(p_path, source, true);
 			} else {
 				completion_cache_options = answer;
 				completion_cache_source = source;
 				completion_cache_line = (int32_t)line;
 				completion_cache_column = (int32_t)column;
 				completion_cache_mode = mode;
-				completion_cache_epoch = analysis_epoch.current();
+				completion_cache_epoch = project_state.analysis_epoch_value();
 				have_options = true;
 			}
 		}
@@ -2667,7 +2648,7 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	};
 
 	VerseRuntime *runtime = get_runtime();
-	if (!project_built || runtime == nullptr || !runtime->is_host_loaded()) {
+	if (!project_state.project_built || runtime == nullptr || !runtime->is_host_loaded()) {
 		return refuse_or_mirrored_class();
 	}
 
@@ -2732,7 +2713,7 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	// loci below an inserted row are all shifted, so the jump lands confidently on the wrong
 	// line. This is the same predicate check_buffer uses to decide a re-analysis is unnecessary.
 	const String normalized = verse_newline_normalized(before + p_code.substr(marker + 1));
-	if (!analyzed_source_by_path.has(p_path) || String(analyzed_source_by_path[p_path]) != normalized) {
+	if (!project_state.analyzed_source_by_path.has(p_path) || String(project_state.analyzed_source_by_path[p_path]) != normalized) {
 		return refuse_or_mirrored_class();
 	}
 
@@ -2811,7 +2792,7 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 		if (p_definition_path == globalized) {
 			return normalized;
 		}
-		const String res_path = path_by_globalized.get(p_definition_path, String());
+		const String res_path = project_state.path_by_globalized.get(p_definition_path, String());
 		return verse_newline_normalized(FileAccess::get_file_as_string(
 				res_path.is_empty() ? p_definition_path : res_path));
 	};
@@ -2850,7 +2831,7 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	// Godot's results are a location, eight class members and the two locals (B31).
 	const bool names_a_type = kind == VH_LOOKUP_CLASS || kind == VH_LOOKUP_ENUM || kind == VH_LOOKUP_MODULE;
 	if (names_a_type && String(result["doc_type"]).is_empty() &&
-			(own_path == globalized || path_by_globalized.has(own_path))) {
+			(own_path == globalized || project_state.path_by_globalized.has(own_path))) {
 		result["doc_type"] = String(verse_scan_type_keyword(
 				source_at(own_path).utf8().get_data(), found_name.utf8().get_data()).c_str());
 	}
@@ -2879,7 +2860,7 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 		// for a class under a `.vmodule`, and only the file-named class registers one. The name
 		// comes from the file the definition was written in, because at its own declaration a
 		// class's owner is the module or the snippet around it and never spells the class.
-		const String own_res_path = own_path == globalized ? p_path : String(path_by_globalized.get(own_path, String()));
+		const String own_res_path = own_path == globalized ? p_path : String(project_state.path_by_globalized.get(own_path, String()));
 		const String own_qualified = own_res_path.is_empty() ? String() : qualified_class_name(own_res_path);
 		if (own_qualified.get_file() == found_name && script_class_names().has(own_qualified)) {
 			ensure_script_doc_published(own_qualified);
@@ -3100,7 +3081,7 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	// cross-file definition we cannot name gets no location at all rather than a jump to that
 	// line of the wrong file.
 	const bool same_file = target_path == globalized;
-	const String target_res_path = same_file ? p_path : String(path_by_globalized.get(target_path, String()));
+	const String target_res_path = same_file ? p_path : String(project_state.path_by_globalized.get(target_path, String()));
 	if (target_res_path.is_empty()) {
 		return hide_if_empty();
 	}
@@ -3170,7 +3151,7 @@ TypedArray<Dictionary> VerseScriptLanguage::probe_hover(const String &p_path) {
 	// Every row below is a position question, and a build leaves the host with no AST to resolve
 	// one against. In the editor the analysis that puts it back starts from _frame; this runs
 	// inside one call and has no frames, so it runs the analysis itself.
-	flush_pending_check();
+	project_state.flush_pending_check();
 
 	const String file = FileAccess::get_file_as_string(p_path);
 	if (FileAccess::get_open_error() != OK) {
@@ -3320,7 +3301,7 @@ TypedArray<Dictionary> VerseScriptLanguage::probe_complete(
 	TypedArray<Dictionary> rows;
 
 	ensure_project_built();
-	flush_pending_check();
+	project_state.flush_pending_check();
 
 	const String file = FileAccess::get_file_as_string(p_path);
 	if (FileAccess::get_open_error() != OK) {
@@ -3386,9 +3367,9 @@ TypedArray<Dictionary> VerseScriptLanguage::probe_complete(
 		//
 		// The completion slot alone: _complete_code queues nothing else, and the ordinary one may
 		// still hold the buffer the build queued if some earlier caret's flush took this one.
-		const bool queued = has_pending_completion_check;
+		const bool queued = project_state.has_pending_completion_check;
 		if (queued) {
-			flush_pending_check();
+			project_state.flush_pending_check();
 			const Dictionary second = _complete_code(code, p_path, nullptr);
 			describe(second, row, "");
 		} else {
@@ -3810,7 +3791,7 @@ void VerseScriptLanguage::_frame() {
 	if (runtime != nullptr && runtime->is_host_loaded()) {
 		// First, so a breakpoint set before anything else happens this frame is already armed.
 		sync_debugger_attachment();
-		poll_check();
+		project_state.poll_check();
 
 #ifdef TOOLS_ENABLED
 		// Connected here rather than in _init: a ScriptLanguage is registered before the editor's
@@ -3843,7 +3824,7 @@ void VerseScriptLanguage::_frame() {
 		// `bindings_incomplete` re-arms this once: a class whose script could not be described is
 		// asked about again on the next frame, by which time the build has usually made it
 		// loadable. It clears itself when a generation describes everything.
-		if ((bindings_refresh_pending || bindings_incomplete) && refresh_bindings()) {
+		if ((bindings_refresh_pending || project_state.bindings_incomplete) && refresh_bindings()) {
 			bindings_refresh_pending = false;
 		}
 
@@ -3853,15 +3834,15 @@ void VerseScriptLanguage::_frame() {
 		// (B30); its verdict was withheld rather than logged, and this is the build that produces a
 		// real one. Fired whether or not the roster actually completed: a script that can never be
 		// described would otherwise leave the withheld verdict unreported for the session.
-		if (corrective_build_pending) {
-			corrective_build_pending = false;
+		if (project_state.corrective_build_pending) {
+			project_state.corrective_build_pending = false;
 			build_project();
 		}
 
 		// The first ask, and every one a change to the program has re-armed. The poll above is
 		// what clears docs_refresh_attempted, so this costs one republish per analysis rather
 		// than one per frame for a class that still cannot be described.
-		if (project_built && !docs_refresh_attempted && script_docs_deferred.exchange(false)) {
+		if (project_state.project_built && !docs_refresh_attempted && script_docs_deferred.exchange(false)) {
 			docs_refresh_attempted = true;
 			docs_refresh_pending = true;
 		}
@@ -3882,8 +3863,8 @@ void VerseScriptLanguage::_frame() {
 
 		// After the error list and before the import, for the same reason: this asks the editor to
 		// run _complete_code again, and that has to see the buffer everything else has settled on.
-		if (completion_refresh_pending) {
-			completion_refresh_pending = false;
+		if (project_state.completion_refresh_pending) {
+			project_state.completion_refresh_pending = false;
 			refresh_completion_if_current();
 		}
 
@@ -3898,7 +3879,7 @@ void VerseScriptLanguage::_frame() {
 
 		// Last, so everything above answers against a host that is not mid-analysis. A queued
 		// buffer waits a frame for this; a blocked editor would wait the whole analysis.
-		start_pending_check();
+		project_state.start_pending_check();
 	}
 }
 
@@ -4179,7 +4160,7 @@ bool VerseScriptLanguage::refresh_bindings() {
 	// of a GDScript naming a Verse class *before the first build*, so it is not worth a warning --
 	// what it is worth is asking again, because the build this generation feeds is exactly what
 	// makes the script loadable. The next ask fills the members in.
-	bindings_incomplete = !bindings.incomplete.empty();
+	project_state.bindings_incomplete = !bindings.incomplete.empty();
 	bindings_incomplete_classes = bindings.incomplete;
 
 	bindings_by_verse_class.clear();
@@ -4256,233 +4237,6 @@ const PackedStringArray &VerseScriptLanguage::mirrored_class_names() {
 	return names;
 }
 
-Error VerseScriptLanguage::ensure_project_built() {
-	if (project_built) {
-		return project_build_status;
-	}
-	return build_project();
-}
-
-Error VerseScriptLanguage::build_project() {
-	VerseRuntime *runtime = get_runtime();
-	if (runtime == nullptr) {
-		return ERR_UNAVAILABLE;
-	}
-	if (!runtime->is_host_loaded()) {
-		const Error host_status = runtime->load_host();
-		if (host_status != OK) {
-			return host_status;
-		}
-	}
-
-	// Re-derived per build rather than trusted: a .vmodule added or removed since the last one
-	// moves files between modules, and a build is the moment that is allowed to take effect. The
-	// class-name list is re-enumerated with it, since a build walks res:// anyway and is the one
-	// hook a game -- where there is no EditorFileSystem to signal -- still has.
-	invalidate_script_class_names();
-	refresh_module_map();
-
-	// And the bindings, for the same reason and one more: a build is the one moment a *script*
-	// the roster names is guaranteed to be on disk and loadable, and a Verse file naming a binding
-	// does not compile until the package holding it is in the project. `_frame` refreshes these
-	// too, which is what makes an addon completable without a build -- but a headless run reaches
-	// this before its first frame.
-	if (bindings_refresh_pending && refresh_bindings()) {
-		bindings_refresh_pending = false;
-	}
-
-	// An exported game has nothing to build. vh_init loaded the generation the cooker published,
-	// and every .verse under res:// is a one-byte stub (D10) -- compiling those would replace a
-	// working project with an empty one, if there were a compiler to do it with. The two lines
-	// above are the part that still has to happen, because which module a script is in and which
-	// class names are declared are read off res:// rather than out of the host.
-	if (!runtime->host_has_compiler()) {
-		project_built = true;
-		project_build_status = OK;
-		return OK;
-	}
-
-	const PackedStringArray sources = find_verse_sources("res://");
-	// A project with the addon installed and no Verse yet has nothing to publish, and the host
-	// refuses an empty list as VH_ERR_ABI -- which failed every Play with no diagnostic to say why.
-	if (sources.is_empty()) {
-		project_built = true;
-		project_build_status = OK;
-		return OK;
-	}
-	PackedStringArray globalized;
-	PackedStringArray modules;
-	ProjectSettings *settings = ProjectSettings::get_singleton();
-	for (int64_t i = 0; i < sources.size(); i++) {
-		globalized.push_back(settings->globalize_path(sources[i]));
-		modules.push_back(module_for_script(sources[i]));
-	}
-
-	// The host reports against the absolute path it was handed; scripts are keyed by res:// path.
-	path_by_globalized.clear();
-	for (int64_t i = 0; i < sources.size(); i++) {
-		path_by_globalized[globalized[i]] = sources[i];
-	}
-
-	Dictionary errors_by_globalized;
-	const Error status = runtime->compile_project(globalized, modules, &errors_by_globalized);
-
-	// **A build against a held-back roster is provisional, and a failed one says nothing.** Those
-	// bindings carry types and no members, so a Verse file calling `MainScript.Greet()` fails here
-	// against a member that lands on the next frame's generation -- a diagnostic that is already
-	// false by the time anyone reads it, and the log has no way to retract a line (which is the
-	// same reason check_buffer keeps analysis diagnostics out of it). The script editor's own list
-	// is replaced wholesale on the next validate, so record_diagnostics below still runs.
-	const bool withhold = status != OK && bindings_incomplete && provisional_build_allowed;
-	if (withhold) {
-		provisional_build_allowed = false;
-		corrective_build_pending = true;
-		// Withholding the diagnostics is not withholding the fact. The corrective build repairs
-		// the *project*, and it cannot repair a node the scene already tried and failed to give a
-		// script to -- so on a cold run this is the only sentence anyone gets, and without it the
-		// first thing said is GDScript's, about a value that is null for a reason named nowhere.
-		warn_incomplete_roster();
-	}
-
-	// The host loaded each of these from disk just now, so this is the text it holds. Seeding it
-	// here is what makes the *first* validate of a file free rather than only the repeats -- and
-	// record_diagnostics below measures a diagnostic's span against it, so it has to be filled
-	// first.
-	analyzed_source_by_path.clear();
-	std::vector<std::string> texts;
-	texts.reserve(sources.size());
-	for (int64_t i = 0; i < sources.size(); i++) {
-		const String text = FileAccess::get_file_as_string(sources[i]);
-		const bool read = FileAccess::get_open_error() == OK;
-		if (read) {
-			analyzed_source_by_path[sources[i]] = verse_newline_normalized(text);
-		}
-		texts.push_back(read ? std::string(text.utf8().get_data()) : std::string());
-	}
-
-	record_diagnostics(errors_by_globalized);
-
-	// Every source is in hand exactly once per build, which is the only affordable moment to ask
-	// the three questions that are about the project rather than about a file.
-	report_name_collisions(sources, texts);
-	log_script_warnings(sources);
-
-	if (!withhold) {
-		const Array reported = errors_by_globalized.keys();
-		for (int64_t i = 0; i < reported.size(); i++) {
-			log_build_diagnostics(TypedArray<Dictionary>(errors_by_globalized[reported[i]]));
-		}
-	}
-
-	// Marked built even when the verdict is withheld, so ensure_project_built answers the failure
-	// rather than rebuilding: refresh_from_analysis asks it again from inside compile(), and a
-	// build that re-entered itself there would report the very diagnostics being withheld.
-	project_built = true;
-	project_build_status = status;
-
-	if (status != OK) {
-		if (withhold) {
-			return status;
-		}
-		// Nothing was published, so whatever ran before this still runs (R-ITER-5). The
-		// diagnostics above say what is wrong; this says what that costs.
-		UtilityFunctions::push_warning(
-				"Verse: the project did not build, so no new code was published. The editor's analysis -- "
-				"diagnostics, completion and the shape of the exported properties -- is live either way; "
-				"fix the errors and build again to replace what is running.");
-		return status;
-	}
-
-	// A new generation means new classes, new method tables and new declared defaults -- exactly
-	// what a byte-identical buffer's cached completion or signature answer could have been
-	// describing before this build, and what every script's own description caches now read
-	// stale against. Both epochs move together here: a build is a moment both kinds of cache
-	// have to give way. The inspector has to be told too, which is R-ITER-3. Snapshotted because
-	// refreshing a script republishes its export list, and Godot is free to drop a script while
-	// that runs.
-	analysis_epoch.advance();
-	description_epoch.advance();
-	const std::vector<VerseScript *> scripts = live_scripts;
-	for (VerseScript *script : scripts) {
-		script->generation_published();
-	}
-
-	// Same reason as the poll's: a class that could not describe itself against the retiring
-	// program may be able to now.
-	docs_refresh_attempted = false;
-
-	// A build generates code, and generating code puts the AST out of reach -- so a hover, a
-	// completion or an argument hint has nothing to resolve a position against until an analysis
-	// has run. This is the ask for one. Queued rather than run: request_check leaves it for
-	// _frame, so it costs the author nothing between pressing Play and the game starting, and a
-	// keystroke that arrives first supersedes it.
-	//
-	// The host used to do this itself, inside vh_compile_project, and it cost ~770 ms of every
-	// build to have the answer ready for a question nobody had asked yet.
-	//
-	// Any file will do -- an analysis is of the whole project, and the path only says which file's
-	// buffer overrides what is on disk. The text is the one just read for it.
-	for (int64_t i = 0; i < sources.size(); i++) {
-		if (analyzed_source_by_path.has(sources[i])) {
-			request_check(sources[i], String(analyzed_source_by_path[sources[i]]));
-			break;
-		}
-	}
-
-	return status;
-}
-
-TypedArray<Dictionary> VerseScriptLanguage::check_buffer(const String &p_path, const String &p_source) const {
-	VerseRuntime *runtime = get_runtime();
-	if (!project_built || runtime == nullptr || !runtime->is_host_loaded()) {
-		return diagnostics_for(p_path);
-	}
-
-	// Anything the host does not already hold needs a fresh analysis, which takes ~750 ms -- some
-	// forty-five frames. Start it on the host's thread and answer from the last one: returning stale
-	// diagnostics for a moment is a far smaller cost than freezing the editor on every keystroke.
-	// _frame picks the result up, and Godot re-validates often enough that the fresh answer lands
-	// on its own.
-	//
-	// Nothing an analysis finds is written to the output log, neither here nor when the result
-	// lands. It describes what the file said a moment ago, which may be a mistake the author has
-	// already undone, and the log has no way to retract a line; the script editor's own error list
-	// can show it because Godot replaces that wholesale on the next validate. The log is the
-	// build's (build_project): a build is something the author asked for, and a failed one
-	// refuses the run.
-	if (!analysis_is_current(p_path, p_source)) {
-		queue_check(p_path, p_source);
-	}
-
-	// Analysis covers the whole project, so a broken file elsewhere reports against its own path;
-	// the editor asked about this one.
-	return diagnostics_for(p_path);
-}
-
-bool VerseScriptLanguage::analysis_is_current(const String &p_path, const String &p_source) const {
-	VerseRuntime *runtime = get_runtime();
-	if (!project_built || runtime == nullptr || !runtime->is_host_loaded()) {
-		return true;
-	}
-
-	// An exported game has no analysis and never will: the snapshot came out of the sidecar and is
-	// the only one there is. Answering false here left every script waiting for a check that
-	// nothing could run, so `valid` stayed false and not one scene came up with its script
-	// attached -- with no error anywhere, because waiting is not failing.
-	if (!runtime->host_has_compiler()) {
-		return true;
-	}
-
-	// The common case by far: opening a file, switching to its tab and saving it all ask about a
-	// buffer nothing has touched since the last analysis.
-	return analyzed_source_by_path.has(p_path)
-			&& String(analyzed_source_by_path[p_path]) == verse_newline_normalized(p_source);
-}
-
-void VerseScriptLanguage::queue_check(const String &p_path, const String &p_source) const {
-	request_check(p_path, verse_newline_normalized(p_source));
-}
-
 void VerseScriptLanguage::register_script(VerseScript *p_script) {
 	live_scripts.push_back(p_script);
 }
@@ -4504,175 +4258,6 @@ void VerseScriptLanguage::unregister_script(VerseScript *p_script) {
 	live_scripts.erase(std::remove(live_scripts.begin(), live_scripts.end(), p_script), live_scripts.end());
 }
 
-void VerseScriptLanguage::request_check(const String &p_path, const String &p_normalized_source, bool p_is_completion) const {
-	// Recorded ahead of the in-flight test below, because the analysis already running may be the
-	// very one this is asking for -- the editor asks for the options and the argument hint about
-	// one keystroke, and the second ask must not lose the first's claim on the result.
-	if (p_is_completion) {
-		completion_refresh_path = p_path;
-		completion_refresh_source = p_normalized_source;
-	}
-
-	// The analysis in flight is already for this exact text. Godot validates the same unchanged
-	// buffer several times over while one runs, and queueing behind it would buy the same answer
-	// a second time -- putting a whole extra analysis between a save and the result it settles on.
-	if (p_path == in_flight_path && p_normalized_source == in_flight_source) {
-		return;
-	}
-
-	// Newest buffer wins *within its kind*: while an analysis runs the editor keeps typing, and
-	// every intermediate state is worth less than the one the author is looking at now. Across the
-	// two kinds nothing displaces anything, because a completion buffer and the author's own text
-	// are different questions with different consumers -- which is what the second slot is for.
-	if (p_is_completion) {
-		pending_completion_path = p_path;
-		pending_completion_source = p_normalized_source;
-		has_pending_completion_check = true;
-	} else {
-		pending_check_path = p_path;
-		pending_check_source = p_normalized_source;
-		has_pending_check = true;
-	}
-
-	// Queued, not started. Nothing that describes a class joins the analysis thread any more --
-	// since ABI v7 they answer from the snapshot the last one left -- but an analysis still blocks
-	// the VM for its whole length, so one begun in the middle of the editor's work is the pump and
-	// every `@tool` instance stopped for ~750 ms of it. _frame starts it once the frame's own work
-	// is done, and _frame is also the only thing that polls, so a buffer superseded before the next
-	// one costs nothing at all.
-}
-
-void VerseScriptLanguage::start_pending_check() const {
-	if (!has_pending_check && !has_pending_completion_check) {
-		return;
-	}
-
-	VerseRuntime *runtime = get_runtime();
-	if (runtime == nullptr || !runtime->is_host_loaded() || runtime->is_check_project_busy()) {
-		return;
-	}
-
-	// The completion buffer first when both are waiting: a popup and an argument hint are blocked
-	// on it and are drawing nothing meanwhile, where the author's own buffer feeds a gutter that is
-	// still showing the last analysis' diagnostics. Each kind holds only its newest buffer, so
-	// preferring one delays the other by a single analysis and can never queue a third.
-	const bool completion = has_pending_completion_check;
-	const String path = completion ? pending_completion_path : pending_check_path;
-	const String source = completion ? pending_completion_source : pending_check_source;
-
-	const String globalized = ProjectSettings::get_singleton()->globalize_path(path);
-	if (runtime->begin_check_project(globalized, source) != OK) {
-		return;
-	}
-
-	// The host has taken this text, so it is what the next result answers for.
-	in_flight_path = path;
-	in_flight_source = source;
-	in_flight_is_completion = completion;
-	if (completion) {
-		has_pending_completion_check = false;
-	} else {
-		has_pending_check = false;
-	}
-}
-
-void VerseScriptLanguage::flush_pending_check() const {
-	if (!has_pending_check && !has_pending_completion_check) {
-		return;
-	}
-
-	VerseRuntime *runtime = get_runtime();
-	if (runtime == nullptr || !runtime->is_host_loaded() || !runtime->host_has_compiler()) {
-		has_pending_check = false;
-		has_pending_completion_check = false;
-		return;
-	}
-
-	// The completion slot first, in the order start_pending_check prefers them and for the same
-	// reason. One flush runs one analysis and leaves the other slot for _frame; probe_complete is
-	// what makes that enough, because it flushes once per caret and each caret queues one buffer.
-	const bool completion = has_pending_completion_check;
-	const String path = completion ? pending_completion_path : pending_check_path;
-	const String source = completion ? pending_completion_source : pending_check_source;
-	if (completion) {
-		has_pending_completion_check = false;
-	} else {
-		has_pending_check = false;
-	}
-
-	// The synchronous entry point, which is what makes this a flush rather than a second queue: it
-	// blocks on whatever the background thread is doing and then analyses.
-	Dictionary errors_by_globalized;
-	runtime->check_project(ProjectSettings::get_singleton()->globalize_path(path), source, &errors_by_globalized);
-
-	analyzed_source_by_path[path] = source;
-	// The snapshot the host now holds changed, whether or not this buffer was a completion one --
-	// see analysis_epoch. This never touches description_epoch: a probe_hover/probe_complete flush
-	// has no live scripts of its own to describe, which matches poll_check never doing so here
-	// either (only its non-completion branch does).
-	analysis_epoch.advance();
-	record_diagnostics(errors_by_globalized);
-}
-
-void VerseScriptLanguage::poll_check() const {
-	VerseRuntime *runtime = get_runtime();
-	if (runtime == nullptr || !runtime->is_host_loaded()) {
-		return;
-	}
-
-	Dictionary errors_by_globalized;
-	if (runtime->poll_check_project(&errors_by_globalized)) {
-		// Only now does the host hold this text, so only now may a validate answer from cache.
-		// Recorded for a completion buffer too, and that is the point: the entry says which text
-		// the host is describing, so `_validate` comparing the author's real buffer against it
-		// queues the ordinary analysis that puts the diagnostics back, and a hover declines in the
-		// meantime rather than trusting loci measured against a spliced-in placeholder.
-		analyzed_source_by_path[in_flight_path] = in_flight_source;
-		// The whole-project snapshot the host holds moved, whichever buffer produced it -- see
-		// analysis_epoch.
-		analysis_epoch.advance();
-
-		if (in_flight_is_completion) {
-			// Everything below describes the author's file to the author. This analysis was of a
-			// line they are halfway through typing -- the placeholder resolves to nothing, so its
-			// diagnostics are an unknown identifier they did not write -- and drawing that would
-			// be worse than drawing nothing. The answer it was asked for is the program it left
-			// behind, which vh_complete_symbol reads on the way back through. description_epoch does
-			// not move here either, for the same reason: a script's exports and documentation must
-			// not be re-derived from a line nobody finished writing.
-			completion_refresh_pending = completion_refresh_path == in_flight_path
-					&& completion_refresh_source == in_flight_source;
-		} else {
-			// The program every script may honestly describe itself against moved, ahead of the
-			// per-script loop below so each one's own comparison against description_epoch_value()
-			// already reads stale -- which is what lets analysis_landed() skip a script this landing
-			// was not for and still have that script's exports and documentation catch up next time
-			// they are asked for, without this loop having to reach it directly (B13, B26, B39).
-			description_epoch.advance();
-
-			editor_refresh_pending = record_diagnostics(errors_by_globalized) || editor_refresh_pending;
-			refresh_script_warnings(in_flight_path);
-
-			// The program the last attempt was made against is gone, so the answer may have
-			// changed. _frame is what acts on it, for the reason the refresh below is deferred.
-			docs_refresh_attempted = false;
-
-			// Every script whose compile() declined to wait for this. Told one at a time rather
-			// than only the analysed file's script, because a save can be waiting on a result its
-			// own buffer did not start. Snapshotted: telling a script republishes its export list,
-			// and Godot is free to drop a script while that runs.
-			const std::vector<VerseScript *> scripts = live_scripts;
-			for (VerseScript *script : scripts) {
-				editor_refresh_pending = script->analysis_landed() || editor_refresh_pending;
-			}
-		}
-
-		in_flight_path = String();
-		in_flight_source = String();
-		in_flight_is_completion = false;
-	}
-}
-
 // Asks the editor for completion again now that the host describes the buffer the last answer
 // declined on.
 //
@@ -4684,7 +4269,7 @@ void VerseScriptLanguage::poll_check() const {
 // here ever is, and the selected index survives unless the head of the list actually changed.
 void VerseScriptLanguage::refresh_completion_if_current() const {
 #ifdef TOOLS_ENABLED
-	if (completion_refresh_path.is_empty()) {
+	if (project_state.completion_refresh_path.is_empty()) {
 		return;
 	}
 
@@ -4697,7 +4282,7 @@ void VerseScriptLanguage::refresh_completion_if_current() const {
 	// Only the file the analysis was for. The author may have switched tabs while it ran, and
 	// asking some other script to complete would open a popup nobody asked for.
 	const Ref<Script> script = script_editor->get_current_script();
-	if (script.is_null() || script->get_path() != completion_refresh_path) {
+	if (script.is_null() || script->get_path() != project_state.completion_refresh_path) {
 		return;
 	}
 
@@ -4709,7 +4294,7 @@ void VerseScriptLanguage::refresh_completion_if_current() const {
 
 	// The caret has to still be inside the identifier the question was about. Anywhere else and
 	// the answer that just landed is not the answer to what is being typed now.
-	if (completion_placeholder_buffer(code_edit) != completion_refresh_source) {
+	if (completion_placeholder_buffer(code_edit) != project_state.completion_refresh_source) {
 		return;
 	}
 
@@ -5446,7 +5031,7 @@ static String identifier_at_span(const String &p_source, const Dictionary &p_dia
 void VerseScriptLanguage::explain_skipped_members(const String &p_path, const TypedArray<Dictionary> &p_errors) const {
 	// The text the analysis read, which is what the compiler's spans are measured against. A file
 	// no analysis has seen has none, and nothing here can be said about it.
-	const String source = analyzed_source_by_path.has(p_path) ? String(analyzed_source_by_path[p_path]) : String();
+	const String source = project_state.analyzed_source_by_path.has(p_path) ? String(project_state.analyzed_source_by_path[p_path]) : String();
 	for (int64_t i = 0; i < p_errors.size(); i++) {
 		Dictionary error = p_errors[i];
 		if ((int64_t)error.get("code", 0) != UNKNOWN_IDENTIFIER_CODE) {
@@ -5480,7 +5065,7 @@ void VerseScriptLanguage::note_missing_imports(const String &p_path, const Typed
 		return;
 	}
 
-	const String source = analyzed_source_by_path.has(p_path) ? String(analyzed_source_by_path[p_path]) : String();
+	const String source = project_state.analyzed_source_by_path.has(p_path) ? String(project_state.analyzed_source_by_path[p_path]) : String();
 
 	for (int64_t i = 0; i < p_errors.size(); i++) {
 		Dictionary error = p_errors[i];
@@ -5583,52 +5168,6 @@ void VerseScriptLanguage::insert_pending_import() const {
 #endif
 }
 
-bool VerseScriptLanguage::record_diagnostics(const Dictionary &p_diagnostics_by_globalized) const {
-	PackedStringArray previous = flattened_diagnostics(diagnostics_by_path);
-	previous.append_array(flattened_diagnostics(compiler_warnings_by_path));
-
-	diagnostics_by_path.clear();
-	compiler_warnings_by_path.clear();
-
-	const Array reported = p_diagnostics_by_globalized.keys();
-	for (int64_t i = 0; i < reported.size(); i++) {
-		const String globalized = reported[i];
-		const String path = path_by_globalized.has(globalized) ? String(path_by_globalized[globalized]) : globalized;
-		const TypedArray<Dictionary> filed = p_diagnostics_by_globalized[globalized];
-
-		// The host reports the absolute path it was handed, but the script editor compares an
-		// error's path against the *script's* -- `res://scripts/mover.verse` -- and moves every
-		// error that does not match into its depended-errors list. Those are listed but never
-		// marked: the line highlight and the error bar both read the list this filters.
-		//
-		// The same dictionaries, not copies: the build logs what it filed after this has run,
-		// which is how the log carries the path and the explanations added below.
-		TypedArray<Dictionary> errors;
-		TypedArray<Dictionary> warnings;
-		for (int64_t e = 0; e < filed.size(); e++) {
-			Dictionary entry = filed[e];
-			entry["path"] = path;
-			const int64_t severity = entry["severity"];
-			if (severity == VH_SEVERITY_ERROR) {
-				errors.push_back(entry);
-			} else if (severity == VH_SEVERITY_WARNING) {
-				warnings.push_back(entry);
-			}
-			// An info has no row in the editor; the build's log is where it is read.
-		}
-		explain_skipped_members(path, errors);
-		note_missing_imports(path, errors);
-		diagnostics_by_path[path] = errors;
-		if (!warnings.is_empty()) {
-			compiler_warnings_by_path[path] = warnings;
-		}
-	}
-
-	PackedStringArray current = flattened_diagnostics(diagnostics_by_path);
-	current.append_array(flattened_diagnostics(compiler_warnings_by_path));
-	return current != previous;
-}
-
 // The build is the one thing that writes a diagnostic to the output log, and it writes every one
 // it filed, every time: a build is something the author asked for, and the answer to a second
 // build with the same errors is those errors again. An analysis writes nothing -- the script
@@ -5636,7 +5175,7 @@ bool VerseScriptLanguage::record_diagnostics(const Dictionary &p_diagnostics_by_
 void VerseScriptLanguage::log_build_diagnostics(const TypedArray<Dictionary> &p_diagnostics) const {
 	for (int64_t i = 0; i < p_diagnostics.size(); i++) {
 		const Dictionary entry = p_diagnostics[i];
-		const String formatted = formatted_diagnostic(entry);
+		const String formatted = verse_formatted_diagnostic(entry);
 		const int64_t severity = entry["severity"];
 		if (severity == VH_SEVERITY_ERROR) {
 			UtilityFunctions::push_error(formatted);
@@ -5646,18 +5185,4 @@ void VerseScriptLanguage::log_build_diagnostics(const TypedArray<Dictionary> &p_
 			UtilityFunctions::print(formatted);
 		}
 	}
-}
-
-TypedArray<Dictionary> VerseScriptLanguage::diagnostics_for(const String &p_path) const {
-	if (!diagnostics_by_path.has(p_path)) {
-		return TypedArray<Dictionary>();
-	}
-	return TypedArray<Dictionary>(diagnostics_by_path[p_path]);
-}
-
-TypedArray<Dictionary> VerseScriptLanguage::compiler_warnings_for(const String &p_path) const {
-	if (!compiler_warnings_by_path.has(p_path)) {
-		return TypedArray<Dictionary>();
-	}
-	return TypedArray<Dictionary>(compiler_warnings_by_path[p_path]);
 }
