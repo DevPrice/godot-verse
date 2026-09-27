@@ -525,7 +525,10 @@ checkout become `<repo>`/`<engine>`, a hex address becomes `<addr>` -- both `0x`
 function ADDRESS" prints -- a generation number becomes `<gen>`, and an engine or host C++ source
 location (`Foo.cpp:123`, `Bar.h:45:9`) has its line and column stripped to just `Foo.cpp`, because
 that number is the *host's* and any host edit shifts it; a `.verse` location is left exact, since
-that line is the fixture's own content. Two fixtures are excluded rather than recorded --
+that line is the fixture's own content; and `epoch N = X` becomes `epoch N = <epoch>`,
+`GetSecondsSinceEpoch()`'s wall-clock answer in `vm_natives_probe.verse`, unreachable before the
+`Warn(...)` fix below stopped that fixture fatal-erroring partway through. Two fixtures are excluded
+rather than recorded --
 `vm_tasks_subscribe_probe.verse` (several `Subscribe` handlers on one signal deliver in a different
 order every process) and `vm_values_probe.verse` (`CrossKind`'s false-string/empty-string map key
 lookup answers differently run to run) -- both measured nondeterministic across three runs of the

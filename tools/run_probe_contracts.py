@@ -28,7 +28,8 @@ which crosses the ABI verbatim), a hex address becomes `<addr>` -- both `0x`-pre
 engine or host C++ source location (`Foo.cpp:123`, `Bar.h:45:9`) has its line (and column) stripped
 to just `Foo.cpp`, because that line number is the *host's*, not the fixture's, and any host edit
 shifts it. A `.verse` location (a diagnostic naming the fixture's own file and line) is left alone:
-that line number is content the fixture is testing, not host-internal detail.
+that line number is content the fixture is testing, not host-internal detail. `epoch N = X` becomes
+`epoch N = <epoch>`, `GetSecondsSinceEpoch()`'s wall-clock answer in vm_natives_probe.verse.
 
 Two fixtures are `known_defect`, not a plain golden: `vm_objects_wideint_probe.verse` and
 `vm_values_false_probe.verse` each end the process in a host **fatal error** -- a VM-internal
@@ -218,6 +219,21 @@ _ADDR_PREFIXED = re.compile(r"0x[0-9a-fA-F]+")
 # so a plain decimal number -- which never has one -- is never mistaken for an address.
 _ADDR_BARE = re.compile(r"\b[0-9A-Fa-f]{8,16}\b")
 _GENERATION = re.compile(r"generation \d+")
+# GetSecondsSinceEpoch(), which vm_natives_probe.verse's C01_Epoch/C02_EpochAgain print -- wall-clock
+# seconds, never the same value twice, the same shape of fact as vm_tasks_subscribe_probe.verse's
+# delivery order and vm_values_probe.verse's map lookup. Was never reached before Warn(...) stopped
+# fatal-erroring partway through this fixture; normalized rather than excluded, because everything
+# else in the file is deterministic and worth pinning to a golden.
+_EPOCH = re.compile(r"(epoch \d) = \d+\.\d+")
+# vm_natives_probe.verse's E03_SubscribeOrder: five Subscribe handlers on one signal, printed as one
+# space-separated line each time it fires -- "nothing orders concurrent Subscribe handlers" is the
+# same fact vm_tasks_subscribe_probe.verse measures, and its own comment (below) explains why *that*
+# fixture is excluded rather than normalized: its delivery is interleaved across several printed
+# lines, with no stable substring to reorder onto. Here it is the opposite -- one line, one call to
+# Show(Order) -- so the numbers can be sorted into a canonical order before comparing. That still
+# loses the interleaving itself, but keeps the one fact worth pinning: exactly which subscribers
+# fired, S3's cancellation included.
+_SUBSCRIBE_ORDER_LINE = re.compile(r"^((?:callback order \d|after cancelling C): )((?:\d+ )+)$", re.MULTILINE)
 # An engine or host C++ source location: `Foo.cpp:123` or `Bar.h:45:9`. Not `.verse`, whose line
 # number is the fixture's own content and is exactly what a *_reject.verse golden is testing.
 _SOURCE_LINE = re.compile(r"(\.(?:cpp|cc|cxx|h|hpp|hxx|inl|ipp)):\d+(?::\d+)?")
@@ -233,6 +249,11 @@ def _addr_bare_repl(match: re.Match[str]) -> str:
     return "<addr>" if any(c in "abcdefABCDEF" for c in token) else token
 
 
+def _subscribe_order_repl(match: re.Match[str]) -> str:
+    prefix, numbers = match.group(1), match.group(2)
+    return prefix + " ".join(sorted(numbers.split(), key=int)) + " "
+
+
 def normalize(text: str, repo: Path, engine: Path) -> str:
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     for base, token in ((str(repo), "<repo>"), (str(engine), "<engine>")):
@@ -241,6 +262,8 @@ def normalize(text: str, repo: Path, engine: Path) -> str:
     text = _ADDR_PREFIXED.sub("<addr>", text)
     text = _ADDR_BARE.sub(_addr_bare_repl, text)
     text = _GENERATION.sub("generation <gen>", text)
+    text = _EPOCH.sub(r"\1 = <epoch>", text)
+    text = _SUBSCRIBE_ORDER_LINE.sub(_subscribe_order_repl, text)
     text = _SOURCE_LINE.sub(r"\1", text)
     text = _UE_LINE_BRACKET.sub("[Line: <line>]", text)
     return text
