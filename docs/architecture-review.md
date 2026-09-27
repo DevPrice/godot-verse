@@ -405,3 +405,126 @@ one line. When it is not, the paragraph has to remain, because it is the only gu
 If only three things are picked up before the next feature, make them item 1 step 1 (compiler
 warnings), item 3 step 1 (a gate that runs without being asked), and the seven live defects above.
 Together they cost less than a week, and each makes every later item cheaper to verify.
+
+## Status
+
+Every item on this list is done, recorded on 2026-09-27 against `master`. This section says what
+each step became, the mechanism that now enforces the rule the item was about, and what is still
+open. The commit hashes are the record; each commit's message gives the reasoning and how it was
+verified.
+
+### The live defects
+
+All seven are fixed, together with the ones the new tests found while the items were being built.
+
+| defect | fix |
+| --- | --- |
+| `SetBindings` never cleared | `dd19896`, then made structural by `VH_ENTRY_POINTS` (`33bdc42`) |
+| enumerator stripping skips the reserved and library names | `168379b`, held by `verse_bindings_test` |
+| `VhCallStatic`/`VhCallUtility` answer zero where their sibling raises | `85b5557` |
+| completion and signature caches keyed on text and caret only | `7dd2aa6`, then the generation epoch (`ef2df24`) |
+| `@export` of a generated-binding class refused as unsupported | refused with its own reason, `VH_EXPORT_BINDING_CLASS_UNSUPPORTED` (`faaec91`); support is deferred by decision |
+| `generated-bindings.md` claims a differential test that does not exist | the test exists (`f0924fe`) |
+| `MATH_LANES` tested only against itself | `MATH_LANES` is gone; both sides read `GodotMathLayout.gen.h` (`2278fbf`) |
+
+### Item 1: one registry per surface
+
+Done, all six steps.
+
+1. Exhaustive switches over every ABI enum in `src/`, `vm/` and `host/` (`fb9d26c`, `a09e7b5`,
+   `164697c`, and the per-switch `VH_EXHAUSTIVE_SWITCH` pragma in the host, `1ecc0f6`, because the
+   module-wide setting breaks the runtime and cooker targets on UE's own headers). A new
+   enumerator fails the build at every switch that has not heard of it.
+2. `VH_ENTRY_POINTS` lists the 44 entry points once; the consumer's members and loader, the host's
+   and `vm/`'s `static_assert`s, and the test resolvers all expand it (`33bdc42`, `7c49dc9`).
+3. `vh_variant_tag`, the lane families and the Verse `Tag*` constants are generated from
+   `VARIANT_LANES` (`2278fbf`, `978521c`, `8766b0b`).
+4. Every array-handed struct's size and offsets are `static_assert`ed per pointer width, and
+   `vh_init` refuses a layout digest mismatch by name (`3a2c4d7`, `e31fe98`, ABI 12.3).
+5. One classifier, `EDeclaredKind`, answers "what kind of type is this" for every describer and
+   converter; class origin gained `Binding`, and one ancestry walk replaced four (`73bda18`,
+   `557b20c`).
+6. Shared naming vectors hold the bindings generator to the mirror's rules (`442867a`, `f0924fe`).
+
+### Item 2: a failure says which failure it was
+
+Done.
+
+1. `TResult<T, EHostFailure>` is the host's internal answer, mapped to an ABI status in one pure
+   function, `StatusFor`; `VH_ERR_NOT_ANALYSED` (ABI 12.4) separates "not analysed yet" from "not
+   found" (`729d96b`, `7791728`).
+2. "Cannot answer" is not a value: an analysis that does not parse keeps the last good class
+   descriptions, marked stale, and one lookup (`FindSnapshotClass`) tells stale from absent
+   (`d5eb60e`). This fixed live instances losing their methods, hovers losing their documentation
+   and completion losing its overrides after a broken buffer.
+3. Every remaining silent failure path passes through `VH_UNREPORTED`, which logs once per site in a
+   Development host; the host has 13, each with its reason.
+4. The invariants the review named are asserted: the callback table only under its lock
+   (`5363762`), every VM entry open (`caede71`), minting on the game thread, the analysis reaped
+   before the next begins (`7cc0819`), and on the consumer side `_frame` state on the main thread
+   and `diagnostic_sink` never re-entered (`ad3d90a`).
+
+### Item 3: detection
+
+Done, all five steps.
+
+1. The gate that runs unasked is GitHub CI, by decision.
+2. Every case is a record in `bin/test_results.jsonl`, and exported runs are held to the editor
+   run's own case list instead of hand-edited counts (`552f45c`).
+3. Every bridge diagnostic prints a stable `VG####` ID from one registry shared by `src/`, `vm/`
+   and `host/`, and tests assert the ID, not the prose (`ab001b8`, `5f65ced`, `53a0e29`;
+   `docs/diagnostics.md`).
+4. `verse_host_unit.exe`, a fourth UBT target, tests the type model, the converters, the sidecar
+   and `StatusFor` from inside the host (`f662901`).
+5. The missing unit tests exist: `verse_bindings_test` and `verse_api_lookup_test` (`62e845d`).
+
+Beyond the item: the by-hand editor checks were audited and automated
+(`docs/editor-test-audit.md`) as three opt-in layers, `editor`, `debug-wire` and `multiplayer`.
+What is still checked by hand is four items, listed at the top of `docs/by-hand-findings.md`.
+
+### Item 4: foreign contracts
+
+Done, all five steps.
+
+1. The 79 `tests/verse_probe` fixtures are asserted against normalized goldens in the `contract`
+   layer (`6d4e4f0`).
+2. `CLAUDE.md`'s numbers are generated into `docs/facts.json` and checked, and its measured claims
+   cite the contract case that asserts them (`dfabc36`, `b216e4f`).
+3. `tests/godot_contract` asserts the Godot behaviour the bridge relies on (`db27139`).
+4. Each substitute for a missing Epic feature is behind one adapter, with a tripwire that fails
+   when Epic ships the feature (`d6b3c91`, `docs/tripwires.md`).
+5. The keyword and `CONST_OVERRIDES` tables are re-derived, and a hand-table row that matches
+   nothing fails generation (`3e605cb`, `de6c68e`, `2e0acf4`).
+
+### Item 5: split `HostScript.cpp`
+
+Done, all five moves. `HostScript.cpp` went from 11,362 lines to 297; what remains is the VM entry
+and the task pump. The units are `HostLookup`, `HostTypeModel`, `HostMarshal`, `HostSignals`,
+`HostCallbacks`, `HostInstances`, `HostPeers`, `HostBuild` and `HostSnapshot`, and the engine rules
+every caller used to have to remember (definition location, qualified and decorated names, the
+construction path) are functions in `HostEngineAdapters` and `NewHostObject` that callers cannot
+bypass. `tools/check_host_constructions.py` enforces the construction path in CI and before every
+host build.
+
+### Item 6: editor state
+
+Done, all three steps: two generation epochs (`ef2df24`), `VerseProjectState` with one
+`BuildState` enum in place of five flags (`88c5166`..`8a77272`), and `verse_script_language.cpp`
+split from 5,602 lines to about 2,100 (`6edca87`..`bf2d34a`).
+
+### Item 7: prose retired as it is enforced
+
+Done alongside each item. Where a rule is now a mechanism, `CLAUDE.md` names the mechanism in a line
+instead of explaining the rule.
+
+### Still open
+
+- **Two defects are recorded as named skips in the `editor` layer:** the argument hint comes back
+  empty after a Play and an unfinished call (B27's second and third checks), and `event(t).Emit`'s
+  help page has no description. Both are the host's.
+- **Two VerseVM assertions** end the host process in `vm_objects_wideint_probe` and
+  `vm_values_false_probe`. They are the engine's, not the bridge's, and are recorded as known
+  defects in the contract layer.
+- **Two behaviours of the engine are nondeterministic**, and the contract layer excludes them rather
+  than pretending otherwise: the delivery order of several `Subscribe` handlers on one signal, and
+  one map-key lookup in `vm_values_probe`.
