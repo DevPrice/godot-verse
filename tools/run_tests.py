@@ -258,6 +258,9 @@ def run_units(results: Results, do_build: bool) -> None:
     registry_test = REPO / "tests" / "verse_diagnostics" / "test_verse_diagnostics.py"
     run("test_verse_diagnostics.py", [sys.executable, str(registry_test)], results, cases="verse_diagnostics")
 
+    claims_test = REPO / "tests" / "claims" / "test_claims.py"
+    run("test_claims.py", [sys.executable, str(claims_test)], results, cases=test_records.PLAIN)
+
 
 def run_abi(results: Results, engine: Path | None, do_build: bool) -> None:
     if engine is None:

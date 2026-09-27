@@ -27,6 +27,10 @@ VARIANT_TAGS_NATIVE_VERSE_PATH = "host/Verse/GodotVariantTags.native.verse"
 DEFAULT_CLASSES_FILE = "tools/verse_api_classes.txt"
 KEYWORDS_HEADER = "src/verse_keywords.h"
 EXTENSION_API = "godot-cpp/gdextension/extension_api-4-7.json"
+# docs/architecture-review.md item 4 step 2: every numeric claim CLAUDE.md makes about the mirror
+# or the ABI, so tests/claims/test_claims.py can hold the prose to the generator rather than to
+# whoever last counted by hand.
+FACTS_PATH = "docs/facts.json"
 
 # The hand-written native class every mirrored class descends from, in Godot.native.verse. Named
 # `vh_object` rather than `object` since Phase 2, because `object` is now the mirror of Godot's own
@@ -1741,6 +1745,23 @@ class Coverage:
         # order keeps them in it. Without the flag a reordered main() would render the header one
         # pass early and silently drop them, the way they were silently missing before R-SCN-2.
         self.math_skips_recorded = False
+        # CLAUDE.md's numeric claims about the mirror (docs/architecture-review.md item 4 step 2),
+        # counted where each method is classified or emitted rather than recomputed afterwards, for
+        # the same reason doc_map and nonatomic are: a second pass over the mirror can disagree with
+        # the mirror. write_facts turns these into docs/facts.json.
+        self.virtuals_emitted = 0
+        self.predicates_emitted = 0
+        self.bool_virtuals_emitted = 0
+        self.logic_methods_emitted = 0
+        self.reads_methods_emitted = 0
+        self.const_void_methods = 0
+        self.object_args_total = 0
+        self.object_args_required = 0
+        self.object_returns_total = 0
+        self.object_returns_required = 0
+        self.object_returning_virtuals = 0
+        self.object_returning_virtuals_optional = 0
+        self.object_returning_virtuals_required = 0
 
     def skip(self, reason: str, member: "SkippedMember | None" = None):
         self.skip_reasons[reason] += 1
@@ -2132,7 +2153,7 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
         used_param_names.add(pname)
         default = arg.get("default_value")
         params.append(Param(pname, info, verse_default_literal(info.verse_type, default) if default else None,
-                            object_param_is_optional(info, arg)))
+                            object_param_is_optional(info, arg, coverage)))
 
     if unsupported_seen:
         if all(POINTER_TYPE_RE.search(seen) for seen in unsupported_seen):
@@ -2178,6 +2199,9 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
             coverage.skip("virtual_no_default", record(
                 "virtual_no_default", f"`{return_info.verse_type}`" if return_info else ""))
             return None
+
+    if is_void and bool(m.get("is_const")):
+        coverage.const_void_methods += 1
 
     return ClassifiedMethod(
         godot_name=m["name"],
@@ -2330,7 +2354,7 @@ def emit_utility_functions(api: dict, resolver: TypeResolver, coverage: Coverage
                 break
             pname = verse_param_name(arg["name"], index, RESERVED_WORDS, used, set())
             used.add(pname)
-            params.append(Param(pname, info, None, object_param_is_optional(info, arg)))
+            params.append(Param(pname, info, None, object_param_is_optional(info, arg, coverage)))
         if unsupported:
             coverage.skip("utility_not_dispatched", SkippedMember(
                 "", verse_name, "@GlobalScope", name, "utility_not_dispatched", ""))
@@ -2346,6 +2370,8 @@ def emit_utility_functions(api: dict, resolver: TypeResolver, coverage: Coverage
         elif info.unpack_decides:
             blocks.append(f"    {verse_name}<public>({decl})<decides><transacts>:{info.verse_type}"
                           f" = {info.unpack_fn}[{call}]")
+            if info.pack_fn == "VhFromObject":
+                coverage.object_returns_total += 1
         else:
             blocks.append(f"    {verse_name}<public>({decl})<transacts>:{info.verse_type}"
                           f" = {info.unpack_fn}({call})")
@@ -2400,7 +2426,7 @@ def emit_static_methods(api: dict, emit_order: list, resolver: TypeResolver,
                     break
                 pname = verse_param_name(arg["name"], index, RESERVED_WORDS, used, set())
                 used.add(pname)
-                params.append(Param(pname, info, None, object_param_is_optional(info, arg)))
+                params.append(Param(pname, info, None, object_param_is_optional(info, arg, coverage)))
             return_value = method.get("return_value")
             info = resolver.classify(return_value["type"]) if return_value else None
             if unsupported or (return_value and info is None) or method.get("is_vararg"):
@@ -2417,15 +2443,19 @@ def emit_static_methods(api: dict, emit_order: list, resolver: TypeResolver,
             elif info.pack_fn == "VhFromObject":
                 lines.append(f"    {verse_name}<public>({decl})<decides><transacts>:{info.verse_type}"
                              f" = {info.verse_type}[VhObjectFrom[{call}]]")
+                coverage.object_returns_total += 1
             elif info.unpack_decides:
                 lines.append(f"    {verse_name}<public>({decl})<decides><transacts>:{info.verse_type}"
                              f" = {info.unpack_fn}[{call}]")
             elif is_predicate_method(godot_class, method, methods_by_name):
                 lines.append(f"    {verse_name}<public>({decl})<decides><transacts>:void"
                              f" = {info.unpack_fn}({call})?")
+                coverage.predicates_emitted += 1
             else:
                 lines.append(f"    {verse_name}<public>({decl})<transacts>:{info.verse_type}"
                              f" = {info.unpack_fn}({call})")
+                if info.verse_type == "logic":
+                    coverage.logic_methods_emitted += 1
             coverage.doc_map.append((statics_module_name(godot_class), verse_name,
                                      godot_class, method["name"], "method"))
             shape = lines[-1].split("(", 1)[1]
@@ -2580,7 +2610,7 @@ def emit_signal_accessor(godot_class: str, sig: dict, resolver: TypeResolver, co
                   f' "{name}", "{sig["name"]}")}}')
 
 
-def object_param_is_optional(info, arg) -> bool:
+def object_param_is_optional(info, arg, coverage: "Coverage | None" = None) -> bool:
     """Whether Godot accepts null for this object argument, which is what decides `?node2d`.
 
     The dump says so per argument, and it says it the other way round: `"meta": "required"` marks an
@@ -2594,7 +2624,12 @@ def object_param_is_optional(info, arg) -> bool:
     does, and the alternative is worse than a wrapped argument: a parameter Verse cannot spell null
     for is a call a script cannot make at all, which is what `by-hand-findings.md` B37 was.
     """
-    return info.pack_fn == "VhFromObject" and arg.get("meta") != "required"
+    is_object = info.pack_fn == "VhFromObject"
+    if coverage is not None and is_object:
+        coverage.object_args_total += 1
+        if arg.get("meta") == "required":
+            coverage.object_args_required += 1
+    return is_object and arg.get("meta") != "required"
 
 
 def param_type(p) -> str:
@@ -3055,6 +3090,30 @@ def generate(api: dict, requested: list, coverage: Coverage, enums: dict):
             if not cm.is_const and not cm.is_void and cm.default_body is None:
                 coverage.nonatomic.append((name, cm.godot_name, verse_class_name(name),
                                            cm.verse_name, cm.godot_return))
+            # CLAUDE.md's counts of what emit_method actually writes -- see write_facts.
+            answers_object = cm.return_type is not None and cm.return_type.pack_fn == "VhFromObject"
+            if cm.default_body is not None:
+                coverage.virtuals_emitted += 1
+                if cm.is_predicate:
+                    coverage.bool_virtuals_emitted += 1
+                if answers_object:
+                    coverage.object_returning_virtuals += 1
+                    if cm.return_optional:
+                        coverage.object_returning_virtuals_optional += 1
+                    elif cm.return_required:
+                        coverage.object_returning_virtuals_required += 1
+            else:
+                if cm.is_const:
+                    coverage.reads_methods_emitted += 1
+                if answers_object:
+                    coverage.object_returns_total += 1
+                    if cm.return_required:
+                        coverage.object_returns_required += 1
+                elif cm.return_type is not None and cm.return_type.verse_type == "logic":
+                    if cm.is_predicate:
+                        coverage.predicates_emitted += 1
+                    else:
+                        coverage.logic_methods_emitted += 1
 
         # Godot's own signals, last, so a name a method or property already took wins: an accessor
         # is the convenience and the member is the API. Every collision of the kind that would have
@@ -3315,10 +3374,11 @@ SINGLETON_ERROR_MESSAGE = (
 )
 
 
-def emit_singleton_accessors(api: dict, emit_order: list, member_names: set) -> list:
-    """One module-level accessor per emitted class that Godot registers as a singleton.
+def emitted_singletons(api: dict, emit_order: list) -> tuple:
+    """(names Godot registers as singletons among the emitted classes, the editor-only subset).
 
-    Total for the 39 Godot registers during `Main::setup`; `<decides>` for the two it does not.
+    Shared by emit_singleton_accessors and write_facts so the 41/2/39 split in CLAUDE.md and the
+    accessors it describes cannot name different sets.
     """
     singletons = {s["name"] for s in api.get("singletons", [])}
     # The two singletons a game can really be without -- EditorInterface and
@@ -3326,9 +3386,20 @@ def emit_singleton_accessors(api: dict, emit_order: list, member_names: set) -> 
     # Engine.get_singleton_list() in a headless run; every other singleton is registered before any
     # scene loads, so no run that executes Verse at all can find one missing.
     editor_only = {c["name"] for c in api.get("classes", []) if c.get("api_type") == "editor"}
+    names = sorted(n for n in emit_order if n in singletons)
+    return names, [n for n in names if n in editor_only]
+
+
+def emit_singleton_accessors(api: dict, emit_order: list, member_names: set) -> list:
+    """One module-level accessor per emitted class that Godot registers as a singleton.
+
+    Total for the 39 Godot registers during `Main::setup`; `<decides>` for the two it does not.
+    """
+    names, editor_only_names = emitted_singletons(api, emit_order)
+    editor_only = set(editor_only_names)
 
     lines = []
-    for name in sorted(n for n in emit_order if n in singletons):
+    for name in names:
         # A cast over what the host built, not a construction -- the same road every object-returning
         # method takes, and R-SCN-6's rule that the class an object crosses as is the class Godot
         # says it is rather than the one the signature named. It used to construct, and Phase 4.5 had
@@ -4133,6 +4204,58 @@ def render_classes_header(api: dict, emit_order: list, method_map: list, doc_map
     )
 
 
+# The tools/run_tests.py constant a cooked sidecar is checked against (HostSidecar.h's own
+# comment). Read out of that file rather than duplicated here, so the two cannot read differently;
+# host/ itself is not something this generator may depend on.
+SIDECAR_VERSION_RE = re.compile(r"^SIDECAR_VERSION\s*=\s*(\d+)", re.MULTILINE)
+
+
+def collect_facts(api: dict, coverage: Coverage, enums: dict, emit_order: list, root: Path) -> dict:
+    """Every number `tests/claims/test_claims.py` holds CLAUDE.md's prose to.
+
+    docs/architecture-review.md item 4 step 2: a numeric claim about the mirror or the ABI gets a
+    fact here instead of staying something the last person to count it remembers to update.
+    """
+    singleton_names, editor_only_names = emitted_singletons(api, emit_order)
+    run_tests_text = (root / "tools" / "run_tests.py").read_text(encoding="utf-8")
+    sidecar_match = SIDECAR_VERSION_RE.search(run_tests_text)
+    if sidecar_match is None:
+        raise ValueError("tools/run_tests.py no longer defines SIDECAR_VERSION")
+
+    return {
+        "mirror.classes": coverage.classes_emitted,
+        "mirror.enums": len(enums),
+        "mirror.virtuals": coverage.virtuals_emitted,
+        "mirror.predicates": coverage.predicates_emitted,
+        "mirror.bool_virtuals": coverage.bool_virtuals_emitted,
+        "mirror.logic_methods": coverage.logic_methods_emitted,
+        "mirror.signal_accessors": coverage.signals_emitted,
+        "mirror.properties": coverage.properties_emitted,
+        "mirror.reads_methods": coverage.reads_methods_emitted,
+        "mirror.const_void_methods": coverage.const_void_methods,
+        "mirror.nonatomic_methods": len(coverage.nonatomic),
+        "mirror.object_args_total": coverage.object_args_total,
+        "mirror.object_args_required": coverage.object_args_required,
+        "mirror.object_returns_total": coverage.object_returns_total,
+        "mirror.object_returns_required": coverage.object_returns_required,
+        "mirror.object_returning_virtuals": coverage.object_returning_virtuals,
+        "mirror.object_returning_virtuals_optional": coverage.object_returning_virtuals_optional,
+        "mirror.object_returning_virtuals_required": coverage.object_returning_virtuals_required,
+        "mirror.singletons_total": len(singleton_names),
+        "mirror.singletons_failable": len(editor_only_names),
+        "mirror.singletons_raising": len(singleton_names) - len(editor_only_names),
+        "mirror.variant_tags": len(variant_tag_rows(api)),
+        "mirror.variant_tag_constants": len(VARIANT_LANES),
+        "abi.const_overrides_rows": len(CONST_OVERRIDES),
+        "abi.sidecar_version": int(sidecar_match.group(1)),
+    }
+
+
+def write_facts(path: Path, facts: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(facts, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
+
+
 def format_report(coverage: Coverage, class_count_requested: int) -> str:
     lines = []
     lines.append("Verse API generation coverage report")
@@ -4631,6 +4754,8 @@ def main() -> int:
                         help="Where to write the GDScript converter's table")
     parser.add_argument("--naming-vectors", default=NAMING_VECTORS_PATH,
                         help="Where to write the naming-rule differential test vectors")
+    parser.add_argument("--facts", default=FACTS_PATH,
+                        help="Where to write CLAUDE.md's numeric claims, as JSON")
     parser.add_argument("--report", default=None, help="Write the coverage report here instead of stdout")
     parser.add_argument("--keywords", default=KEYWORDS_HEADER)
     args = parser.parse_args()
@@ -4735,6 +4860,12 @@ def main() -> int:
         encoding="utf-8", newline="\n")
 
     write_naming_vectors(resolve(root, args.naming_vectors), api)
+
+    # Unconditional, like every other generated file above and unlike the report below --
+    # `--report` only redirects where the human-readable summary goes, and CI's `generated` job
+    # runs with `--report /dev/null`, so a fact that only landed inside that summary would never be
+    # checked for drift.
+    write_facts(resolve(root, args.facts), collect_facts(api, coverage, enums, emit_order, root))
 
     report = format_report(coverage, len(class_blocks))
     if args.report:
