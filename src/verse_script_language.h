@@ -4,6 +4,7 @@
 // script_language_extension.hpp only forward-declares it.
 #include "verse_api_lookup.h"
 #include "verse_bindings.h"
+#include "verse_debugger.h"
 #include "verse_project_state.h"
 #include "verse_script.h"
 
@@ -224,16 +225,12 @@ public:
 	std::vector<VerseBindingClass> last_binding_classes;
 
 	// The consumer half of R-DIAG-4's break decision, reached from VerseRuntime's ABI callbacks.
-	//
-	// Called from inside the Verse interpreter's handshake with an op in flight, so nothing here
-	// may enter the host except the vh_debug_* reads -- and those only from inside debug_break,
-	// which is where Godot's own debug loop runs.
-	//
-	// p_relation is a vh_debug_frame_relation: how the frame about to execute relates to the frame
-	// the last stop was in. It stands in for Godot's depth counter, which this bridge cannot keep
-	// because it never sees a Verse call, only an op.
-	bool debug_should_break(const godot::String &p_path, int32_t p_line, int32_t p_relation);
-	void debug_break();
+	// VerseDebugger documents the rest; these two are the public face, the way build_project is
+	// VerseProjectState's.
+	bool debug_should_break(const godot::String &p_path, int32_t p_line, int32_t p_relation) {
+		return debugger.should_break(p_path, p_line, p_relation);
+	}
+	void debug_break() { debugger.break_here(); }
 
 	// Budget handed to vh_tick each frame, so a runaway Verse task costs frame rate rather than
 	// hanging the editor. Read from the verse/runtime/frame_budget_ms project setting at _init.
@@ -241,7 +238,7 @@ public:
 
 	// Attaches the Verse debugger when Godot's is active and detaches it when it stops being.
 	// Called once per frame from _frame, which is also where every other per-frame decision is.
-	void sync_debugger_attachment();
+	void sync_debugger_attachment() { debugger.sync_attachment(); }
 
 	// The build-and-analysis pump's public face; VerseProjectState documents each.
 	godot::Error build_project() { return project_state.build_project(); }
@@ -487,35 +484,13 @@ private:
 	// editor's singletons do not exist when a ScriptLanguage is registered.
 	bool filesystem_hook_connected = false;
 
-	// R-DIAG-4's state, all of it. Whether the Verse debugger is installed in the host, why the
-	// last stop happened, and where it happened.
-	//
-	// The last stop's position is what keeps a step a step: `Total := Helper()` reports its line
-	// twice, once before the call and once when the result lands, so a step-over with no memory of
-	// where it started stops again on the line it started on. GDScript never meets this because
-	// its line opcode is per source line; a Verse location is per op.
-	bool debugger_attached = false;
-	godot::String break_reason;
-	godot::String stopped_source;
-	int32_t stopped_line = 0;
-
-	// res:// path per absolute host path. The host asks once per distinct location per frame and
-	// hands back the path it was given at build time, separators and all; localizing it is a
-	// string walk that has no business happening inside the interpreter's handshake.
-	mutable std::unordered_map<std::string, godot::String> res_path_by_source;
-
-	// One stopped frame's locals or members, in the { <p_key>: PackedStringArray, values: Array }
-	// shape the extension wrapper splits on.
-	godot::Dictionary debug_values_at(int32_t p_level, int32_t p_kind, const char *p_key) const;
+	// R-DIAG-4's state and behaviour, all of it: see verse_debugger.h. Mutable for the same reason
+	// project_state is -- Godot's virtuals are const and nearly every one of them touches it.
+	mutable VerseDebugger debugger{ *this };
 
 	// Copies the host's rows into the array Godot allocated. Not a loop over p_info_array[i]:
 	// see the definition for why the stride is not sizeof.
 	int32_t fill_profiling_info(godot::ScriptLanguageExtensionProfilingInfo *p_info_array, int32_t p_info_max, bool p_frame_only);
-
-	// The res:// path for a path the host named. Case-insensitive and separator-insensitive,
-	// because the host hands back exactly what vh_compile_project was given -- which on Windows
-	// is a mix: `C:/project\scripts\player.verse`.
-	godot::String res_path_for_source(const godot::String &p_path) const;
 
 	// Whether Godot's profiler has asked for rows. Held here as well as in the host so that
 	// _profiling_start on a session with no host loaded is still a no-op rather than a crash.
