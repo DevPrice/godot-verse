@@ -1966,7 +1966,7 @@ G19 carries the same note against the gap it came from.
 edits survive a save and a `CACHE_MODE_IGNORE` reload; the reopened `.tres` carries
 `script_class="SettingsResource"`; and a played scene's `Describe()` answers the edited values.
 
-### R-EXP-8's `@icon`, and the five inspector hints · **automated, two known defects**
+### R-EXP-8's `@icon`, and the five inspector hints · **automated**
 
 `editor` layer, `_inspector_hints`/`_class_icons` cases, over `tests/integration/scripts/hints.verse`:
 `Portrait`'s browse button opens a file dialog filtered to `.png`/`.jpg`; `SaveFolder`'s browses to
@@ -1975,12 +1975,14 @@ Earth, and ticking Fire then Earth stores 5; `Target` offers a node picker that 
 `Node`; `Mismatched` is absent from the inspector, with the sentence in the warnings panel; and the
 scene dock and create dialog show `icon.svg`, falling back once the file is deleted.
 
-Two known defects found rather than fixed, kept as named skips: `@export_node_path` on a `string`
-reaches Godot as `TYPE_STRING` with `PROPERTY_HINT_NODE_PATH_VALID_TYPES`, and the inspector builds
-`EditorPropertyNodePath` only for a `NodePath`, so `Target` draws as a plain text field with no
-picker (`NODE_PATH_DEFECT`); and a `@global_class` script's icon is read from the class registry,
-which `_get_global_class_name` never fills with one, so Godot draws the base class's icon instead
-and never asks `_get_class_icon_path` (`GLOBAL_ICON_DEFECT`).
+Two defects this found, both fixed: `@export_node_path` on a `string` reached Godot as
+`TYPE_STRING` with `PROPERTY_HINT_NODE_PATH_VALID_TYPES`, and the inspector builds
+`EditorPropertyNodePath` only for a `NodePath`, so `Target` drew as a plain text field with no
+picker — the property is declared `TYPE_NODE_PATH` now, as GDScript's `@export_node_path` is, and
+what the host answers for it is handed back as a `NodePath` (`VerseScript::as_declared_type`); and a
+`@global_class` script's icon is read from the class registry, which `_get_global_class_name` never
+filled with one, so Godot drew the base class's icon and never asked `_get_class_icon_path` — it
+answers the `icon_path` key now, from the same scan.
 
 ### R-EXP-9's other half: an RPC that arrives at a second peer · **automated**
 

@@ -1528,7 +1528,6 @@ icon_probe := class(node2d):
 const NODE_PATH_DEFECT := "known defect: `@export_node_path` on a `string` reaches Godot as TYPE_STRING with PROPERTY_HINT_NODE_PATH_VALID_TYPES, and the inspector builds EditorPropertyNodePath only for a NodePath, so Target is drawn as a plain text field with no picker"
 const TOOL_AUTOLOAD_DEFECT := "known defect: a @tool Verse autoload is added to the editor's tree holding a placeholder instance -- tool_probe.verse answers can_instantiate() false after the session's Plays have built, and VerseScript::_can_instantiate is is_compiled() && is_tool(), so it is is_compiled() that is false -- so a call answers 'Attempt to call a method on a placeholder instance' and its _Ready never runs"
 const ICON_CACHE_WHY := "Godot's own behaviour, not the bridge's: the GDScript control still draws the deleted icon.svg too -- EditorData's script icon cache and the loaded texture outlive the file for the session, so the fallback needs a fresh editor"
-const GLOBAL_ICON_DEFECT := "known defect: a @global_class script's icon is read from the class registry (EditorData::get_script_icon, script_class_get_icon_path), which is filled from _get_global_class_name's icon_path, and VerseScriptLanguage::_get_global_class_name answers none -- so Godot draws Node2D's icon and never asks _get_class_icon_path"
 
 const LISTENER_SOURCE := """extends Node
 
@@ -1601,9 +1600,9 @@ func _inspector_hints() -> void:
 	var boxes := find_all(properties["Elements"], "CheckBox") if properties.has("Elements") else []
 	check_eq("R-EXP-8 (4): Elements is three checkboxes named Fire, Water and Earth",
 			boxes.map(func(box: CheckBox) -> String: return box.text), ["Fire", "Water", "Earth"])
+	if boxes.size() == 3:
 		# The dialog's tree fills a frame or more after it is shown.
 		await wait_until(func() -> bool: return _tree_item_in(picker, "Mark") != null and _tree_item_in(picker, "Bystander") != null, 5000)
-	if boxes.size() == 3:
 		for index in [0, 2]:
 			boxes[index].button_pressed = true
 			boxes[index].pressed.emit()
@@ -1695,9 +1694,6 @@ func _class_icons() -> void:
 	var cached := false
 	for s in subjects:
 		var name: String = s.tag + "R-EXP-8 (7): with icon.svg deleted, the Scene dock falls back to an icon of its own for %s" % s.what
-		if s.icon != ICON and s.root == "Hints":
-			skip(name, "there was no icon.svg to fall back from: " + GLOBAL_ICON_DEFECT)
-			continue
 		var icon := await _scene_dock_icon(s.scene, s.root, true)
 		var fell_back := icon != ICON and icon != "<none>"
 		if s.id == "gd":
@@ -1708,12 +1704,10 @@ func _class_icons() -> void:
 			check(name, fell_back)
 
 
-# A theme icon has no path, which is what Node2D's own is and what the global-class defect draws.
-func _check_icon(s: Dictionary, name: String, icon: String) -> void:
-	if icon == "" and s.root == "Hints":
-		skip(name, GLOBAL_ICON_DEFECT)
-	else:
-		check_eq(name, icon, ICON)
+# A theme icon has no path, which is what Node2D's own is, and what a global class draws when
+# _get_global_class_name answers no icon_path: the class registry is where Godot reads one.
+func _check_icon(_s: Dictionary, name: String, icon: String) -> void:
+	check_eq(name, icon, ICON)
 
 
 # The resource path of the icon the Scene dock draws beside the edited scene's root, "<none>" for
@@ -1836,42 +1830,42 @@ func _row_named(rows: Dictionary, prefix: String) -> String:
 # B3: "Connecting a signal with Make Function checked writes a stub that does not compile." Godot's
 # Connect dialog emits EditorNode's script_add_function_request with the arguments it builds
 # (connections_dialog.cpp:651-655, "name: Type"), which is what reaches _make_function through
-	# The last row is not a signal of signals.verse: it is the dialog's own spelling for a payload
-	# the fixture has no signal for, and its `position` is the name that meets node2d's inherited
-	# Position, which a stub has to step around.
 # ScriptTextEditor::add_callback; Godot then saves the script, and the analysis of that save says
 # whether the stub compiles.
 func _make_function() -> void:
 	_mark("B3: the stub Make Function writes")
 	var script: Script = load(SIGNALS)
 	var root := EditorInterface.get_edited_scene_root()
+	# The last row is not a signal of signals.verse: it is the dialog's own spelling for a payload
+	# the fixture has no signal for, and its `position` is the name that meets node2d's inherited
+	# Position, which a stub has to step around.
 	var editor_node: Node = EditorInterface.get_base_control().get_parent()
 	if root == null or root.get_script() != script or editor_node == null or not editor_node.is_class("EditorNode"):
 		check("B3: the node dock's scene is still open under EditorNode", false)
 		return
 	var code := await code_edit_for(script)
 	if code == null:
-		# ScriptEditor saves the stub itself only while the file on disk is the one it last read:
-		# after this case's own ResourceSaver restore it asks to reload instead and saves nothing.
-		if not FileAccess.get_file_as_string(SIGNALS).contains(row[1]):
-			script.source_code = code.text
-			ResourceSaver.save(script)
 		check("B3: signals.verse opens in the script editor", false)
 		return
 	var original := code.text
 	for row in [["Hit", "_on_signals_hit", "a signal with no payload"],
 			["Own", "_on_signals_own", "a signal with an int payload"],
 			["Touched", "_on_signals_touched", "a signal with a class payload"],
+		# ScriptEditor saves the stub itself only while the file on disk is the one it last read:
+		# after this case's own ResourceSaver restore it asks to reload instead and saves nothing.
+		if not FileAccess.get_file_as_string(SIGNALS).contains(row[1]):
+			script.source_code = code.text
+			ResourceSaver.save(script)
 			["Reported", "_on_signals_reported", "a signal with int, String and Vector2 payloads"],
-		if row[1] == "_on_made_up":
-			check_eq("B3: the dialog's `name: Type` pairs become PascalCase parameters of their Verse types, a clash with a member suffixed",
-					stub.get_slice(")", 0), "\t_on_made_up<public>(Ratio:float, PositionValue:vector2, Node:?node")
 			["Carried", "_on_signals_carried", "a signal with a Variant payload"],
 			["Rendered", "_on_signals_rendered", "a signal with a RID payload"],
 			[PackedStringArray(["ratio: float", "position: Vector2", "node: Node"]), "_on_made_up",
 				"a float, a Vector2 named position and a Node named node"]]:
 		_mark("B3: the stub Make Function writes for %s" % row[2])
 		var args: PackedStringArray = row[0] if row[0] is PackedStringArray else _dialog_args(root, row[0])
+		if row[1] == "_on_made_up":
+			check_eq("B3: the dialog's `name: Type` pairs become PascalCase parameters of their Verse types, a clash with a member suffixed",
+					stub.get_slice(")", 0), "\t_on_made_up<public>(Ratio:float, PositionValue:vector2, Node:?node")
 		editor_node.emit_signal("script_add_function_request", root, row[1], args)
 		await frames(1)
 		var at := code.text.find("\t%s<public>(" % row[1])

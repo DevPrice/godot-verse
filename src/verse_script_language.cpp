@@ -988,6 +988,11 @@ Dictionary VerseScriptLanguage::_get_global_class_name(const String &p_path) con
 	result["base_type"] = base_types_for(decl).registry_base;
 	result["is_abstract"] = decl.is_abstract;
 	result["is_tool"] = decl.is_tool;
+	// A global class's icon is drawn from the class registry this fills (EditorData::get_script_icon
+	// reads script_class_get_icon_path first), not from VerseScript::_get_class_icon_path.
+	if (!decl.icon_path.empty()) {
+		result["icon_path"] = String::utf8(decl.icon_path.c_str());
+	}
 	// Presence of "name" is what registers the class: ScriptLanguageExtension::get_global_class_name
 	// returns empty the moment the key is absent, so a script without the attribute must not set
 	// it. The other keys are filled either way, as C#'s ScriptManagerBridge does.
