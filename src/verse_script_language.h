@@ -5,6 +5,7 @@
 #include "verse_api_lookup.h"
 #include "verse_bindings.h"
 #include "verse_debugger.h"
+#include "verse_profiler.h"
 #include "verse_project_state.h"
 #include "verse_script.h"
 
@@ -488,13 +489,9 @@ private:
 	// project_state is -- Godot's virtuals are const and nearly every one of them touches it.
 	mutable VerseDebugger debugger{ *this };
 
-	// Copies the host's rows into the array Godot allocated. Not a loop over p_info_array[i]:
-	// see the definition for why the stride is not sizeof.
-	int32_t fill_profiling_info(godot::ScriptLanguageExtensionProfilingInfo *p_info_array, int32_t p_info_max, bool p_frame_only);
-
-	// Whether Godot's profiler has asked for rows. Held here as well as in the host so that
-	// _profiling_start on a session with no host loaded is still a no-op rather than a crash.
-	bool profiling_active = false;
+	// The profiler's state and behaviour: see verse_profiler.h. Not mutable -- none of the
+	// `_profiling_*` virtuals it backs is const.
+	VerseProfiler profiler;
 
 	// The import _frame is about to write, as the res:// path of the file and the module path to
 	// import. One at a time: the next analysis reports whatever is still unresolved.
