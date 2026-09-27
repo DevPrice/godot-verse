@@ -1737,8 +1737,11 @@ runs only with a script editor, which a headless run has none of.
 the editor *draws* the page is now automated too: `editor` layer, `_tooltips` cases (`B40:
 event.Emit draws as a method of event`, `B40: with its argument and -> void`), which read the real
 `EditorHelpBitTooltip` raised by hovering `hover_probe.verse`'s `Emit`. `Subscribe` and `Await` on a
-`signal_ref` are a known defect rather than fixed, kept as a named skip: both still hover as Local
-Constants, because `event`'s page registers but `signal_ref`'s does not.
+`signal_ref` hovered as Local Constants for a while after: they are *class* methods, not extension
+methods, so the lookup's owner is the class and the extension-method arm never saw them. A method of
+a class written in one of the Godot package's files, with no mirrored page, now gets a page under
+the class's name the same way, with no receiver to drop (`B40: signal_ref.Await draws as a method of
+signal_ref`, and `.Subscribe`).
 
 **A limitation, recorded:** the declared type carries no parameter *names*, only types, so the drawn
 signature is `Emit(: t) -> void`. Names would need the host to carry the spelled signature in the

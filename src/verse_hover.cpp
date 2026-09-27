@@ -466,6 +466,26 @@ Dictionary VerseHover::lookup_code(const String &p_code, const String &p_symbol,
 			return result;
 		}
 
+		// A method of a class the Godot package declares and Godot has no page for --
+		// `signal_ref.Await`, `signal_ref.Subscribe`. B40's page, under the class's own name; the
+		// declared type has no receiver to drop, because a class method's is implicit.
+		if (kind == VH_LOOKUP_FUNCTION && found_owner != own_path && is_godot_package_file(own_path)) {
+			// The comment above the declaration first, the way a local result reads it: the host's
+			// doc is empty for these (it reads a `@doc` attribute, and GodotApi writes comments).
+			const String prose = verse_doc_bbcode(own_description.is_empty() ? String(found["doc"]) : own_description);
+			const String doc_class = publish_api_method(found_owner, found_name, result["doc_type"], prose, false);
+			if (!doc_class.is_empty()) {
+				// Godot reads a class member's prose off the page; probe_hover reads it here.
+				if (!prose.is_empty()) {
+					result["description"] = prose;
+				}
+				result["type"] = (int64_t)ScriptLanguageExtension::LOOKUP_RESULT_CLASS_METHOD;
+				result["class_name"] = doc_class;
+				result["class_member"] = found_name;
+				return result;
+			}
+		}
+
 		// A member of a class the project itself declares is a property or a method, and saying so
 		// is the whole difference between the editor calling it that and calling it a local
 		// variable. It takes naming the class it belongs to, which is only safe because that name
@@ -738,7 +758,7 @@ TypedArray<Dictionary> VerseHover::probe(const String &p_path) {
 }
 
 String VerseHover::publish_api_method(const String &p_receiver_type, const String &p_member,
-		const String &p_function_type, const String &p_description) const {
+		const String &p_function_type, const String &p_description, bool p_has_receiver) const {
 	// The page is named after the receiver, without its type parameters: `event(t)` documents its
 	// methods under `event`, the name a reader sees and the compiler prints. The page is built and
 	// the class name returned whether or not an editor is present -- so the lookup result is the
@@ -765,7 +785,7 @@ String VerseHover::publish_api_method(const String &p_receiver_type, const Strin
 	const VerseSignature signature = verse_parse_signature(signature_text.utf8().get_data());
 
 	Array arguments;
-	for (size_t i = 1; i < signature.params.size(); i++) {
+	for (size_t i = p_has_receiver ? 1 : 0; i < signature.params.size(); i++) {
 		Dictionary argument;
 		argument["name"] = String::utf8(signature.params[i].name.c_str());
 		argument["type"] = String::utf8(signature.params[i].type.c_str());

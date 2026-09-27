@@ -127,6 +127,11 @@ const char *godot_doc_class_for_primitive(const godot::String &p_verse_type);
 // flat scope would otherwise let a script's own Print be documented as Godot's.
 bool is_godot_package_global(const godot::String &p_owner, const godot::String &p_path);
 
+// Whether a definition was written in one of the Godot package's hand-written or generated files,
+// whatever it is a member of -- which is what separates `signal_ref.Await` from a project class's
+// method of the same name.
+bool is_godot_package_file(const godot::String &p_path);
+
 // The Verse class one of Godot's stands for, or null when that class was not mirrored -- which a
 // chain walk meets whenever gen_verse_api.py was run with --classes-file.
 //

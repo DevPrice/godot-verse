@@ -182,9 +182,10 @@ const char *godot_doc_class_for_primitive(const String &p_verse_type) {
 }
 
 bool is_godot_package_global(const String &p_owner, const String &p_path) {
-	if (p_owner != p_path) {
-		return false;
-	}
+	return p_owner == p_path && is_godot_package_file(p_path);
+}
+
+bool is_godot_package_file(const String &p_path) {
 	const String file = p_path.get_file();
 	// GodotMath.native.verse is the fourth and was missing until the math methods were looked for
 	// in it: it is where every extension method on a value type and every scalar `LerpAngle` is

@@ -41,7 +41,7 @@ private:
 	// name to put in the lookup result, or empty when there is no script editor to register with
 	// (a headless run), so the caller falls back to the local result (B40).
 	godot::String publish_api_method(const godot::String &p_receiver_type, const godot::String &p_member,
-			const godot::String &p_function_type, const godot::String &p_description) const;
+			const godot::String &p_function_type, const godot::String &p_description, bool p_has_receiver = true) const;
 
 	// The doc carrier and the pages it holds, for publish_api_method. The carrier is a VerseScript
 	// with no file, kept out of live_scripts so the build and analysis walks never reach it; its
