@@ -152,7 +152,11 @@ def collect(project: Path, godot: Path, engine: Path, wanted: set[str], limit: i
     kinds: dict[tuple[str, int, int], str] = {}
     total = 0
     for path in sorted(project.rglob("*.verse")):
-        if "addons" in path.parts:
+        # A dot-directory is skipped the way hover_probe.gd and the build's own walk skip it:
+        # `.godot/verse/bindings.verse` is generated, sorts first, and would take every position
+        # a small --limit allows.
+        relative = path.relative_to(project).parts
+        if "addons" in relative or any(part.startswith(".") for part in relative):
             continue
         res = "res://" + path.relative_to(project).as_posix()
         source = path.read_text(encoding="utf-8").replace("\r\n", "\n")
