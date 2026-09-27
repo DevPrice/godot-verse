@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "HostScript.h"
+#include "HostCallbacks.h"
 #include "HostEngineAdapters.h"
 #include "HostMarshal.h"
 #include "HostScriptState.h"
@@ -120,6 +121,7 @@ using GodotVerse::EnterVerse;
 using GodotVerse::FVerseEntry;
 using GodotVerse::DecoratedNameOf;
 using GodotVerse::ExtensionMethodDecoratedName;
+using GodotVerse::FCallbackTarget;
 using GodotVerse::FDeclaredType;
 using GodotVerse::FillLocation;
 using GodotVerse::FindBindingClass;
@@ -2713,46 +2715,6 @@ TMap<int64, FMintedPeer> GMintedByHandle;
 /// cached too -- a class the mirror does not carry is not worth asking Godot about twice.
 TMap<int64, UClass*> GHandleClassCache;
 
-/// A Verse function Godot holds as a Callable, as the pair that can name it again later.
-///
-/// Not the function *value*: 4a accepts only a method bound to a script instance (OQ-16 carries
-/// the unbound case), and for one of those the owner's handle and the method's decorated name say
-/// everything -- which means nothing here has to keep a VM cell alive, and invoking is the same
-/// InstanceCall path Godot's own dispatch takes, argument conversion and all.
-struct FCallbackTarget
-{
-    int64 OwnerHandle = 0;
-    FUtf8String DecoratedName;
-
-    /// Non-zero for a Callable the host minted to feed a suspended task rather than to call a
-    /// script method: the token of the row in GAwaiters below. Nothing a script hands to
-    /// `MakeCallable` ever carries one.
-    int64 AwaitToken = 0;
-
-    /// Pack the emission's arguments into one Godot Array before dispatching. What a subscriber to
-    /// a *foreign* signal receives, because nothing declares that signal's payload and there is no
-    /// per-argument shape to convert against.
-    bool bArgsAsArray = false;
-
-    /// Non-zero for the permanent connection an `@export_signal` event member holds: the binding
-    /// whose `Event` this emission is signalled into. The event-member analogue of AwaitToken, and
-    /// exclusive with it -- an await is one wait, this is every emission for the instance's life.
-    int64 EventSignalId = 0;
-};
-
-TMap<int64, FCallbackTarget> GCallbacks;
-int64 GNextCallbackId = 1;
-
-/// The one table in this file that is touched off the game thread, and so the one that needs a lock.
-///
-/// vh_callback_release is deliberately unguarded (R-ASYNC-8's exception, argued at its definition):
-/// a Godot Callable is destroyed on whatever thread dropped its last reference, and refusing that
-/// would leak the row instead. Releasing never enters the VM, so allowing it is safe -- but a
-/// TMap::Remove racing a Find on the game thread is not, and that is what this closes.
-///
-/// The id counter needs no lock: only the game thread mints one.
-FCriticalSection GCallbacksLock;
-
 /// One `signal` member of one live instance: everything the member's *type* and *name* said,
 /// resolved once at construction so neither has to be spelled again.
 struct FSignalBinding
@@ -5321,16 +5283,11 @@ AUTORTFM_DISABLE int64 ConnectDelivery(int64 OwnerHandle,
         return 0;
     }
 
-    const int64 CallbackId = GNextCallbackId++;
-    {
-        FScopeLock Lock(&GCallbacksLock);
-        GCallbacks.Add(CallbackId, MoveTemp(Target));
-    }
+    const int64 CallbackId = GodotVerse::AddCallback(MoveTemp(Target));
     const int64 CallableRef = Host.Godot.MakeCallable(Host.Godot.Ctx, CallbackId, OwnerHandle);
     if (CallableRef == 0)
     {
-        FScopeLock Lock(&GCallbacksLock);
-        GCallbacks.Remove(CallbackId);
+        GodotVerse::RemoveCallback(CallbackId);
         return 0;
     }
 
@@ -5347,8 +5304,7 @@ AUTORTFM_DISABLE int64 ConnectDelivery(int64 OwnerHandle,
     if (Status != VH_CALL_OK)
     {
         Host.Godot.ReleaseRef(Host.Godot.Ctx, CallableRef);
-        FScopeLock Lock(&GCallbacksLock);
-        GCallbacks.Remove(CallbackId);
+        GodotVerse::RemoveCallback(CallbackId);
         return 0;
     }
     OutCallableRef = CallableRef;
@@ -5478,10 +5434,7 @@ AUTORTFM_DISABLE void GodotVerse::EndSignalAwait(int64 Token)
         Scope->OnContentScopeCleanup.Remove(Awaiter.Cleanup);
     }
 
-    {
-        FScopeLock Lock(&GCallbacksLock);
-        GCallbacks.Remove(Awaiter.CallbackId);
-    }
+    GodotVerse::RemoveCallback(Awaiter.CallbackId);
 
     GodotVerse::FHostState& Host = GodotVerse::GetHost();
     if (Host.Godot.DisconnectSignal)
@@ -6525,8 +6478,7 @@ AUTORTFM_DISABLE void GodotVerse::ReleaseInstance(FInstance* Instance)
                 }
                 if (Binding->CallbackId != 0)
                 {
-                    FScopeLock Lock(&GCallbacksLock);
-                    GCallbacks.Remove(Binding->CallbackId);
+                    RemoveCallback(Binding->CallbackId);
                 }
                 if (const UObject* const Event = Binding->Event.Get())
                 {
@@ -6963,24 +6915,18 @@ AUTORTFM_DISABLE int64 GodotVerse::MakeCallableFor(const FVerseValue& Callback)
         return 0;
     }
 
-    const int64 Id = GNextCallbackId++;
-    {
-        FScopeLock Lock(&GCallbacksLock);
-        GCallbacks.Add(Id, FCallbackTarget{OwnerHandle, Decorated});
-    }
+    const int64 Id = AddCallback(FCallbackTarget{OwnerHandle, Decorated});
     const int64 Ref = Host.Godot.MakeCallable(Host.Godot.Ctx, Id, OwnerHandle);
     if (Ref == 0)
     {
-        FScopeLock Lock(&GCallbacksLock);
-        GCallbacks.Remove(Id);
+        RemoveCallback(Id);
     }
     return Ref;
 }
 
 AUTORTFM_DISABLE void GodotVerse::ReleaseCallback(int64 CallbackId)
 {
-    FScopeLock Lock(&GCallbacksLock);
-    GCallbacks.Remove(CallbackId);
+    RemoveCallback(CallbackId);
 }
 
 AUTORTFM_DISABLE int32 GodotVerse::InvokeCallback(int64 CallbackId,
@@ -6989,18 +6935,12 @@ AUTORTFM_DISABLE int32 GodotVerse::InvokeCallback(int64 CallbackId,
                                                   vh_value& OutResult,
                                                   FFieldStorage& OutStorage)
 {
-    // Copied out under the lock rather than held as a pointer: the call below runs Verse, and a
-    // Callable released on another thread mid-call would take the row -- and the pointer -- with it.
-    FCallbackTarget Target;
+    const TResult<FCallbackTarget> Found = FindCallback(CallbackId);
+    if (!Found)
     {
-        FScopeLock Lock(&GCallbacksLock);
-        const FCallbackTarget* const Found = GCallbacks.Find(CallbackId);
-        if (!Found)
-        {
-            return VH_ERR_NOT_FOUND;
-        }
-        Target = *Found;
+        return VH_ERR_NOT_FOUND;
     }
+    const FCallbackTarget& Target = Found.GetValue();
 
     // A Callable the host minted to feed a suspended task rather than to call a script method. It
     // resumes inside this emission, which is where GDScript resumes a coroutine too.

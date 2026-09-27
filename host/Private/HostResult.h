@@ -54,6 +54,9 @@ enum class EHostFailure : uint8
     CallbackMissing,
     /// The consumer's callback answered an error.
     CallbackFailed,
+    /// No live row answers to the id: a callback, a signal binding or a wait that was never made or
+    /// has already been released.
+    UnknownId,
 };
 
 /// A value, or the reason there is none.

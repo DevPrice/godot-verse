@@ -104,6 +104,7 @@ int32_t StatusFor(GodotVerse::EHostFailure Failure)
     case EHostFailure::NothingAtPosition:
     case EHostFailure::NotAFunction:
     case EHostFailure::NoSuchClass:
+    case EHostFailure::UnknownId:
         return VH_ERR_NOT_FOUND;
     // A value the declaration cannot take, or cannot be built as: the call was shaped wrong, which
     // is what InstanceCall already answers for a conversion that declines.
