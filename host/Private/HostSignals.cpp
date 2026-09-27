@@ -712,6 +712,58 @@ AUTORTFM_DISABLE GodotVerse::TResult<void> PayloadValue(Verse::FRunningContext C
     return GodotVerse::EHostFailure::Unconvertible;
 }
 
+/// The one place the host signals a `/Verse.org/Verse` event with an emission Godot delivered:
+/// a wait's, whose event lives on the `signal` object it awaited, and an `@export_signal` member's,
+/// whose binding holds it. FindEvent answers which, inside the VM; a null Shape means a foreign
+/// signal, whose arguments become one Godot Array.
+///
+/// A substitute (tripwire/subscribable_event_unreleased, docs/tripwires.md): the member types are
+/// `signal(t)` and a plain `event(t)` because the book's `subscribable_event` is not in this drop
+/// and `subscribable_event_intrnl` is `<epic_internal>` and marked for deletion. Adopting Epic's
+/// type the day it ships changes what this signals, not the emit verb: its `Signal` is
+/// `no_rollback` too, so emitting stays the bridge's and Godot stays the dispatcher.
+///
+/// Its own `AutoRTFM::Transact`, nested inside whatever transaction the emitting call is already
+/// in, for the reason DeliverToAwaiter's contract gives.
+template <typename FFindEvent>
+AUTORTFM_DISABLE GodotVerse::TResult<void> SignalVerseEvent(FFindEvent&& FindEvent,
+                                                            const FPayloadShape* Shape,
+                                                            const vh_value* Args,
+                                                            int32 ArgCount)
+{
+    GodotVerse::TResult<void> Result = GodotVerse::TResult<void>::Ok();
+    Verse::FRunningContext Context = Verse::FRunningContextPromise{};
+    const AutoRTFM::ETransactionResult TransactionResult = AutoRTFM::Transact([&] {
+        AutoRTFM::Open([&] {
+            EnterVerse(Context, [&] {
+                verse::event* const Event = FindEvent(Context);
+                if (!Event)
+                {
+                    Result = GodotVerse::EHostFailure::NotASignal;
+                    return;
+                }
+                Verse::VValue Payload;
+                const GodotVerse::TResult<void> Built = Shape ? PayloadValue(Context, *Shape, Args, ArgCount, Payload)
+                                                              : ArgumentArrayValue(Context, Args, ArgCount, Payload);
+                if (!Built)
+                {
+                    Result = Built;
+                    return;
+                }
+                // event::Signal resumes the suspended awaits in FIFO order, under each task's own
+                // content scope, skipping any whose scope was terminated -- Epic's code, and the
+                // reason `Await` needed no scheduler of its own.
+                Event->Signal(FVerseValue(Payload));
+            });
+        });
+    });
+    if (TransactionResult != AutoRTFM::ETransactionResult::Committed)
+    {
+        return GodotVerse::EHostFailure::Aborted;
+    }
+    return Result;
+}
+
 } // namespace
 
 AUTORTFM_DISABLE GodotVerse::TResult<void> GodotVerse::DeliverToAwaiter(int64 Token, const vh_value* Args, int32 ArgCount)
@@ -736,38 +788,8 @@ AUTORTFM_DISABLE GodotVerse::TResult<void> GodotVerse::DeliverToAwaiter(int64 To
     {
         return EHostFailure::UnknownId;
     }
-
-    TResult<void> Result = TResult<void>::Ok();
-    Verse::FRunningContext Context = Verse::FRunningContextPromise{};
-    const AutoRTFM::ETransactionResult TransactionResult = AutoRTFM::Transact([&] {
-        AutoRTFM::Open([&] {
-            EnterVerse(Context, [&] {
-                verse::event* const Event = FindEventField(Context, Waiter);
-                if (!Event)
-                {
-                    Result = EHostFailure::NotASignal;
-                    return;
-                }
-                Verse::VValue Payload;
-                const TResult<void> Built = Shape ? PayloadValue(Context, *Shape, Args, ArgCount, Payload)
-                                                  : ArgumentArrayValue(Context, Args, ArgCount, Payload);
-                if (!Built)
-                {
-                    Result = Built;
-                    return;
-                }
-                // event::Signal resumes the suspended awaits in FIFO order, under each task's own
-                // content scope, skipping any whose scope was terminated -- Epic's code, and the
-                // reason `Await` needed no scheduler of its own.
-                Event->Signal(FVerseValue(Payload));
-            });
-        });
-    });
-    if (TransactionResult != AutoRTFM::ETransactionResult::Committed)
-    {
-        return EHostFailure::Aborted;
-    }
-    return Result;
+    return SignalVerseEvent([Waiter](Verse::FRunningContext Context) { return FindEventField(Context, Waiter); },
+                            Shape, Args, ArgCount);
 }
 
 AUTORTFM_DISABLE GodotVerse::TResult<void> GodotVerse::DeliverToEvent(int64 SignalId, const vh_value* Args, int32 ArgCount)
@@ -785,34 +807,7 @@ AUTORTFM_DISABLE GodotVerse::TResult<void> GodotVerse::DeliverToEvent(int64 Sign
         return TResult<void>::Ok();
     }
     const FPayloadShape Shape = Binding->Payload;
-
-    TResult<void> Result = TResult<void>::Ok();
-    Verse::FRunningContext Context = Verse::FRunningContextPromise{};
-    const AutoRTFM::ETransactionResult TransactionResult = AutoRTFM::Transact([&] {
-        AutoRTFM::Open([&] {
-            EnterVerse(Context, [&] {
-                verse::event* const Event = Cast<verse::event>(Held);
-                if (!Event)
-                {
-                    Result = EHostFailure::NotASignal;
-                    return;
-                }
-                Verse::VValue Payload;
-                const TResult<void> Built = PayloadValue(Context, Shape, Args, ArgCount, Payload);
-                if (!Built)
-                {
-                    Result = Built;
-                    return;
-                }
-                Event->Signal(FVerseValue(Payload));
-            });
-        });
-    });
-    if (TransactionResult != AutoRTFM::ETransactionResult::Committed)
-    {
-        return EHostFailure::Aborted;
-    }
-    return Result;
+    return SignalVerseEvent([Held](Verse::FRunningContext) { return Cast<verse::event>(Held); }, &Shape, Args, ArgCount);
 }
 
 namespace {
