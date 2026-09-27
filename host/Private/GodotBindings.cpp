@@ -58,8 +58,16 @@ decltype(auto) CallGodot(CallableType&& Callable)
 void RaiseCallStatus(int32 Status, int64 Handle, const verse::string& Member, const TCHAR* Verb)
 {
     const FUtf8String Name(ToView(Member));
-    switch (Status)
+    VH_EXHAUSTIVE_SWITCH_BEGIN
+    switch (static_cast<vh_call_status>(Status))
     {
+    // Never actually raises: the caller only reaches here once Status != VH_CALL_OK, and
+    // VH_CALL_BAD_ARITY reaches no message here either -- kept explicit so a fifth vh_call_status
+    // fails this switch instead of silently joining one of them.
+    case VH_CALL_OK:
+    case VH_CALL_BAD_ARITY:
+        break;
+
     case VH_CALL_DEAD_OBJECT:
         RAISE_VERSE_RUNTIME_ERROR_FORMAT(
             Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
@@ -94,10 +102,8 @@ void RaiseCallStatus(int32 Status, int64 Handle, const verse::string& Member, co
             reinterpret_cast<const char*>(*Name),
             Handle);
         break;
-
-    default:
-        break;
     }
+    VH_EXHAUSTIVE_SWITCH_END
 }
 
 /// The same as RaiseCallStatus, for a reference id rather than a named member of an object.
@@ -200,7 +206,8 @@ struct FLaneCount
 
 FLaneCount LanesFor(int64 Tag)
 {
-    switch (Tag)
+    VH_EXHAUSTIVE_SWITCH_BEGIN
+    switch (static_cast<vh_variant_tag>(Tag))
     {
     case VH_VARIANT_BOOL:
     case VH_VARIANT_INT:
@@ -238,10 +245,34 @@ FLaneCount LanesFor(int64 Tag)
     case VH_VARIANT_RECT2I:
         return {4, 0};
 
-    default:
-        // Strings ride in Text, references in Ref, and nil occupies nothing.
+    // Strings ride in Text, references in Ref, and nil occupies nothing. Listed rather than left
+    // to a default so a new tag has to be sorted into a lane count here before it can be added
+    // anywhere else.
+    case VH_VARIANT_NIL:
+    case VH_VARIANT_STRING:
+    case VH_VARIANT_STRING_NAME:
+    case VH_VARIANT_NODE_PATH:
+    case VH_VARIANT_RID:
+    case VH_VARIANT_OBJECT:
+    case VH_VARIANT_CALLABLE:
+    case VH_VARIANT_SIGNAL:
+    case VH_VARIANT_DICTIONARY:
+    case VH_VARIANT_ARRAY:
+    case VH_VARIANT_PACKED_BYTE_ARRAY:
+    case VH_VARIANT_PACKED_INT32_ARRAY:
+    case VH_VARIANT_PACKED_INT64_ARRAY:
+    case VH_VARIANT_PACKED_FLOAT32_ARRAY:
+    case VH_VARIANT_PACKED_FLOAT64_ARRAY:
+    case VH_VARIANT_PACKED_STRING_ARRAY:
+    case VH_VARIANT_PACKED_VECTOR2_ARRAY:
+    case VH_VARIANT_PACKED_VECTOR3_ARRAY:
+    case VH_VARIANT_PACKED_COLOR_ARRAY:
+    case VH_VARIANT_PACKED_VECTOR4_ARRAY:
+    case VH_VARIANT_MAX:
         return {0, 0};
     }
+    VH_EXHAUSTIVE_SWITCH_END
+    return {0, 0};
 }
 
 int64 IntLane(const FGodotValue& Value, int32 Index)
