@@ -92,13 +92,15 @@ def check_facts(text: str, facts: dict) -> None:
     for m in tags:
         key, value = m.group(1), int(m.group(2))
         line = text.count("\n", 0, m.start()) + 1
-        case_name = unique(seen, f"tag {key} @ CLAUDE.md:{line}")
+        # Named by key and occurrence, not by line, so an unrelated edit to CLAUDE.md does not
+        # rename every case below it; the line is in the detail, where a failure needs it.
+        case_name = unique(seen, f"tag {key}")
         cited.add(key)
         if key not in facts:
-            check(case_name, False, f"docs/facts.json has no fact named {key!r}")
+            check(case_name, False, f"CLAUDE.md:{line}: docs/facts.json has no fact named {key!r}")
             continue
         check(case_name, facts[key] == value,
-              f"CLAUDE.md says {value}, docs/facts.json says {facts[key]}")
+              f"CLAUDE.md:{line} says {value}, docs/facts.json says {facts[key]}")
 
     for key in sorted(facts):
         if key in UNCITED_FACTS:
@@ -123,20 +125,21 @@ def check_contract_citations(text: str) -> None:
         line = text.count("\n", 0, m.start()) + 1
         for raw in m.group(1).split(","):
             cite = raw.strip()
-            case_name = unique(seen, f"contract {cite} @ CLAUDE.md:{line}")
+            case_name = unique(seen, f"contract {cite}")
+            where = f"CLAUDE.md:{line}"
             if cite.startswith("probe/") and cite.endswith(".verse"):
                 fixture = cite[len("probe/"):]
                 src = PROBE_DIR / fixture
                 golden = PROBE_EXPECTED_DIR / f"{fixture}.txt"
                 check(case_name, src.is_file() and golden.is_file(),
-                      f"{src} is a file: {src.is_file()}; {golden} is a file: {golden.is_file()}")
+                      f"{where}: {src} is a file: {src.is_file()}; {golden} is a file: {golden.is_file()}")
             elif cite.startswith("godot/"):
                 name = cite[len("godot/"):]
                 check(case_name, name in GODOT_CONTRACT_CASES,
-                      f"{name!r} is not one of tools/run_godot_contract.py's case names")
+                      f"{where}: {name!r} is not one of tools/run_godot_contract.py's case names")
             else:
                 check(case_name, False,
-                      f"{cite!r} names neither a probe/<fixture>.verse nor a godot/<case>")
+                      f"{where}: {cite!r} names neither a probe/<fixture>.verse nor a godot/<case>")
 
 
 def main() -> int:
