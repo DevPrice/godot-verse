@@ -49,7 +49,11 @@ def mirror_host(src: Path, dst: Path, extra: dict[str, Path] | None = None) -> t
     copied = 0
     for rel, src_path in src_files.items():
         dst_path = dst / rel
-        if not dst_path.exists() or src_path.stat().st_mtime > dst_path.stat().st_mtime:
+        # Newer *and* different: a fresh worktree's checkout makes every file newer, and rewriting
+        # an identical Verse/ file truncates one a running host may be reading at that moment --
+        # the compiler reads the staged package sources at runtime, not only at build time.
+        if not dst_path.exists() or (src_path.stat().st_mtime > dst_path.stat().st_mtime
+                                     and src_path.read_bytes() != dst_path.read_bytes()):
             dst_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src_path, dst_path)
             copied += 1
@@ -219,8 +223,9 @@ def run_ubt(engine: Path, target: str, config: str) -> None:
         sys.exit(result.returncode)
 
 
-# UBT target -> the binary it leaves in Engine/Binaries/Win64. The cooker is not here: it is an
-# executable the export plugin runs out of the engine tree, and nothing collects it.
+# UBT target -> the binary it leaves in Engine/Binaries/Win64. The cooker and verse_host_unit are
+# not here: each is an executable run out of the engine tree -- where VNI finds the Verse sources it
+# recorded relative to the running module -- and nothing collects either.
 TARGET_BINARIES = {
     "VerseHost": "verse_host.dll",
     "VerseHostRuntime": "verse_host_runtime.dll",
@@ -313,11 +318,12 @@ def main() -> None:
                         help="UE source checkout with the Verse toolchain; defaults to $UE_ROOT")
     parser.add_argument("--config", default="Development", choices=["Debug", "DebugGame", "Development", "Shipping"])
     parser.add_argument("--target", default="VerseHost",
-                        choices=["VerseHost", "VerseHostRuntime", "VerseHostCooker"],
+                        choices=["VerseHost", "VerseHostRuntime", "VerseHostCooker", "VerseHostUnit"],
                         help="the UBT target under host/ to build: VerseHost (the editor host), "
                              "VerseHostRuntime (the one an exported game ships) -- both collected "
                              "into bin/ -- or VerseHostCooker, which is an executable the export "
-                             "plugin runs and is left in the engine tree")
+                             "plugin runs, or VerseHostUnit, the host's white-box test executable; "
+                             "those two are left in the engine tree")
     parser.add_argument("--clean", action="store_true")
     parser.add_argument("--stage-only", action="store_true")
     args = parser.parse_args()
@@ -361,6 +367,12 @@ def main() -> None:
         "Public/verse_diagnostics.h": repo / "include" / "verse_diagnostics.h",
         "Public/verse_diagnostics.def": repo / "include" / "verse_diagnostics.def",
     }
+    # verse_host_unit's main and its tests, which no other target may compile: staged beside the
+    # host's own sources for this target alone, so the next build of any other target mirrors them
+    # away again. Flat into Private/ because that is the directory the host's headers resolve from.
+    if args.target == "VerseHostUnit":
+        for source in sorted((repo / "tests" / "host_unit").glob("*.cpp")):
+            staged_extra[f"Private/{source.name}"] = source
     # The build id is written last and digests everything else: it is the one staged file that
     # cannot be an input to itself.
     staged_extra[f"Private/{BUILD_ID_NAME}"] = write_build_id(

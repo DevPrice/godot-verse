@@ -318,13 +318,14 @@ compiler-side entry points answer `VH_ERR_UNSUPPORTED` in a runtime host.
 with Godot only when the subclass declares it, so **omitting one is how you say "unsupported."**
 Adding an override you do not implement changes behaviour.
 
-### `host/` — three UBT targets over one `Private/`
+### `host/` — four UBT targets over one `Private/`
 
 | target | produces | for |
 | --- | --- | --- |
 | `VerseHost.Target.cs` | `verse_host.dll` | the editor: compiles, analyses, runs |
 | `VerseHostRuntime.Target.cs` | `verse_host_runtime.dll` | what an exported game ships; `WITH_VERSE_COMPILER=0` |
 | `VerseHostCooker.Target.cs` | `verse_cook.exe` | an **executable** the export plugin runs as a subprocess |
+| `VerseHostUnit.Target.cs` | `verse_host_unit.exe` | the editor host plus `tests/host_unit`'s main: white-box tests of `Private/` (abi layer) |
 
 `Private/` is the ABI implementation. `VerseHost.cpp` is the entry surface; `HostRuntime` is the
 host state, the diagnostic channel and the call arena, and `HostEventLoop` the task pump;
@@ -460,6 +461,7 @@ reviewed files of `docs/web-vm/spec/` alone. Keep it that way — do not bring V
     python tools/build_host.py            # stages host/ into the UE tree, runs UBT
     python tools/build_host.py --target VerseHostRuntime  # the host an exported game ships
     python tools/build_host.py --target VerseHostCooker   # verse_cook.exe; not collected into bin/
+    python tools/build_host.py --target VerseHostUnit     # verse_host_unit.exe, the host's white-box tests; not collected either
     python tools/build_host.py --clean    # after a worktree build poisoned the shared staging
     scons target=editor                   # the GDExtension; target=template_release is what an export ships
     python tools/gen_verse_api.py         # regenerates the Verse mirror of Godot's API
@@ -557,6 +559,19 @@ stands in for one.
 `tests/host_smoke`'s fixtures and asserts the packages, the container, the sidecar and the
 `program.vbc` (read by the clean-room `tools/vbc_dump.py`, which shares no code with the writer),
 and a runtime-host case that runs `task(t)` methods and a raise through `cooked_probe`.
+
+**`verse_host_unit`**, in the same layer, is the white-box seam (`docs/architecture-review.md`
+item 3 step 4): `host/Private` linked with `tests/host_unit/HostUnitMain.cpp` as an executable
+(`VerseHostUnit.Target.cs`, the editor host with `bShouldCompileAsDLL = false` and none of the
+cooker's editor-class flags). It boots through `vh_init`, compiles `tests/host_unit`'s fixtures and
+asks the units directly: every `EDeclaredKind` the classifier answers, `DescribeType` and
+`DescribeExportType`, a wire-to-Verse-to-wire round trip per kind that crosses, a sidecar round trip
+of the declared types and var-ness (per class and through a whole `WriteClassSidecar` /
+`LoadClassSidecar`), `StatusFor` for every `EHostFailure` at both consumer minors, and the engine
+adapters. `KindName` and `ExpectedStatus` there are exhaustive switches, so **a new kind or failure
+reason fails that file's build until the test names it**. `build_host.py` stages the test's `.cpp`
+into `Private/` for that target alone; the exe stays in `Engine/Binaries/Win64`, because VNI finds
+the Verse sources relative to the running module, and `--build` does not rebuild it.
 
 **The interpreter's differential harness is not a layer.** `tools/run_vm_conformance.py` runs
 `tests/cooked_probe` over `tests/vm_conformance`'s fixtures against `bin/verse_vm.dll` and diffs the
@@ -789,6 +804,7 @@ game.
 The binaries still run standalone, which is what to reach for when bisecting one failure:
 
     bin/host_smoke.exe <engine>/Engine/Binaries/Win64/verse_host.dll <engine>/Engine .
+    <engine>/Engine/Binaries/Win64/verse_host_unit.exe .   # the argument is the repo root
     bin/verse_lexer_test.exe
     bin/verse_class_decl_test.exe
     bin/verse_module_map_test.exe

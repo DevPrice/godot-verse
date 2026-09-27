@@ -287,7 +287,10 @@ def run_units(results: Results, do_build: bool) -> None:
 def run_abi(results: Results, engine: Path | None, do_build: bool) -> None:
     if engine is None:
         results.skip("host_smoke", "no Unreal checkout -- set UE_ROOT or pass --engine")
+        results.skip("verse_host_unit", "no Unreal checkout -- set UE_ROOT or pass --engine")
         return
+
+    run_host_unit(results, engine)
 
     host_dll = engine / "Engine" / "Binaries" / "Win64" / "verse_host.dll"
     if not host_dll.is_file():
@@ -310,6 +313,18 @@ def run_abi(results: Results, engine: Path | None, do_build: bool) -> None:
         cases="smoke")
 
     run_cook(results, engine)
+
+
+def run_host_unit(results: Results, engine: Path) -> None:
+    """The host's white-box seam: host/Private linked with tests/host_unit's main, run out of the
+    engine tree like the cooker, because VNI finds its Verse sources relative to the running module.
+    Not rebuilt by --build: it is a UBT target, which is build_host.py's."""
+    unit = engine / "Engine" / "Binaries" / "Win64" / "verse_host_unit.exe"
+    if not unit.is_file():
+        results.skip("verse_host_unit", f"{unit} not built -- run tools/build_host.py --target VerseHostUnit")
+        return
+    run("verse_host_unit", [str(unit), str(REPO)], results, require_line="[host_unit] ran in",
+        cases="host_unit")
 
 
 # Classes tests/host_smoke's fixtures declare under their own file's name, and so the classes a
