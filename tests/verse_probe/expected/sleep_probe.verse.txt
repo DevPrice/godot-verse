@@ -25,8 +25,8 @@ loser's defer ran
 race returned
 [probe] call ReportDeferred: status 0, int 1
 [probe] call ReportRaced: status 0, int 1
-[probe] :0:0: error 0: Subscribe was called on an unbound `signal`, which names nothing.
-[probe] :0:0: error 0: Subscribe was called on an unbound `signal`, which names nothing.
+[probe] :0:0: error 0: VG2106: Subscribe was called on an unbound `signal`, which names nothing.
+[probe] :0:0: error 0: VG2106: Subscribe was called on an unbound `signal`, which names nothing.
 both handlers satisfied Subscribe
 [probe] call Connect: status 0, void
 [probe_contract] exit code: 0

@@ -343,11 +343,14 @@ def main() -> None:
         shutil.rmtree(dst)
 
     # Both DLLs compile against the same ABI header, so it lives outside host/ and is staged in,
-    # beside the two generated headers it includes.
+    # beside the two generated headers it includes -- and so does the diagnostic registry, which
+    # the host shares with src/ and vm/ so that all three print one sentence per failure.
     staged_extra = {
         "Public/verse_host_abi.h": repo / "include" / "verse_host_abi.h",
         "Public/verse_host_variant_tags.gen.h": repo / "include" / "verse_host_variant_tags.gen.h",
         "Public/verse_host_abi_layout.h": repo / "include" / "verse_host_abi_layout.h",
+        "Public/verse_diagnostics.h": repo / "include" / "verse_diagnostics.h",
+        "Public/verse_diagnostics.def": repo / "include" / "verse_diagnostics.def",
     }
     # The build id is written last and digests everything else: it is the one staged file that
     # cannot be an input to itself.

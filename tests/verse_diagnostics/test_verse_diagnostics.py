@@ -3,7 +3,7 @@
 A diagnostic is asserted by its ID, so the ID is only worth something while it names exactly one
 sentence and every ID anything prints or asserts is one the registry defines. This reads the
 registry the way the preprocessor does -- one VERSE_DIAG(id, where, text) per row, text as adjacent
-string literals -- and holds it to src/ and vm/ (which emit the IDs), to the tests and tools that
+string literals -- and holds it to src/, vm/ and host/ (which emit the IDs), to the tests and tools that
 assert them, and to docs/diagnostics.md, which is the page an author lands on from one.
 
 One line per case, exit status 1 on any failure.
@@ -98,11 +98,11 @@ def main() -> None:
     check("every row has a sentence", not empty, ", ".join(empty))
 
     # The registry itself is the one place an ID may appear without being used.
-    source = [p for p in files_under("src", "vm", "include", suffixes=(".cpp", ".h"))
+    source = [p for p in files_under("src", "vm", "host/Private", "include", suffixes=(".cpp", ".h"))
               if p.name != "verse_diagnostics.def"]
     emitted = ids_in(source)
     unknown = sorted(i for i in emitted if i not in registered)
-    check("every ID src/ and vm/ emit is in the registry", not unknown,
+    check("every ID src/, vm/ and host/ emit is in the registry", not unknown,
           ", ".join(f"{i} in {emitted[i][0]}" for i in unknown))
     unused = sorted(i for i in registered if i not in emitted)
     check("every ID in the registry is emitted somewhere", not unused, ", ".join(unused))

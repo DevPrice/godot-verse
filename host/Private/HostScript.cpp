@@ -2,6 +2,7 @@
 
 #include "HostScript.h"
 #include "HostTypeModel.h"
+#include "verse_diagnostics.h"
 #include "AutoRTFM.h"
 #include "Containers/Map.h"
 #include "Containers/UnrealString.h"
@@ -6195,39 +6196,24 @@ AUTORTFM_DISABLE void DescribePayload(const uLang::CTypeBase* Payload,
     }
 }
 
-/// Why a signal was refused, as a clause that follows "was never registered with Godot: ".
-///
-/// The editor says this better -- src/verse_script_language.cpp turns the same code into a sentence
-/// with a fix in it, at the member's own line, which is where an author wants it. This is the
-/// version a game running outside the editor gets, and it exists because the alternative was the
-/// generic "names nothing", which described the symptom and not one cause.
-AUTORTFM_DISABLE FUtf8String SignalRejectReason(int32 Reject, const FUtf8String& Detail)
+std::string_view DiagArg(const FUtf8String& Text)
 {
-    VH_EXHAUSTIVE_SWITCH_BEGIN
-    switch (static_cast<vh_signal_reject>(Reject))
-    {
-    // Never actually rejected, so never actually asked for; kept alongside the rest so a new
-    // vh_signal_reject enumerator fails here rather than answering the generic sentence below.
-    case VH_SIGNAL_OK:
-        return UTF8TEXT("the declaration was refused.");
-    case VH_SIGNAL_IS_VAR:
-        return UTF8TEXT("a `signal` member must not be `var`.");
-    // Retired: GetClassSignalsLive no longer tests access. Kept while the enumerator is, so a
-    // descriptor recorded by an older host still reads as itself rather than as the default.
-    case VH_SIGNAL_NOT_PUBLIC:
-        return UTF8TEXT("a `signal` member must be `<public>` for anything outside the class to connect to it.");
-    case VH_SIGNAL_NO_GODOT_OWNER:
-        return UTF8TEXT("its class does not derive from `object`, so Godot never gives it an object to register on.");
-    case VH_SIGNAL_PAYLOAD_UNSUPPORTED:
-        return FUtf8String(UTF8TEXT("its payload argument `")) + Detail + UTF8TEXT("` has no Godot type.");
-    case VH_SIGNAL_PAYLOAD_NESTED_STRUCT:
-        return FUtf8String(UTF8TEXT("its payload field `")) + Detail
-            + UTF8TEXT("` is itself a struct, and a payload decomposes one level only.");
-    case VH_SIGNAL_NEEDS_ATTRIBUTE:
-        return UTF8TEXT("it carries no `@export_signal`, so Godot was never told about it.");
-    }
-    VH_EXHAUSTIVE_SWITCH_END
-    return UTF8TEXT("the declaration was refused.");
+    return std::string_view(reinterpret_cast<const char*>(*Text), (size_t)Text.Len());
+}
+
+/// Reports one of the registry's sentences (include/verse_diagnostics.def), the one vm/ and src/
+/// print for the same thing.
+AUTORTFM_DISABLE void ReportVerseDiag(verse_diag Id, std::initializer_list<verse_diag_arg> Args = {})
+{
+    const std::string Text = verse_diag_text(Id, Args);
+    GodotVerse::ReportError(FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Text.data()), (int32)Text.size()));
+}
+
+/// Why a signal was refused: the VG20xx sentence the editor shows at the member's own line, which
+/// is what a game running outside the editor has instead of that line.
+AUTORTFM_DISABLE std::string SignalRejectReason(const FUtf8String& Name, int32 Reject, const FUtf8String& Detail)
+{
+    return verse_signal_rejection(DiagArg(Name), Reject, DiagArg(Detail));
 }
 
 /// The UObject a class-typed member holds, or null.
@@ -7032,9 +7018,7 @@ AUTORTFM_DISABLE void GodotVerse::EmitSignal(int64 SignalId, const FVerseValue& 
     const FSignalBinding* const Binding = GSignalBindings.Find(SignalId);
     if (!Binding)
     {
-        ReportError(UTF8TEXT("A signal was emitted through an unbound `signal`. One a script "
-                             "built for itself rather than declared as a member of a class Godot "
-                             "instantiated names nothing, the way `godot_array{}` does."));
+        ReportVerseDiag(verse_diag::VG2105);
         return;
     }
 
@@ -7043,8 +7027,8 @@ AUTORTFM_DISABLE void GodotVerse::EmitSignal(int64 SignalId, const FVerseValue& 
     // otherwise get the generic "names nothing" for a member that was declared perfectly visibly.
     if (Binding->Reject != VH_SIGNAL_OK)
     {
-        ReportError(FUtf8String(UTF8TEXT("The signal `")) + Binding->Name + UTF8TEXT("` was never registered with Godot: ")
-            + SignalRejectReason(Binding->Reject, Binding->RejectDetail) + UTF8TEXT(" Nothing was emitted."));
+        const std::string Reason = SignalRejectReason(Binding->Name, Binding->Reject, Binding->RejectDetail);
+        ReportVerseDiag(verse_diag::VG2101, {{"signal", DiagArg(Binding->Name)}, {"reason", Reason}});
         return;
     }
 
@@ -7118,8 +7102,7 @@ AUTORTFM_DISABLE void GodotVerse::EmitSignal(int64 SignalId, const FVerseValue& 
 
     if (!bConverted)
     {
-        ReportError(FUtf8String(UTF8TEXT("The payload of signal `")) + Binding->Name
-            + UTF8TEXT("` has no representation on the Godot wire, so nothing was emitted."));
+        ReportVerseDiag(verse_diag::VG2104, {{"signal", DiagArg(Binding->Name)}});
         return;
     }
 
@@ -7136,7 +7119,7 @@ AUTORTFM_DISABLE int64 GodotVerse::SubscribeSignal(int64 SignalId, const FVerseV
     const FSignalBinding* const Binding = GSignalBindings.Find(SignalId);
     if (!Binding)
     {
-        ReportError(UTF8TEXT("Subscribe was called on an unbound `signal`, which names nothing."));
+        ReportVerseDiag(verse_diag::VG2106);
         return 0;
     }
 
@@ -7144,8 +7127,8 @@ AUTORTFM_DISABLE int64 GodotVerse::SubscribeSignal(int64 SignalId, const FVerseV
     // refuse the name, and "connect failed" is a worse sentence than the one that says why.
     if (Binding->Reject != VH_SIGNAL_OK)
     {
-        ReportError(FUtf8String(UTF8TEXT("Cannot subscribe to `")) + Binding->Name + UTF8TEXT("`: ")
-            + SignalRejectReason(Binding->Reject, Binding->RejectDetail));
+        const std::string Reason = SignalRejectReason(Binding->Name, Binding->Reject, Binding->RejectDetail);
+        ReportVerseDiag(verse_diag::VG2102, {{"signal", DiagArg(Binding->Name)}, {"reason", Reason}});
         return 0;
     }
 
@@ -7220,10 +7203,7 @@ AUTORTFM_DISABLE void GodotVerse::EmitEventSignal(UObject* Event, const FVerseVa
     const int64 SignalId = EventBindingFor(Event);
     if (SignalId == 0)
     {
-        ReportError(UTF8TEXT("Emit was called on an `event` that is not an `@export_signal` member "
-                             "of a class Godot instantiated, so it names no Godot signal. An event "
-                             "a script builds for itself is a Verse event and nothing more -- "
-                             "`Signal` is how tasks are resumed through one."));
+        ReportVerseDiag(verse_diag::VG2107);
         return;
     }
     EmitSignal(SignalId, Payload);
@@ -7234,8 +7214,7 @@ AUTORTFM_DISABLE int64 GodotVerse::SubscribeEventSignal(UObject* Event, const FV
     const int64 SignalId = EventBindingFor(Event);
     if (SignalId == 0)
     {
-        ReportError(UTF8TEXT("Subscribe was called on an `event` that is not an `@export_signal` "
-                             "member of a class Godot instantiated, so it names no Godot signal."));
+        ReportVerseDiag(verse_diag::VG2108);
         return 0;
     }
     return SubscribeSignal(SignalId, Callback);
@@ -7648,14 +7627,13 @@ AUTORTFM_DISABLE int64 GodotVerse::BeginSignalAwait(UObject* Signal)
     const FSignalBinding* const Binding = GSignalBindings.Find(SignalId);
     if (!Binding)
     {
-        ReportError(UTF8TEXT("Await was called on an unbound `signal`, which names nothing "
-                             "and so will never be emitted."));
+        ReportVerseDiag(verse_diag::VG2109);
         return 0;
     }
     if (Binding->Reject != VH_SIGNAL_OK)
     {
-        ReportError(FUtf8String(UTF8TEXT("Cannot await `")) + Binding->Name + UTF8TEXT("`: ")
-            + SignalRejectReason(Binding->Reject, Binding->RejectDetail));
+        const std::string Reason = SignalRejectReason(Binding->Name, Binding->Reject, Binding->RejectDetail);
+        ReportVerseDiag(verse_diag::VG2103, {{"signal", DiagArg(Binding->Name)}, {"reason", Reason}});
         return 0;
     }
     return BeginAwait(Signal, SignalId, Binding->OwnerHandle, Binding->Name);
@@ -7667,7 +7645,7 @@ AUTORTFM_DISABLE int64 GodotVerse::BeginSignalRefAwait(int64 Ref, UObject* Waite
     FUtf8String Name;
     if (!ResolveSignalRef(Ref, OwnerHandle, Name))
     {
-        ReportError(UTF8TEXT("Await was called on a Signal value that names no object and signal."));
+        ReportVerseDiag(verse_diag::VG2110);
         return 0;
     }
     return BeginAwait(Waiter, 0, OwnerHandle, Name);
@@ -7724,7 +7702,7 @@ AUTORTFM_DISABLE int64 GodotVerse::SubscribeSignalRef(int64 Ref, const FVerseVal
     FUtf8String Name;
     if (!ResolveSignalRef(Ref, OwnerHandle, Name))
     {
-        ReportError(UTF8TEXT("Subscribe was called on a Signal value that names no object and signal."));
+        ReportVerseDiag(verse_diag::VG2111);
         return 0;
     }
 
@@ -7732,9 +7710,7 @@ AUTORTFM_DISABLE int64 GodotVerse::SubscribeSignalRef(int64 Ref, const FVerseVal
     FUtf8String Decorated;
     if (!DescribeBoundFunctionFwd(Callback.GetValue().DynamicCast<Verse::VFunction>(), OwnerOfCallback, Decorated))
     {
-        ReportError(UTF8TEXT("Subscribe was given a Verse function that is not a method bound to a "
-                             "live script instance, which is the only shape a Godot Callable can "
-                             "carry without outliving what it names."));
+        ReportVerseDiag(verse_diag::VG2112);
         return 0;
     }
 
@@ -10503,9 +10479,7 @@ AUTORTFM_DISABLE void EnsureEventConnections(GodotVerse::FInstance& Instance)
         // Silence here would be the worst answer available: the member registers, emissions still
         // reach Godot, and only delivery *back into the event* is missing -- so every await on it
         // hangs and nothing says why.
-        GodotVerse::ReportError(FUtf8String(UTF8TEXT("The signal `")) + Binding->Name
-            + UTF8TEXT("` was registered but could not be connected, so awaiting it would never "
-                       "resume."));
+        ReportVerseDiag(verse_diag::VG2113, {{"signal", DiagArg(Binding->Name)}});
     }
 }
 

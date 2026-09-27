@@ -55,8 +55,9 @@ To add a message:
 an ID that code prints or a test asserts isn't in the registry, if a registered ID is never
 printed, or if this page and the registry list different IDs.
 
-The UE host (`host/`) raises its own copies of the VG21xx and VG40xx runtime messages, without
-IDs. An exported game on the `vm` backend prints them with IDs.
+The UE host (`host/`) raises the VG21xx and VG40xx runtime messages from the same registry, so
+an editor session, a game on the `host` backend and one on the `vm` backend print the same
+sentence with the same ID.
 
 ## Export: `@export` members (VG1xxx)
 

@@ -1599,7 +1599,9 @@ that a release process needs a decision before Phase 8.
 - **A new bridge diagnostic gets an ID in the registry and a test asserts the ID.** Every sentence
   `src/` or `vm/` authors -- a push_error, a `_validate` warning, an export message, a runtime raise
   -- is a `VERSE_DIAG` row in `include/verse_diagnostics.def` and is printed through
-  `verse_diag_text` (vm/) or `verse_diagnostic` (src/), which put its `VGnnnn: ` ID in front.
+  `verse_diag_text` (vm/, and host/ for the VG21xx and VG40xx raises it shares with vm/) or
+  `verse_diagnostic` (src/), which put its `VGnnnn: ` ID in front. `build_host.py` stages the
+  registry into the host's `Public/` beside the ABI header.
   `docs/diagnostics.md` is the list an author reads and the numbering scheme, and
   `tests/verse_diagnostics/test_verse_diagnostics.py` holds the registry, the code, the tests and
   that page to one another. Assert with `diag("VG1002", "Maybe")` in `tools/run_tests.py` -- the ID

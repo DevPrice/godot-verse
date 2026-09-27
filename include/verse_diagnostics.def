@@ -62,38 +62,37 @@ VERSE_DIAG(VG2006, "_validate warning and build log (VH_SIGNAL_NEEDS_ATTRIBUTE);
 VERSE_DIAG(VG2007, "_validate warning; vm/ runtime raise (a reject code this build does not know)",
 	"{name} cannot be registered with Godot, so nothing can connect to it.")
 
-// VG21xx: a signal used at run time in a way that cannot reach Godot. vm/ raises these; the UE host
-// raises its own unprefixed copies (host/Private), which this registry does not reach.
-VERSE_DIAG(VG2101, "vm/ runtime raise: Emit on a signal refused at analysis ({reason} is its VG20xx sentence)",
+// VG21xx: a signal used at run time in a way that cannot reach Godot. vm/ and the UE host raise these.
+VERSE_DIAG(VG2101, "vm/ and host/ runtime raise: Emit on a signal refused at analysis ({reason} is its VG20xx sentence)",
 	"The signal `{signal}` was never registered with Godot: {reason} Nothing was emitted.")
-VERSE_DIAG(VG2102, "vm/ runtime raise: Subscribe on a signal refused at analysis",
+VERSE_DIAG(VG2102, "vm/ and host/ runtime raise: Subscribe on a signal refused at analysis",
 	"Cannot subscribe to `{signal}`: {reason}")
-VERSE_DIAG(VG2103, "vm/ runtime raise: Await on a signal refused at analysis",
+VERSE_DIAG(VG2103, "vm/ and host/ runtime raise: Await on a signal refused at analysis",
 	"Cannot await `{signal}`: {reason}")
-VERSE_DIAG(VG2104, "vm/ runtime raise: Emit with a payload the recorded shape cannot carry",
+VERSE_DIAG(VG2104, "vm/ and host/ runtime raise: Emit with a payload the recorded shape cannot carry",
 	"The payload of signal `{signal}` has no representation on the Godot wire, so nothing was emitted.")
-VERSE_DIAG(VG2105, "vm/ runtime raise: Emit on a `signal` no member binding names",
+VERSE_DIAG(VG2105, "vm/ and host/ runtime raise: Emit on a `signal` no member binding names",
 	"A signal was emitted through an unbound `signal`. One a script built for itself rather than "
 	"declared as a member of a class Godot instantiated names nothing, the way `godot_array{}` does.")
-VERSE_DIAG(VG2106, "vm/ runtime raise: Subscribe on a `signal` no member binding names",
+VERSE_DIAG(VG2106, "vm/ and host/ runtime raise: Subscribe on a `signal` no member binding names",
 	"Subscribe was called on an unbound `signal`, which names nothing.")
-VERSE_DIAG(VG2107, "vm/ runtime raise: Emit on an `event` that is not an @export_signal member",
+VERSE_DIAG(VG2107, "vm/ and host/ runtime raise: Emit on an `event` that is not an @export_signal member",
 	"Emit was called on an `event` that is not an `@export_signal` member of a class Godot "
 	"instantiated, so it names no Godot signal. An event a script builds for itself is a Verse event "
 	"and nothing more -- `Signal` is how tasks are resumed through one.")
-VERSE_DIAG(VG2108, "vm/ runtime raise: Subscribe on an `event` that is not an @export_signal member",
+VERSE_DIAG(VG2108, "vm/ and host/ runtime raise: Subscribe on an `event` that is not an @export_signal member",
 	"Subscribe was called on an `event` that is not an `@export_signal` member of a class Godot "
 	"instantiated, so it names no Godot signal.")
-VERSE_DIAG(VG2109, "vm/ runtime raise: Await on a `signal` no member binding names",
+VERSE_DIAG(VG2109, "vm/ and host/ runtime raise: Await on a `signal` no member binding names",
 	"Await was called on an unbound `signal`, which names nothing and so will never be emitted.")
-VERSE_DIAG(VG2110, "vm/ runtime raise: Await on a signal_ref that names nothing",
+VERSE_DIAG(VG2110, "vm/ and host/ runtime raise: Await on a signal_ref that names nothing",
 	"Await was called on a Signal value that names no object and signal.")
-VERSE_DIAG(VG2111, "vm/ runtime raise: Subscribe on a signal_ref that names nothing",
+VERSE_DIAG(VG2111, "vm/ and host/ runtime raise: Subscribe on a signal_ref that names nothing",
 	"Subscribe was called on a Signal value that names no object and signal.")
-VERSE_DIAG(VG2112, "vm/ runtime raise: Subscribe given a function that is not a bound method",
+VERSE_DIAG(VG2112, "vm/ and host/ runtime raise: Subscribe given a function that is not a bound method",
 	"Subscribe was given a Verse function that is not a method bound to a live script instance, which "
 	"is the only shape a Godot Callable can carry without outliving what it names.")
-VERSE_DIAG(VG2113, "vm/ runtime error: an @export_signal event's delivery connection was refused",
+VERSE_DIAG(VG2113, "vm/ and host/ runtime error: an @export_signal event's delivery connection was refused",
 	"The signal `{signal}` was registered but could not be connected, so awaiting it would never "
 	"resume.")
 
@@ -108,33 +107,33 @@ VERSE_DIAG(VG3003, "_validate warning and build log (VH_RPC_BAD_ARGUMENT_TYPE)",
 	"{name}: @rpc wants {wanted} in this position.")
 
 // VG4xxx: running, and loading the host. VG40xx is a Godot call Verse made that Godot refused.
-VERSE_DIAG(VG4001, "vm/ runtime raise (VH_CALL_DEAD_OBJECT)",
+VERSE_DIAG(VG4001, "vm/ and host/ runtime raise (VH_CALL_DEAD_OBJECT)",
 	"{verb} `{member}` on Godot object {handle}, which Godot has already freed. Test "
 	"IsInstanceValid[...] before reaching through a reference the scene may have dropped.")
-VERSE_DIAG(VG4002, "vm/ runtime raise (VH_CALL_BAD_VALUE)",
+VERSE_DIAG(VG4002, "vm/ and host/ runtime raise (VH_CALL_BAD_VALUE)",
 	"{verb} `{member}` on Godot object {handle}, and the value has no representation on the Verse "
 	"bridge. This is a gap in the type table in tools/gen_verse_api.py.")
 VERSE_DIAG(VG4003, "vm/ runtime raise (VH_CALL_BAD_ARITY)",
 	"{verb} `{member}` on Godot object {handle} with the wrong number of arguments. The generated Verse "
 	"mirror and this build of Godot disagree; regenerate with tools/gen_verse_api.py.")
-VERSE_DIAG(VG4004, "vm/ runtime raise (VH_CALL_NO_SUCH_MEMBER)",
+VERSE_DIAG(VG4004, "vm/ and host/ runtime raise (VH_CALL_NO_SUCH_MEMBER)",
 	"{verb} `{member}` on Godot object {handle}, which has no such member. The generated Verse mirror "
 	"and this build of Godot disagree; regenerate with tools/gen_verse_api.py.")
-VERSE_DIAG(VG4005, "vm/ runtime raise: a container reference of 0",
+VERSE_DIAG(VG4005, "vm/ and host/ runtime raise: a container reference of 0",
 	"{verb} a Godot container that names nothing. A container built in Verse -- `godot_array{}` and the "
 	"like -- holds no Godot value; one has to come back from Godot.")
-VERSE_DIAG(VG4006, "vm/ runtime raise: a container reference the ref table no longer holds",
+VERSE_DIAG(VG4006, "vm/ and host/ runtime raise: a container reference the ref table no longer holds",
 	"{verb} a Godot container the bridge no longer holds (reference {ref}). A reference is released "
 	"when the Verse value holding it is collected, so this is a handle kept past the object that owned "
 	"it.")
-VERSE_DIAG(VG4007, "vm/ runtime raise: a variant of a lane the declared type does not read",
+VERSE_DIAG(VG4007, "vm/ and host/ runtime raise: a variant of a lane the declared type does not read",
 	"Godot returned a value tagged {tag} where the Verse bridge expected `{expected}`. The type table in "
 	"tools/gen_verse_api.py and this build of Godot disagree.")
 VERSE_DIAG(VG4008, "vm/ runtime raise: a Godot call with no CallMethod callback installed",
 	"Called `{member}` on Godot object {handle}, but this embedder cannot call Godot methods.")
-VERSE_DIAG(VG4009, "vm/ runtime raise: a method call on a Godot value reference",
+VERSE_DIAG(VG4009, "vm/ and host/ runtime raise: a method call on a Godot value reference",
 	"Godot has no method `{member}` on the value reference {ref} names.")
-VERSE_DIAG(VG4010, "vm/ runtime raise: an archetype of a class Godot will not instantiate",
+VERSE_DIAG(VG4010, "vm/ and host/ runtime raise: an archetype of a class Godot will not instantiate",
 	"Godot would not make a `{class}`, so this class has no object to be. A Godot class that is "
 	"abstract, or that the engine only ever hands out as a singleton, cannot be constructed -- derive "
 	"from one that can, or reach the singleton through its accessor.")

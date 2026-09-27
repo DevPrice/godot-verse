@@ -13,6 +13,7 @@
 #include "VerseValue.h"
 #include "VerseVM/VVMCoroutine.h"
 #include "VerseVM/VVMRuntimeError.h"
+#include "verse_diagnostics.h"
 
 #include "VerseHost.gen.h"
 #include "VerseHost.gen.ipp"
@@ -56,6 +57,19 @@ decltype(auto) CallGodot(CallableType&& Callable)
     return AutoRTFM::Open(Forward<CallableType>(Callable));
 }
 
+std::string_view Utf8Of(const FUtf8String& Text)
+{
+    return std::string_view(reinterpret_cast<const char*>(*Text), (size_t)Text.Len());
+}
+
+/// Raises one of the registry's sentences (include/verse_diagnostics.def), the one vm/ and src/
+/// print for the same failure.
+void RaiseDiagnostic(const std::string& Sentence)
+{
+    RAISE_VERSE_RUNTIME_ERROR(Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
+                              FString(UTF8_TO_TCHAR(Sentence.c_str())));
+}
+
 /// Reaching through a handle Godot has freed is a bug in the script, not a value that happens to
 /// be absent, so it is reported the way Verse reports reading a var out of a dead object: an
 /// unrecoverable runtime error. Raising aborts every enclosing transaction -- which is what drops
@@ -64,6 +78,10 @@ decltype(auto) CallGodot(CallableType&& Callable)
 void RaiseCallStatus(int32 Status, int64 Handle, const verse::string& Member, const TCHAR* Verb)
 {
     const FUtf8String Name(ToView(Member));
+    const FUtf8String VerbText(Verb);
+    const auto Raise = [&] {
+        RaiseDiagnostic(verse_call_failure(Utf8Of(VerbText), Utf8Of(Name), Handle, Status));
+    };
     VH_EXHAUSTIVE_SWITCH_BEGIN
     switch (static_cast<vh_call_status>(Status))
     {
@@ -75,23 +93,8 @@ void RaiseCallStatus(int32 Status, int64 Handle, const verse::string& Member, co
         break;
 
     case VH_CALL_DEAD_OBJECT:
-        RAISE_VERSE_RUNTIME_ERROR_FORMAT(
-            Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
-            TEXT("%s `%hs` on Godot object %lld, which Godot has already freed. Test "
-                 "IsInstanceValid[...] before reaching through a reference the scene may have dropped."),
-            Verb,
-            reinterpret_cast<const char*>(*Name),
-            Handle);
-        break;
-
     case VH_CALL_BAD_VALUE:
-        RAISE_VERSE_RUNTIME_ERROR_FORMAT(
-            Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
-            TEXT("%s `%hs` on Godot object %lld, and the value has no representation on the Verse "
-                 "bridge. This is a gap in the type table in tools/gen_verse_api.py."),
-            Verb,
-            reinterpret_cast<const char*>(*Name),
-            Handle);
+        Raise();
         break;
 
     /* The mirror in GodotClasses.native.verse is generated from the same extension_api.json the
@@ -100,13 +103,7 @@ void RaiseCallStatus(int32 Status, int64 Handle, const verse::string& Member, co
      * Property *reads* are the exception and never arrive here -- Godot cannot tell an absent
      * property from a nil one, so a miss there stays an ordinary failure. */
     case VH_CALL_NO_SUCH_MEMBER:
-        RAISE_VERSE_RUNTIME_ERROR_FORMAT(
-            Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
-            TEXT("%s `%hs` on Godot object %lld, which has no such member. The generated Verse "
-                 "mirror and this build of Godot disagree; regenerate with tools/gen_verse_api.py."),
-            Verb,
-            reinterpret_cast<const char*>(*Name),
-            Handle);
+        Raise();
         break;
     }
     VH_EXHAUSTIVE_SWITCH_END
@@ -123,23 +120,14 @@ void RaiseRefStatus(int32 Status, int64 Ref, const TCHAR* Verb)
     // is what `godot_array{}` holds, and a script can write that -- the container wrappers are
     // public so they can be named in a signature, and their Ref is not. Blaming collection for it
     // sends the author looking for a lifetime bug they do not have.
+    const FUtf8String VerbText(Verb);
     if (Ref == 0)
     {
-        RAISE_VERSE_RUNTIME_ERROR_FORMAT(
-            Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
-            TEXT("%s a Godot container that names nothing. A container built in Verse -- "
-                 "`godot_array{}` and the like -- holds no Godot value; one has to come back from "
-                 "Godot."),
-            Verb);
+        RaiseDiagnostic(verse_diag_text(verse_diag::VG4005, {{"verb", Utf8Of(VerbText)}}));
         return;
     }
-    RAISE_VERSE_RUNTIME_ERROR_FORMAT(
-        Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
-        TEXT("%s a Godot container the bridge no longer holds (reference %lld). A reference is "
-             "released when the Verse value holding it is collected, so this is a handle kept past "
-             "the object that owned it."),
-        Verb,
-        Ref);
+    const std::string RefText = std::to_string(Ref);
+    RaiseDiagnostic(verse_diag_text(verse_diag::VG4006, {{"verb", Utf8Of(VerbText)}, {"ref", RefText}}));
 }
 
 /// A deferred write reports nothing useful: by the time OnCommit runs, the transaction a runtime
@@ -681,13 +669,7 @@ int64 VhAdoptOrMint(TNonNullPtr<verse::vh_object> Object)
         AutoRTFM::Open([&] { return GodotVerse::AdoptOrMintPeer(Object.Get(), Refused); });
     if (Refused)
     {
-        RAISE_VERSE_RUNTIME_ERROR_FORMAT(
-            Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
-            TEXT("Godot would not make a `%hs`, so this class has no object to be. A Godot class "
-                 "that is abstract, or that the engine only ever hands out as a singleton, cannot "
-                 "be constructed -- derive from one that can, or reach the singleton through its "
-                 "accessor."),
-            Refused);
+        RaiseDiagnostic(verse_diag_text(verse_diag::VG4010, {{"class", Refused}}));
     }
     return Handle;
 }
@@ -818,12 +800,8 @@ FVerseResult Sleep(TVerseCall<void> Call, double Seconds)
 void VhTypeMismatch(verse::string const& Expected, FGodotValue const& Value)
 {
     const FUtf8String Name(ToView(Expected));
-    RAISE_VERSE_RUNTIME_ERROR_FORMAT(
-        Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
-        TEXT("Godot returned a value tagged %lld where the Verse bridge expected `%hs`. The type "
-             "table in tools/gen_verse_api.py and this build of Godot disagree."),
-        Value.Tag,
-        reinterpret_cast<const char*>(*Name));
+    const std::string TagText = std::to_string(Value.Tag);
+    RaiseDiagnostic(verse_diag_text(verse_diag::VG4007, {{"tag", TagText}, {"expected", Utf8Of(Name)}}));
 }
 
 void VhCallValue(int64 Handle, verse::string const& Method, TArray<FGodotValue> const& Args, FGodotValue& OutValue)
@@ -1229,10 +1207,9 @@ void VhRefCall(int64 Ref, verse::string const& Method, TArray<FGodotValue> const
     });
     if (Status == VH_CALL_NO_SUCH_MEMBER)
     {
-        RAISE_VERSE_RUNTIME_ERROR_FORMAT(
-            Verse::ERuntimeDiagnostic::ErrRuntime_NativeInternal,
-            TEXT("Godot has no method `%s` on the value reference %lld names."),
-            *FString(Name), (long long)Ref);
+        const std::string RefText = std::to_string(Ref);
+        RaiseDiagnostic(verse_diag_text(verse_diag::VG4009,
+                                        {{"member", std::string_view(Bytes(Name), (size_t)Name.Len())}, {"ref", RefText}}));
         return;
     }
     if (Status != VH_CALL_OK)
