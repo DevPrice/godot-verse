@@ -3,7 +3,7 @@
   "abi.sidecar_version": 8,
   "mirror.bool_virtuals": 161,
   "mirror.classes": 1036,
-  "mirror.const_void_methods": 50,
+  "mirror.const_void_methods": 38,
   "mirror.enums": 793,
   "mirror.logic_methods": 308,
   "mirror.nonatomic_methods": 1142,
@@ -23,5 +23,6 @@
   "mirror.singletons_total": 41,
   "mirror.variant_tag_constants": 38,
   "mirror.variant_tags": 39,
-  "mirror.virtuals": 1380
+  "mirror.virtuals": 1380,
+  "mirror.virtuals_in_dump": 1437
 }

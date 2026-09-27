@@ -2200,7 +2200,11 @@ def classify_method(m: dict, resolver: TypeResolver, coverage: Coverage, members
                 "virtual_no_default", f"`{return_info.verse_type}`" if return_info else ""))
             return None
 
-    if is_void and bool(m.get("is_const")):
+    # Not a virtual: `_draw()` and its siblings carry the same raw is_const-and-void shape but
+    # dispatch nothing -- a hand-written default body, never `VhCallValueConst` -- so they are not
+    # a "const-and-void method" in this paragraph's sense (docs/architecture-review.md item 4
+    # step 2 caught this one: the raw count is 51, of which 13 are virtuals).
+    if is_void and bool(m.get("is_const")) and not is_virtual:
         coverage.const_void_methods += 1
 
     return ClassifiedMethod(
@@ -4222,10 +4226,23 @@ def collect_facts(api: dict, coverage: Coverage, enums: dict, emit_order: list, 
     if sidecar_match is None:
         raise ValueError("tools/run_tests.py no longer defines SIDECAR_VERSION")
 
+    emitted_classes = set(emit_order)
+    # extension_api.json's own virtual rows, before any of them are classified. Every one of
+    # `mirror.virtuals` is drawn from here, and the gap between the two -- 57, all of it -- is
+    # `unmarshallable_pointer`: a virtual whose signature crosses a raw C pointer (`void*`,
+    # `AudioFrame*`, `const uint8_t*`...) that has no Verse representation and never will, the same
+    # skip an ordinary method with a pointer argument gets. Nothing here is redeclared across an
+    # inheritance chain -- `_process` appears on five unrelated classes, each its own row -- so
+    # this is a straight count, not a deduplication.
+    virtuals_in_dump = sum(
+        1 for c in api["classes"] if c["name"] in emitted_classes
+        for m in c.get("methods", []) or [] if m.get("is_virtual"))
+
     return {
         "mirror.classes": coverage.classes_emitted,
         "mirror.enums": len(enums),
         "mirror.virtuals": coverage.virtuals_emitted,
+        "mirror.virtuals_in_dump": virtuals_in_dump,
         "mirror.predicates": coverage.predicates_emitted,
         "mirror.bool_virtuals": coverage.bool_virtuals_emitted,
         "mirror.logic_methods": coverage.logic_methods_emitted,

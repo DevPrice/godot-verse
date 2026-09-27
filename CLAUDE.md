@@ -759,8 +759,11 @@ the editor and `export_check.gd` as an autoload in an export.
 | `bin/host_build_id.gen.h` | `tools/build_host.py` | the staged host sources themselves — a digest of `host/` plus the ABI header, and the engine commit beside it — staged into the host's `Private/` and baked into every host binary, so a cooked sidecar and the host reading it can be told apart. A digest rather than `HEAD` so a doc commit does not invalidate three binaries. Not committed |
 
 **What the mirror is**, since no single file shows it: all <!--fact:mirror.classes-->1036 Godot classes as a Verse class
-hierarchy, Godot's own `Object` among them; its <!--fact:mirror.enums-->793 enums as real Verse enums; all <!--fact:mirror.virtuals-->1380 of
-`extension_api.json`'s virtuals, spelled Godot's way, every one of them emitted; properties as writable members rather than get/set pairs; **Godot's `bool` as two
+hierarchy, Godot's own `Object` among them; its <!--fact:mirror.enums-->793 enums as real Verse enums;
+<!--fact:mirror.virtuals-->1380 of `extension_api.json`'s <!--fact:mirror.virtuals_in_dump-->1437 virtual rows, spelled Godot's way and every one of *those*
+emitted — the other 57 take or answer a raw C pointer (`void*`, `AudioFrame*`, `const uint8_t*`, ...)
+that Verse has no representation for, the same `unmarshallable_pointer` skip an ordinary method with
+one gets; properties as writable members rather than get/set pairs; **Godot's `bool` as two
 different things** — <!--fact:mirror.predicates-->568 predicates and <!--fact:mirror.bool_virtuals-->161 bool virtuals as `<decides>:void`, the way Verse's own
 comparisons and `GodotMath`'s `HasPoint` are spelled, and `logic` kept for the <!--fact:mirror.logic_methods-->308 methods that
 answer a value rather than a test (an accessor with a `set_` twin, an outcome like `MoveAndSlide`);
@@ -1025,7 +1028,7 @@ layer, and is skipped there when `../godot` is absent.
   of correct advice (`by-hand-findings.md` B7). The compiler's own text stands.
 - **A method's effect is Godot's `is_const`.** <!--fact:mirror.reads_methods-->4019 mirror methods carry `<reads>`, and the test is
   `const` **and answering a value** — Godot's `const` means "does not mutate the C++ object", so the
-  <!--fact:mirror.const_void_methods-->50 const-and-void methods are `OS.set_environment`, `CanvasItem.draw_string` and 48 more that
+  <!--fact:mirror.const_void_methods-->38 const-and-void methods are `OS.set_environment`, `CanvasItem.draw_string` and 36 more that
   plainly do something. A `<reads>` body dispatches through `VhCallValueConst`, not `VhCallValue`;
   the two have to move together.
 - **The dynamic route has a `<reads>` twin too, and its honesty is the caller's.** `object.Call`
