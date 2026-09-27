@@ -305,9 +305,20 @@ AUTORTFM_DISABLE void TestClassifier(const uLang::CClass& Probe, const uLang::CS
 			Why = TEXT("no generated layout");
 		}
 		Case(Name, Why.IsEmpty(), Why);
+
+		// The cook's own ensure, asked of every kind the fixture carries rather than of whatever a
+		// cook happens to write.
+		const FMemberType Described = DescribeType(Member->GetType(), Program);
+		const EDeclaredKind Recorded = RecordedKind(Described);
+		Case(FString::Printf(TEXT("recorded_kind %s"), UTF8_TO_TCHAR(Row.Member)), Recorded == RecordsAs(Described.Kind),
+		     FString::Printf(TEXT("got %s, expected %s"), KindName(Recorded), KindName(RecordsAs(Described.Kind))));
 	}
 
 	Case(TEXT("classify no type at all"), ClassifyDeclaredType(nullptr, Program).Kind == K::Other);
+	Expect(TEXT("records_as TypedContainer"), KindName(RecordsAs(K::TypedContainer)), KindName(K::Other));
+	Expect(TEXT("records_as Int"), KindName(RecordsAs(K::Int)), KindName(K::Int));
+	Expect(TEXT("records_as Binding origin"), OriginName(RecordsAs(EClassOrigin::Binding)), OriginName(EClassOrigin::Other));
+	Expect(TEXT("records_as Script origin"), OriginName(RecordsAs(EClassOrigin::Script)), OriginName(EClassOrigin::Script));
 }
 
 AUTORTFM_DISABLE FMemberType Describe(const uLang::CClass& Probe, const uLang::CSemanticProgram& Program, const char* Member)
@@ -643,19 +654,6 @@ AUTORTFM_DISABLE void TestMarshal(const uLang::CClass& Probe, const uLang::CSema
 	}
 }
 
-EDeclaredKind RecordsAs(EDeclaredKind Kind)
-{
-	// The one kind the sidecar cannot carry: a typed container describes exactly as Other does, and
-	// every converter treats the two alike (HostSidecar.cpp's RecordedKind).
-	return Kind == EDeclaredKind::TypedContainer ? EDeclaredKind::Other : Kind;
-}
-
-EClassOrigin RecordsAs(EClassOrigin Origin)
-{
-	// The sidecar's refOrigin is shared with the interpreter and has no Binding.
-	return Origin == EClassOrigin::Binding ? EClassOrigin::Other : Origin;
-}
-
 FString DescribedDifference(const FExportDesc& Before, const FExportDesc& After)
 {
 	if (Before.Type != After.Type) return FString::Printf(TEXT("type %d, expected %d"), After.Type, Before.Type);
@@ -673,7 +671,7 @@ FString DescribedDifference(const FExportDesc& Before, const FExportDesc& After)
 	return FString();
 }
 
-FString MemberTypeDifference(const FMemberType& Before, const FMemberType& After)
+AUTORTFM_DISABLE FString MemberTypeDifference(const FMemberType& Before, const FMemberType& After)
 {
 	if (After.Kind != RecordsAs(Before.Kind))
 	{
@@ -710,7 +708,7 @@ FString MemberTypeDifference(const FMemberType& Before, const FMemberType& After
 	return FString();
 }
 
-FString PayloadDifference(const FPayloadShape& Before, const FPayloadShape& After)
+AUTORTFM_DISABLE FString PayloadDifference(const FPayloadShape& Before, const FPayloadShape& After)
 {
 	if (Before.Kind != After.Kind) return TEXT("shape differs");
 	if (Before.Reject != After.Reject) return TEXT("reject differs");
@@ -728,7 +726,7 @@ FString PayloadDifference(const FPayloadShape& Before, const FPayloadShape& Afte
 }
 
 /// One class's three tables against their round trip, a case per row.
-void CompareDeclaredTypes(const TCHAR* Prefix, const FDeclaredTypes& Before, const FDeclaredTypes& After)
+AUTORTFM_DISABLE void CompareDeclaredTypes(const TCHAR* Prefix, const FDeclaredTypes& Before, const FDeclaredTypes& After)
 {
 	for (const TPair<FUtf8String, FMemberType>& Pair : Before.Members)
 	{

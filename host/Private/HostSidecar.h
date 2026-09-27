@@ -71,6 +71,19 @@ AUTORTFM_DISABLE FExportDesc ReadExportDesc(const TSharedPtr<FJsonObject>& Objec
 AUTORTFM_DISABLE TSharedPtr<FJsonObject> WriteDeclaredTypes(const FDeclaredTypes& Types);
 AUTORTFM_DISABLE TSharedPtr<FDeclaredTypes> ReadDeclaredTypes(const TSharedPtr<FJsonObject>& Object);
 
+/// The kind a description read back out of a sidecar is, recovered from the fields it carries,
+/// since the sidecar has no field for one.
+AUTORTFM_DISABLE EDeclaredKind RecordedKind(const FMemberType& Type);
+
+/// What a description of Kind reads back as: itself, but for TypedContainer, which describes
+/// exactly as Other does and which every converter treats alike. The cook `ensure`s
+/// RecordedKind(Type) == RecordsAs(Type.Kind) for every type it writes.
+AUTORTFM_DISABLE EDeclaredKind RecordsAs(EDeclaredKind Kind);
+
+/// The origin a reference reads back with: itself, but for Binding, which the sidecar's `refOrigin`
+/// (shared with the interpreter) records as Other.
+AUTORTFM_DISABLE EClassOrigin RecordsAs(EClassOrigin Origin);
+
 /// The table CollectEngineSignalTypes answers, as JSON, and back.
 AUTORTFM_DISABLE TSharedPtr<FJsonObject> WriteEngineSignalTypes(const FEngineSignalTypes& Types);
 AUTORTFM_DISABLE TSharedPtr<FEngineSignalTypes> ReadEngineSignalTypes(const TSharedPtr<FJsonObject>& Object);

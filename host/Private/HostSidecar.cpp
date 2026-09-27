@@ -520,13 +520,12 @@ namespace {
 AUTORTFM_DISABLE TSharedPtr<FJsonObject> WriteMemberType(const FMemberType& Type);
 AUTORTFM_DISABLE FMemberType ReadMemberType(const TSharedPtr<FJsonObject>& Object);
 
-/// The kind a description read back out of a sidecar is, recovered from the fields it carries.
-///
+} // namespace
+
 /// The sidecar has no field for the kind -- its format is shared with the interpreter -- and does
 /// not need one: DescribeType fills a different combination of fields for every kind but one, and
-/// the order of the tests is the order those combinations overlap in. The one is TypedContainer,
-/// which describes exactly as Other does and reads back as Other (RecordsAs).
-AUTORTFM_DISABLE EDeclaredKind RecordedKind(const FMemberType& Type)
+/// the order of the tests is the order those combinations overlap in.
+AUTORTFM_DISABLE EDeclaredKind GodotVerse::RecordedKind(const FMemberType& Type)
 {
     const GodotVerse::FExportDesc& Described = Type.Described;
     if (Described.Reject == VH_EXPORT_OPTION_NOT_OBJECT)
@@ -585,27 +584,25 @@ AUTORTFM_DISABLE EDeclaredKind RecordedKind(const FMemberType& Type)
     return EDeclaredKind::Other;
 }
 
-/// `refOrigin` as the sidecar spells it, which the interpreter reads too and which has no Binding:
-/// one is recorded as Other, which is what it was before it had a name, and DeclaredReferenceClass
-/// resolves the two alike.
-AUTORTFM_DISABLE int32 SidecarOriginCode(EClassOrigin Origin)
+/// `refOrigin` is read by the interpreter too and has no Binding: one is recorded as Other, which is
+/// what it was before it had a name, and DeclaredReferenceClass resolves the two alike.
+AUTORTFM_DISABLE EClassOrigin GodotVerse::RecordsAs(EClassOrigin Origin)
 {
     VH_EXHAUSTIVE_SWITCH_BEGIN
     switch (Origin)
     {
     case EClassOrigin::Other:
     case EClassOrigin::Binding:
-        return (int32)EClassOrigin::Other;
+        return EClassOrigin::Other;
     case EClassOrigin::Mirrored:
     case EClassOrigin::Script:
-        return (int32)Origin;
+        return Origin;
     }
     VH_EXHAUSTIVE_SWITCH_END
-    return (int32)EClassOrigin::Other;
+    return EClassOrigin::Other;
 }
 
-/// What RecordedKind answers for a description of Kind, so the cook can check the round trip.
-AUTORTFM_DISABLE EDeclaredKind RecordsAs(EDeclaredKind Kind)
+AUTORTFM_DISABLE EDeclaredKind GodotVerse::RecordsAs(EDeclaredKind Kind)
 {
     VH_EXHAUSTIVE_SWITCH_BEGIN
     switch (Kind)
@@ -637,6 +634,11 @@ AUTORTFM_DISABLE EDeclaredKind RecordsAs(EDeclaredKind Kind)
     return Kind;
 }
 
+namespace {
+
+using GodotVerse::RecordedKind;
+using GodotVerse::RecordsAs;
+
 AUTORTFM_DISABLE TSharedPtr<FJsonObject> WriteMemberType(const FMemberType& Type)
 {
     ensureMsgf(RecordedKind(Type) == RecordsAs(Type.Kind),
@@ -653,7 +655,7 @@ AUTORTFM_DISABLE TSharedPtr<FJsonObject> WriteMemberType(const FMemberType& Type
     {
         Object->SetStringField(TEXT("ref"), FString(Type.ReferenceName));
         Object->SetStringField(TEXT("refPath"), FString(Type.ReferenceQualifiedName));
-        Object->SetNumberField(TEXT("refOrigin"), SidecarOriginCode(Type.ReferenceOrigin));
+        Object->SetNumberField(TEXT("refOrigin"), (int32)RecordsAs(Type.ReferenceOrigin));
         Object->SetBoolField(TEXT("refOption"), Type.bReferenceIsOption);
     }
     if (!Type.StructName.IsEmpty())
