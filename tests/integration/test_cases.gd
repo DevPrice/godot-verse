@@ -2459,8 +2459,10 @@ func begin() -> void:
 				_check("and the analysis keeps them rather than replacing them",
 						refined.has("Hit(") and refined.size() > opened.size())
 		_end_editor_only()
+		_begin_override_completion()
 	else:
 		_skip("the script editor's hover tooltip", EDITOR_ONLY + ": no analysis in an exported game")
+		_skip(OVERRIDE_COMPLETION, EDITOR_ONLY + ": no analysis in an exported game")
 
 	var tx_script: Script = load("res://scripts/transactions.verse")
 	_check("transactions.verse compiles", tx_script != null and tx_script.can_instantiate())
@@ -2480,6 +2482,112 @@ func _verse_language() -> Object:
 		if lang != null and lang.get_class() == "VerseScriptLanguage":
 			return lang
 	return null
+
+
+# --- override declarations in the completion popup (by-hand-findings.md B13) ----------------------
+#
+# What the editor's first popup is drawn from, which probe_complete cannot see: it flushes the
+# analysis a caret queues, so its "first" answer is only first for a buffer nothing had analysed.
+# probe_complete_code asks exactly as the script editor does -- no build, no flush -- and the frames
+# between the first ask and the last are _frame's, which is where the completion analysis starts and
+# lands. Each frame's ask is the editor's re-ask, and the one that queues nothing is the refined
+# answer. The cases are printed together once all three buffers have answered, so the export's one
+# skip stands for all of them.
+#
+# The second buffer carries a syntax error further down the file, which is what an author's buffer
+# does for most of the time they are typing. An analysis that does not parse describes no class at
+# all -- no snapshot row and no scope at the caret -- so without a remembered list the popup fell to
+# the five names the parser knows by itself, and the next caret's first popup with it.
+const OVERRIDE_COMPLETION := "override declarations in the completion popup"
+const OVERRIDE_PROBE_PATH := "res://scripts/override_complete_probe.verse"
+# An analysis is ~1 s and a headless frame is not paced, so this is a wall-clock bound.
+const OVERRIDE_COMPLETION_TIMEOUT_MS := 60000
+var _override_buffers: Array = []
+var _override_answers: Array = []
+var _override_code := ""
+var _override_first: Dictionary = {}
+var _override_started_ms := 0
+var _override_timed_out := false
+
+
+func _begin_override_completion() -> void:
+	var source := FileAccess.get_file_as_string(OVERRIDE_PROBE_PATH).replace("\r\n", "\n")
+	var anchor := "\tSpeed:float = 1.0\n"
+	var at := source.find(anchor)
+	if at < 0:
+		_begin_editor_only(OVERRIDE_COMPLETION)
+		_check("override_complete_probe.verse declares Speed", false)
+		_end_editor_only()
+		return
+	at += anchor.length()
+	# A new member begun on its own line, the caret behind the `_` an author types first.
+	var clean := source.substr(0, at) + "\t_" + char(0xFFFF) + "\n" + source.substr(at)
+	var broken := clean + "\tUnfinished():int =\n"
+	_override_buffers = [clean, broken, clean]
+	_ask_next_override_buffer()
+
+
+func _ask_next_override_buffer() -> void:
+	_override_code = _override_buffers[_override_answers.size()]
+	_override_first = _verse_language().call("probe_complete_code", OVERRIDE_PROBE_PATH, _override_code)
+	_override_started_ms = Time.get_ticks_msec()
+
+
+func _poll_override_completion() -> void:
+	var answer: Dictionary = _verse_language().call("probe_complete_code", OVERRIDE_PROBE_PATH, _override_code)
+	var timed_out := Time.get_ticks_msec() - _override_started_ms > OVERRIDE_COMPLETION_TIMEOUT_MS
+	if answer.get("awaiting_analysis", false) and not timed_out:
+		return
+	_override_timed_out = _override_timed_out or timed_out
+	_override_answers.append([_override_first, answer])
+	if _override_answers.size() < _override_buffers.size():
+		_ask_next_override_buffer()
+		return
+	_override_code = ""
+
+	_begin_editor_only(OVERRIDE_COMPLETION)
+	_check("the completion analysis for a new member lands", not _override_timed_out)
+	var first := _override_displays(_override_answers[0][0])
+	var refined := _override_displays(_override_answers[0][1])
+	_check("the first popup in a class body offers the _Ready declaration",
+			_has_prefixed(first, "_Ready<override>("))
+	_check("and the _Process declaration",
+			_has_prefixed(first, "_Process<override>("))
+	_check("the refined popup still offers the _Ready declaration",
+			_has_prefixed(refined, "_Ready<override>("))
+	_check("and the _Process declaration after the refresh",
+			_has_prefixed(refined, "_Process<override>("))
+	# Godot filters the options against what was typed, by the text it draws and inserts; an option
+	# that does not begin with the `_` is one the author never sees however right it is.
+	var spelled := true
+	for pair in _override_answers:
+		for answer_of in pair:
+			for option in answer_of.get("options", []):
+				if String(option.get("display", "")).contains("<override>"):
+					spelled = spelled and String(option["display"]).begins_with("_") \
+							and String(option.get("insert_text", "")).begins_with("_")
+	_check("every override declaration begins with the `_` typed", spelled)
+	_check("an override the class already declares is not offered again",
+			not _has_prefixed(first, "_Draw<override>(") and not _has_prefixed(refined, "_Draw<override>("))
+	_check("with a syntax error further down the file, the refined popup still offers _Ready",
+			_has_prefixed(_override_displays(_override_answers[1][1]), "_Ready<override>("))
+	_check("and the first popup after that analysis still offers it",
+			_has_prefixed(_override_displays(_override_answers[2][0]), "_Ready<override>("))
+	_end_editor_only()
+
+
+func _override_displays(answer: Dictionary) -> Array:
+	var displays := []
+	for option in answer.get("options", []):
+		displays.append(String(option.get("display", "")))
+	return displays
+
+
+func _has_prefixed(displays: Array, head: String) -> bool:
+	for display in displays:
+		if String(display).begins_with(head):
+			return true
+	return false
 
 
 # The first row for a name that is code rather than prose. probe_hover answers one row per word
@@ -2537,6 +2645,9 @@ func _hover_columns_agree(rows: Array, symbol: String) -> bool:
 # True when the last frame-stepped case has run. The driver is what quits.
 func step() -> bool:
 	if _tx == null:
+		return false
+	if _override_code != "":
+		_poll_override_completion()
 		return false
 	_tx_step += 1
 	match _tx_step:

@@ -156,6 +156,8 @@ void VerseScriptLanguage::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("probe_hover", "path"), &VerseScriptLanguage::probe_hover);
 	ClassDB::bind_method(D_METHOD("probe_complete", "path", "positions"),
 		&VerseScriptLanguage::probe_complete);
+	ClassDB::bind_method(D_METHOD("probe_complete_code", "path", "code"),
+		&VerseScriptLanguage::probe_complete_code);
 }
 
 String VerseScriptLanguage::_get_name() const {
@@ -824,6 +826,12 @@ TypedArray<Dictionary> VerseScriptLanguage::probe_hover(const String &p_path) {
 TypedArray<Dictionary> VerseScriptLanguage::probe_complete(
 		const String &p_path, const PackedInt32Array &p_positions) {
 	return completion.probe(p_path, p_positions);
+}
+
+Dictionary VerseScriptLanguage::probe_complete_code(const String &p_path, const String &p_code) {
+	Dictionary answer = _complete_code(p_code, p_path, nullptr);
+	answer["awaiting_analysis"] = project_state.completion_check_outstanding();
+	return answer;
 }
 
 // Every _debug_* virtual is a one-line delegation to VerseDebugger, which owns the state and the

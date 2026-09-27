@@ -306,6 +306,13 @@ public:
 	godot::TypedArray<godot::Dictionary> probe_complete(
 		const godot::String &p_path, const godot::PackedInt32Array &p_positions);
 
+	// _complete_code over p_code exactly as the editor asks it -- the caret already marked with
+	// U+FFFF, no build and no flush -- plus `awaiting_analysis`, whether a completion buffer is
+	// still queued or in flight. probe_complete flushes, so it never sees the answer the editor's
+	// first popup is drawn from; a caller of this one lets _frame run until the flag clears and
+	// asks again, which is the editor's own re-ask.
+	godot::Dictionary probe_complete_code(const godot::String &p_path, const godot::String &p_code);
+
 	// Scripts that read their validity and export list out of the analysis, so a result landing
 	// in _frame reaches them. Borrowed: a script adds itself on construction and removes itself
 	// on destruction.

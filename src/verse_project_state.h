@@ -224,6 +224,12 @@ public:
 	// whose first answer queued one is the caret worth asking twice.
 	bool completion_check_pending() const { return pending_completion.has_value(); }
 
+	// Whether a completion buffer is still waiting or being analysed. probe_complete_code's caller
+	// lets frames go by until this is false, which is when the editor's own re-ask would come.
+	bool completion_check_outstanding() const {
+		return pending_completion.has_value() || (in_flight.has_value() && in_flight->kind == CheckKind::COMPLETION);
+	}
+
 	// Armed by a completion landing for the buffer completion last asked about, and taken by the
 	// _frame that asks the editor to complete again. Answers whether it was armed.
 	bool take_completion_refresh();
