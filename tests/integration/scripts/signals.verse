@@ -103,6 +103,17 @@ signals := class(node2d):
 
     EmitTouched<public>(Body:node2d)<transacts>:void = Touched.Emit(Body)
 
+    # Each one Godot value, never the struct it is in Verse: a `variant` crosses as what it holds
+    # and a `rid` as a RID.
+    @export_signal
+    Carried<public>:event(variant) = event(variant){}
+
+    @export_signal
+    Rendered<public>:event(rid) = event(rid){}
+
+    EmitCarried<public>(Text:string)<transacts>:void = Carried.Emit(VariantString(Text))
+    EmitRendered<public>()<transacts>:void = Rendered.Emit(GetCanvasItem())
+
     EmitHit<public>()<transacts>:void = Hit.Emit(())
     EmitScored<public>(Points:int)<transacts>:void = Scored.Emit(Points)
     EmitStruck<public>(Damage:int, By:string)<transacts>:void = Struck.Emit((Damage, By))

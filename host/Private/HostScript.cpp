@@ -6045,9 +6045,9 @@ AUTORTFM_DISABLE FUtf8String SignalArgName(const FMemberType& Arg, int32 Index, 
 ///     rather than an unregistered project one. An emission carries a handle; nobody filters
 ///     anything, and DeclaredReferenceClass's FindBindingClass arm resolves the class the same way
 ///     an ordinary method argument does.
-///   - VH_EXPORT_UNSUPPORTED_TYPE over a *reference* wrapper is "the inspector has no editor for
-///     an arbitrary Array". The id crosses perfectly well, which is why DescribeExportType types
-///     it before rejecting it.
+///   - VH_EXPORT_UNSUPPORTED_TYPE over a *reference* wrapper, a `variant` or a `rid` is "the
+///     inspector has no editor for this". Each crosses perfectly well as one Godot value, which is
+///     why DescribeExportType types it before rejecting it.
 ///
 /// What is left really is unrepresentable: an option around a non-object (ValueToWire reads a
 /// cleared option as a null reference, so `?int` would arrive as nothing), and a type with no lane.
@@ -6062,7 +6062,8 @@ AUTORTFM_DISABLE bool PayloadArgCrosses(const FMemberType& Arg)
     case VH_EXPORT_BINDING_CLASS_UNSUPPORTED:
         return true;
     case VH_EXPORT_UNSUPPORTED_TYPE:
-        return Arg.Described.Type == VH_TYPE_REF;
+        return Arg.Kind == EDeclaredKind::Container || Arg.Kind == EDeclaredKind::Variant
+            || Arg.Kind == EDeclaredKind::Rid;
     case VH_EXPORT_OPTION_NOT_OBJECT:
     case VH_EXPORT_HINT_WRONG_TYPE:
         return false;
@@ -6082,12 +6083,10 @@ AUTORTFM_DISABLE const uLang::CClass* PayloadStructClass(const FDeclaredType& Pa
     {
     case EDeclaredKind::UserStruct:
         return Payload.Class;
-    // Decomposed field by field, as they were before a classifier told them apart from a project's
-    // own struct: `signal(rid)` delivers its `Id` as an int, and `signal(variant)` its 22 lanes.
-    // Every other describer claims both.
+    // Structs, and each one Godot value: decomposed, a `signal(variant)` delivered its 22 lanes and
+    // a `signal(rid)` its `Id` as a bare int.
     case EDeclaredKind::Variant:
     case EDeclaredKind::Rid:
-        return Payload.Class;
     case EDeclaredKind::MathStruct:
     case EDeclaredKind::Option:
     case EDeclaredKind::Reference:

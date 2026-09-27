@@ -30,6 +30,7 @@ var _signal_points := 0
 var _signal_by := ""
 var _signal_object: Object = null
 var _signal_report: Array = []
+var _signal_value: Variant = null
 var _tx: Node2D = null
 var _tx_step := 0
 var _conc: Node2D = null
@@ -65,6 +66,10 @@ func _on_verse_reported(damage: int, by: String, point: Vector2) -> void:
 	_signal_report = [damage, by, point]
 
 
+
+
+func _on_verse_carried(value: Variant) -> void:
+	_signal_value = value
 
 
 func _on_verse_hit() -> void:
@@ -1305,6 +1310,27 @@ func begin() -> void:
 		emitter_node.connect("Touched", _on_verse_touched)
 		emitter_node.call("EmitTouched", emitter_node)
 		_check("an object payload crosses as the node it names", _signal_object == emitter_node)
+
+		# A variant and a rid are structs in Verse and one Godot value each; decomposed field by
+		# field they reached Godot as 22 lanes and as a bare int.
+		var carried_args: Array = by_name["Carried"]["args"] if by_name.has("Carried") else []
+		_check_eq("a variant payload is one argument", carried_args.size(), 1)
+		var rendered_args: Array = by_name["Rendered"]["args"] if by_name.has("Rendered") else []
+		_check_eq("a rid payload is one RID argument",
+				[rendered_args.size(), int(rendered_args[0]["type"]) if rendered_args.size() == 1 else -1],
+				[1, TYPE_RID])
+		_signal_value = null
+		if by_name.has("Carried"):
+			emitter_node.connect("Carried", _on_verse_carried)
+			emitter_node.call("EmitCarried", "lanes")
+		_check_eq("a variant payload arrives as the value it holds",
+				[typeof(_signal_value), _signal_value], [TYPE_STRING, "lanes"])
+		_signal_value = null
+		if by_name.has("Rendered"):
+			emitter_node.connect("Rendered", _on_verse_carried)
+			emitter_node.call("EmitRendered")
+		_check_eq("a rid payload arrives as the node's own RID",
+				[typeof(_signal_value), _signal_value], [TYPE_RID, emitter_node.get_canvas_item()])
 
 		# architecture-review.md item 1 step 1, commit 6: the same for a payload typed as a
 		# *generated binding* class (`mob`) rather than a mirrored one. PayloadArgCrosses used to
