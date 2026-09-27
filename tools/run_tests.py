@@ -48,6 +48,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -583,6 +584,23 @@ def _check_sidecar(path: Path, expected_classes: list[str], name: str) -> bool:
     return ok
 
 
+def _copy_over_loaded(source: Path, target: Path) -> None:
+    """shutil.copy2, retried for a few seconds on WinError 32.
+
+    A layer that ends by killing a game (debug-wire) has the process gone before Windows has
+    unmapped its GDExtension, so the next layer's copy onto the same file can be refused for a
+    moment after -- which is how the multiplayer layer died on a PermissionError straight after
+    debug-wire, every time the two ran in one invocation."""
+    for attempt in range(20):
+        try:
+            shutil.copy2(source, target)
+            return
+        except PermissionError:
+            if attempt == 19:
+                raise
+            time.sleep(0.5)
+
+
 def stage_extension(project: Path, for_export: bool = False) -> str | None:
     """Copies the built GDExtension into the test project. Returns why it could not, or None."""
     source_dir = REPO / "demo" / "addons" / "godot-verse" / "bin" / "windows-x86_64"
@@ -597,11 +615,11 @@ def stage_extension(project: Path, for_export: bool = False) -> str | None:
     # editor produces. Every tool that takes a --project was therefore unable to aim at the
     # one project this repository treats as the worked example.
     if editor_dll.resolve() != (target_dir / editor_dll.name).resolve():
-        shutil.copy2(editor_dll, target_dir / editor_dll.name)
+        _copy_over_loaded(editor_dll, target_dir / editor_dll.name)
     # The .gdextension names a debug library too, and Godot refuses to load the extension at all
     # when a named library is missing -- so the editor build stands in for it rather than being
     # left absent.
-    shutil.copy2(editor_dll, target_dir / "godot-verse.debug.dll")
+    _copy_over_loaded(editor_dll, target_dir / "godot-verse.debug.dll")
 
     # An export needs the release library and the runtime host as well, because what it is
     # exporting *is* them: the [dependencies] rows that put the host beside the game are generated
