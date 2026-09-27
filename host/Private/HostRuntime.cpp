@@ -3,7 +3,10 @@
 #include "HostRuntime.h"
 #include "Containers/Utf8String.h"
 #include "HAL/UnrealMemory.h"
+#include "HostResult.h"
 #include "Math/UnrealMathUtility.h"
+
+#include <cstdio>
 
 namespace GodotVerse {
 
@@ -187,6 +190,22 @@ void* FCallArena::Allocate(size_t Size, size_t Align)
     BlockSize = NewBlockSize;
     BlockOffset = Size;
     return Block;
+}
+
+AUTORTFM_DISABLE void ReportUnreported(const char* Reason, const char* File, int32 Line)
+{
+    // stderr rather than the diagnostic callback: the converters run on the analysis thread as
+    // well, and every ABI callback belongs to the game thread.
+    const char* Name = File;
+    for (const char* Cursor = File; *Cursor != '\0'; ++Cursor)
+    {
+        if (*Cursor == '/' || *Cursor == '\\')
+        {
+            Name = Cursor + 1;
+        }
+    }
+    fprintf(stderr, "[vh-unreported] %s:%d: %s\n", Name, Line, Reason);
+    fflush(stderr);
 }
 
 } // namespace GodotVerse

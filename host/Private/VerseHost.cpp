@@ -105,6 +105,18 @@ int32_t StatusFor(GodotVerse::EHostFailure Failure)
     case EHostFailure::NotAFunction:
     case EHostFailure::NoSuchClass:
         return VH_ERR_NOT_FOUND;
+    // A value the declaration cannot take, or cannot be built as: the call was shaped wrong, which
+    // is what InstanceCall already answers for a conversion that declines.
+    case EHostFailure::NotPublished:
+    case EHostFailure::TypeMismatch:
+    case EHostFailure::Unconvertible:
+    case EHostFailure::NullNotOptional:
+    case EHostFailure::EnumOrdinalOutOfRange:
+    case EHostFailure::MissingField:
+    case EHostFailure::ConstructionFailed:
+    case EHostFailure::CallbackMissing:
+    case EHostFailure::CallbackFailed:
+        return VH_ERR_ARGUMENT;
     }
     VH_EXHAUSTIVE_SWITCH_END
     return VH_ERR_NOT_FOUND;

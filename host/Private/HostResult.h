@@ -2,9 +2,12 @@
 
 #pragma once
 
+#include "AutoRTFM.h"
 #include "Misc/AssertionMacros.h"
 #include "Misc/Optional.h"
 #include "Templates/UnrealTemplate.h"
+
+#include <atomic>
 
 namespace GodotVerse {
 
@@ -32,6 +35,25 @@ enum class EHostFailure : uint8
     NotAFunction,
     /// The analysed program declares no class of that name.
     NoSuchClass,
+    /// The published program has no class or enumeration of the name a declaration or a layout
+    /// names -- a retired generation's, a nested class, or a build that has not published yet.
+    NotPublished,
+    /// The value is not of the kind its declaration, or the wire, says it is.
+    TypeMismatch,
+    /// The declared type has no representation on the other side of the wire.
+    Unconvertible,
+    /// Godot's null, for a declaration that is not an option.
+    NullNotOptional,
+    /// An ordinal with no enumerator in the enum the author declared.
+    EnumOrdinalOutOfRange,
+    /// A struct value without a field its layout names.
+    MissingField,
+    /// The VM refused to create or set a field of a value being built.
+    ConstructionFailed,
+    /// The consumer supplied no callback for what this needs.
+    CallbackMissing,
+    /// The consumer's callback answered an error.
+    CallbackFailed,
 };
 
 /// A value, or the reason there is none.
@@ -77,4 +99,51 @@ private:
     EFailure Failure{};
 };
 
+/// Success with nothing to carry, or the reason it failed: what a function that used to answer
+/// bool and fill out-parameters answers instead.
+template <typename EFailure>
+class TResult<void, EFailure>
+{
+public:
+    static TResult Ok() { return TResult(); }
+
+    TResult(EFailure InFailure)
+        : Failure(InFailure)
+    {
+    }
+
+    bool IsOk() const { return !Failure.IsSet(); }
+    explicit operator bool() const { return IsOk(); }
+
+    EFailure GetFailure() const
+    {
+        check(!IsOk());
+        return Failure.GetValue();
+    }
+
+private:
+    TResult() = default;
+
+    TOptional<EFailure> Failure;
+};
+
+AUTORTFM_DISABLE void ReportUnreported(const char* Reason, const char* File, int32 Line);
+
 } // namespace GodotVerse
+
+/// Marks a failure path that answers without saying why -- a `return false` or `return {}` that
+/// carries no EHostFailure -- so the silent paths are one grep away and can be counted down. Says so
+/// once per site on stderr in a development host, and is nothing in Shipping.
+#if UE_BUILD_SHIPPING
+#define VH_UNREPORTED(Reason) ((void)0)
+#else
+#define VH_UNREPORTED(Reason)                                                           \
+    do                                                                                  \
+    {                                                                                   \
+        static std::atomic<bool> bVhUnreportedSaid{false};                              \
+        if (!bVhUnreportedSaid.exchange(true))                                          \
+        {                                                                               \
+            ::GodotVerse::ReportUnreported((Reason), __FILE__, __LINE__);               \
+        }                                                                               \
+    } while (0)
+#endif
