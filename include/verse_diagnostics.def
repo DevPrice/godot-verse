@@ -1,0 +1,83 @@
+// The registry of every sentence this bridge writes itself: VERSE_DIAG(id, where, text).
+//
+// Included by include/verse_diagnostics.h, once per expansion, and parsed by
+// tests/verse_diagnostics/test_verse_diagnostics.py, which is why each row is exactly one
+// VERSE_DIAG( ... ) whose text is adjacent string literals and nothing else. docs/diagnostics.md
+// holds the numbering scheme and one "what to do" per row, and the test holds the two to each other.
+//
+// An ID is never reused or renumbered: a test, a search engine or an author's note may hold one. A
+// sentence whose meaning changes gets a new row; one whose wording is only improved keeps its ID.
+// `{name}` in a text is a placeholder, filled by name; any other brace is literal.
+
+// VG1xxx: `@export` members the inspector cannot carry (R-EXP-1, R-EXP-2, R-EXP-3).
+VERSE_DIAG(VG1001, "_validate warning and build log (VH_EXPORT_OBJECT_NOT_OPTIONAL)",
+	"{name} is a {class}, and the inspector may leave that slot empty. Declare it `?{class}` so the "
+	"member can hold the empty case.")
+VERSE_DIAG(VG1002, "_validate warning and build log (VH_EXPORT_OPTION_NOT_OBJECT)",
+	"{name} is an option around a value the inspector has no empty slot for. Only a node or a resource "
+	"can be left unassigned.")
+VERSE_DIAG(VG1003, "_validate warning and build log (VH_EXPORT_HINT_WRONG_TYPE)",
+	"{name} carries {attribute}, which describes {wants} -- and this member is not one. The attribute "
+	"exists because the declared type cannot say what a value is for, so the two have to be written to "
+	"agree.")
+VERSE_DIAG(VG1004, "_validate warning and build log (VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL)",
+	"{name} refers to {class}, which is neither a node nor a resource, so the inspector has nothing to "
+	"draw for it. Derive {class} from a Godot class the inspector can pick one of.")
+VERSE_DIAG(VG1005, "_validate warning and build log (VH_EXPORT_BINDING_CLASS_UNSUPPORTED, with a native base)",
+	"{name} refers to {class}, which is a GDScript class, and `@export` cannot carry a GDScript class "
+	"reached through a generated binding yet. Export its native base class `{native}` instead.")
+VERSE_DIAG(VG1006, "_validate warning and build log (VH_EXPORT_BINDING_CLASS_UNSUPPORTED, no native base)",
+	"{name} refers to {class}, which is a GDScript class, and `@export` cannot carry a GDScript class "
+	"reached through a generated binding yet.")
+VERSE_DIAG(VG1007, "_validate warning and build log (VH_EXPORT_UNSUPPORTED_TYPE)",
+	"{name} has a type godot-verse cannot carry to the inspector yet, so it is not exported.")
+
+// VG2xxx: signals. VG20xx is a declaration Godot is never told about (R-SIG-1).
+VERSE_DIAG(VG2001, "_validate warning and build log (VH_SIGNAL_IS_VAR); vm/ runtime raise",
+	"{name} is a `var`, and a signal is an identity rather than a value. Its binding is made once "
+	"against the object the member was built on, so reassigning it leaves the name pointing at "
+	"nothing. Drop the `var`.")
+VERSE_DIAG(VG2002, "_validate warning (VH_SIGNAL_NOT_PUBLIC, retired: no host built against this header sends it)",
+	"{name} is not `<public>`, so nothing outside the class can connect to it -- which is the only "
+	"thing connecting ever is. Declare it `{name}<public>`.")
+VERSE_DIAG(VG2003, "_validate warning and build log (VH_SIGNAL_NO_GODOT_OWNER); vm/ runtime raise",
+	"{name} is on a class that does not derive from `object`, so Godot never gives it an object to "
+	"register the signal on. Unlike GDScript, where every class is an Object with a signal table of "
+	"its own, a plain Verse class has no Godot counterpart at all.")
+VERSE_DIAG(VG2004, "_validate warning and build log (VH_SIGNAL_PAYLOAD_NESTED_STRUCT); vm/ runtime raise",
+	"{name} has a payload whose field `{field}` is itself a struct. A struct payload becomes one Godot "
+	"argument per top-level field, and Godot has no argument shape for a struct, so there is no second "
+	"level to flatten into. Flatten the field, or carry it as one of the mirrored math types.")
+VERSE_DIAG(VG2005, "_validate warning and build log (VH_SIGNAL_PAYLOAD_UNSUPPORTED); vm/ runtime raise",
+	"{name} has a payload argument `{field}` with no Godot type, so an emission would have nothing to "
+	"carry it in.")
+VERSE_DIAG(VG2006, "_validate warning and build log (VH_SIGNAL_NEEDS_ATTRIBUTE); vm/ runtime raise",
+	"{name} carries no `@export_signal`, so Godot is never told about it: it cannot be connected in the "
+	"Node panel, emitted to, or seen from GDScript. The attribute is what registers a member, the way "
+	"`@export` is what sends one to the inspector. Write `@export_signal` on the line above `{name}`.")
+VERSE_DIAG(VG2007, "_validate warning; vm/ runtime raise (a reject code this build does not know)",
+	"{name} cannot be registered with Godot, so nothing can connect to it.")
+
+// VG3xxx: `@rpc` configurations Godot is never given (R-EXP-9).
+VERSE_DIAG(VG3001, "_validate warning and build log (VH_RPC_UNKNOWN_ARGUMENT)",
+	"{name}: `{word}` is not an @rpc word. It must be one of \"call_local\"/\"call_remote\" (local "
+	"calls), \"any_peer\"/\"authority\" (permission), or \"reliable\"/\"unreliable\"/"
+	"\"unreliable_ordered\" (transfer mode).")
+VERSE_DIAG(VG3002, "_validate warning and build log (VH_RPC_DUPLICATE_CATEGORY)",
+	"{name}: {category} is given twice. Each of the three may be said no more than once.")
+VERSE_DIAG(VG3003, "_validate warning and build log (VH_RPC_BAD_ARGUMENT_TYPE)",
+	"{name}: @rpc wants {wanted} in this position.")
+
+// VG4xxx: running, and loading the host. VG40xx is a Godot call Verse made that Godot refused.
+VERSE_DIAG(VG4001, "vm/ runtime raise (VH_CALL_DEAD_OBJECT)",
+	"{verb} `{member}` on Godot object {handle}, which Godot has already freed. Test "
+	"IsInstanceValid[...] before reaching through a reference the scene may have dropped.")
+VERSE_DIAG(VG4002, "vm/ runtime raise (VH_CALL_BAD_VALUE)",
+	"{verb} `{member}` on Godot object {handle}, and the value has no representation on the Verse "
+	"bridge. This is a gap in the type table in tools/gen_verse_api.py.")
+VERSE_DIAG(VG4003, "vm/ runtime raise (VH_CALL_BAD_ARITY)",
+	"{verb} `{member}` on Godot object {handle} with the wrong number of arguments. The generated Verse "
+	"mirror and this build of Godot disagree; regenerate with tools/gen_verse_api.py.")
+VERSE_DIAG(VG4004, "vm/ runtime raise (VH_CALL_NO_SUCH_MEMBER)",
+	"{verb} `{member}` on Godot object {handle}, which has no such member. The generated Verse mirror "
+	"and this build of Godot disagree; regenerate with tools/gen_verse_api.py.")

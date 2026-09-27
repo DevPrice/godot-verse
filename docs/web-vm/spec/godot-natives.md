@@ -745,11 +745,13 @@ Looks `Id` up in the signal-binding table (§9.1). If `Id` is `0` or otherwise n
 
 > `A signal was emitted through an unbound `signal`. One a script built for itself rather than declared as a member of a class Godot instantiated names nothing, the way `godot_array{}` does.`
 
-If the binding exists but was refused at analysis time (§9.4's reject codes), raises instead
-(composed from the reject reason, verbatim reason text depends on which `vh_signal_reject` applies
-— see `vh_signal_reject`'s own comments in `include/verse_host_abi.h` for the reason clauses):
+If the binding exists but was refused at analysis time (§9.4's reject codes), raises instead.
+`<reason>` is the editor's own sentence for that `vh_signal_reject` -- the one `_validate` draws at
+the member's line -- which is `verse_signal_rejection(<name>, reject, detail)` in
+`include/verse_diagnostics.h`; a full sentence ending in its own full stop, so no punctuation is
+added around it:
 
-> `The signal `<name>` was never registered with Godot: <reason>. Nothing was emitted.`
+> `The signal `<name>` was never registered with Godot: <reason> Nothing was emitted.`
 
 Otherwise, decomposes `Payload` according to the binding's recorded payload shape (§9.1 — Bare,
 Tuple, or Struct) into the Godot argument list, and drives `EmitSignal` with the owning handle,
@@ -1479,7 +1481,11 @@ signal payload, and asserts `=` on what comes back.
   comments in `include/verse_host_abi.h` give the *meaning* of each code precisely, but the
   human-readable sentence each one is rendered as (`SignalRejectReason` in the existing host) was
   not located and read in this pass. A clean-room implementer needing the exact wording should ask
-  for a follow-up spec addition rather than guess at it.
+  for a follow-up spec addition rather than guess at it. **Answered 2026-09-26 by decision rather
+  than by reading the host:** the interpreter's reason is the editor's sentence for the reject
+  (`include/verse_diagnostics.h`, `verse_signal_rejection`), which is what `src/` draws in the gutter,
+  so the two backends' consumer halves cannot word one refusal two ways. The UE host's
+  `SignalRejectReason` clauses are its own and are not claimed to match.
 - **Whether `VhCallStatic`/`VhCallUtility` answering a default `variant` (rather than raising) when
   their callback pointer is null is an intentional asymmetry against `VhCallValue`'s raise-on-null
   behaviour, or an oversight never exercised in practice** (because a fully wired-up embedder never

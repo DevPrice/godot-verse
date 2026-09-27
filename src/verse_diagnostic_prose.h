@@ -9,18 +9,8 @@
 // What a refused `@export`, signal or `@rpc` has to say for itself, at the line that declared it
 // (R-EXP-1, R-SIG-1, R-EXP-9), and the formatting shared by every diagnostic the output log prints.
 //
-// Free functions of plain inputs -- a reject code, a name, a detail string -- rather than of the
-// Dictionary or VerseSignalInfo/VerseRpcInfo a caller happens to be holding, which is what lets
-// `verse_bindings_test`-shaped unit tests reach them with no Godot at all. Only the return type
-// keeps this godot-cpp-dependent: a later task moving the signal-rejection sentences into a header
-// both src/ and vm/ include would need std::string here instead, since vm/ builds with no
-// godot::String, and would drop this header's dependency on godot_cpp/variant entirely -- the ABI
-// reject enums it switches over already come from the plain-C verse_host_abi.h.
-
-// The attribute an author wrote, named back to them. R-EXP-1's five are told apart by the hint
-// alone, because vh_export_desc has no room to carry the spelling and adding one would be a layout
-// change -- so this is the one place the mapping is written down on the consumer's side.
-godot::String export_hint_attribute_name(vh_export_hint p_hint);
+// The sentences themselves are include/verse_diagnostics.h's, which vm/ runs too; these are its
+// godot::String face, so the two backends cannot word one rejection two ways.
 
 // What a rejected export has to say for itself. p_native_class is only ever read for
 // VH_EXPORT_BINDING_CLASS_UNSUPPORTED, and empty otherwise.

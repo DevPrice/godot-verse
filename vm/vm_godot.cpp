@@ -13,6 +13,8 @@
 #include "vm_runtime.h"
 #include "vm_values.h"
 
+#include "verse_diagnostics.h"
+
 #include "../host/Private/GodotMathLayout.gen.h"
 #include "../src/verse_api_classes.h"
 
@@ -153,23 +155,9 @@ std::string wire_text(const vh_value &p_wire) {
 	return std::string(p_wire.String.Utf8, size_t(p_wire.String.Len));
 }
 
-// §8.4's three sentences, by the status Godot answered.
+// §8.4's sentences, by the status Godot answered.
 std::string call_sentence(const char *p_verb, const std::string &p_member, int64_t p_handle, int32_t p_status) {
-	const std::string head = std::string(p_verb) + " `" + p_member + "` on Godot object " + std::to_string(p_handle);
-	switch ((vh_call_status)p_status) {
-		case VH_CALL_DEAD_OBJECT:
-			return head + ", which Godot has already freed. Test IsInstanceValid[...] before reaching through a reference the scene may have dropped.";
-		case VH_CALL_BAD_VALUE:
-			return head + ", and the value has no representation on the Verse bridge. This is a gap in the type table in tools/gen_verse_api.py.";
-		case VH_CALL_BAD_ARITY:
-			return head + " with the wrong number of arguments. The generated Verse mirror and this build of Godot disagree; regenerate with tools/gen_verse_api.py.";
-		// Only called with a non-OK status; VH_CALL_OK falls back to the same sentence NO_SUCH_MEMBER
-		// gets, matching what the prior `default:` answered for both.
-		case VH_CALL_OK:
-		case VH_CALL_NO_SUCH_MEMBER:
-			return head + ", which has no such member. The generated Verse mirror and this build of Godot disagree; regenerate with tools/gen_verse_api.py.";
-	}
-	return head + ", which has no such member. The generated Verse mirror and this build of Godot disagree; regenerate with tools/gen_verse_api.py.";
+	return verse_call_failure(p_verb, p_member, p_handle, p_status);
 }
 
 // §8.31's two sentences.
@@ -181,25 +169,9 @@ std::string reference_sentence(const char *p_verb, int64_t p_ref) {
 			"). A reference is released when the Verse value holding it is collected, so this is a handle kept past the object that owned it.";
 }
 
-// The clause a vh_signal_reject reads as (include/verse_host_abi.h's comments on each code).
-std::string reject_reason(int32_t p_reject, const std::string &p_detail) {
-	switch ((vh_signal_reject)p_reject) {
-		case VH_SIGNAL_IS_VAR:
-			return "it is declared `var`, and a signal is an identity rather than a value";
-		case VH_SIGNAL_NOT_PUBLIC:
-			return "it is not `<public>`";
-		case VH_SIGNAL_NO_GODOT_OWNER:
-			return "its class does not derive from a Godot object, so there is nothing to register it on";
-		case VH_SIGNAL_PAYLOAD_UNSUPPORTED:
-			return "its payload argument `" + p_detail + "` has no Godot type";
-		case VH_SIGNAL_PAYLOAD_NESTED_STRUCT:
-			return "its payload field `" + p_detail + "` is itself a struct, and a struct payload decomposes one level only";
-		case VH_SIGNAL_NEEDS_ATTRIBUTE:
-			return "it carries no `@export_signal`";
-		case VH_SIGNAL_OK:
-			return "it was refused when the class was analysed";
-	}
-	return "it was refused when the class was analysed";
+// The editor's own sentence for the refusal, so a raise names the rule and the fix the gutter did.
+std::string reject_reason(const std::string &p_name, int32_t p_reject, const std::string &p_detail) {
+	return verse_signal_rejection(p_name, p_reject, p_detail);
 }
 
 // The arenas of the Godot calls in flight, one per nesting level and kept once made, so a call
@@ -2164,8 +2136,8 @@ Outcome callable_from_native(NativeCall &r_call) {
 // Emission on a binding row, shared by §8.14 and §8.17.
 Outcome emit_binding(NativeCall &r_call, GodotBridge &r_bridge, const GodotBridge::SignalBinding &p_row, Value p_payload) {
 	if (p_row.reject != VH_SIGNAL_OK) {
-		return raise(r_call, "The signal `" + p_row.name + "` was never registered with Godot: " + reject_reason(p_row.reject, p_row.reject_detail) +
-						". Nothing was emitted.");
+		return raise(r_call, "The signal `" + p_row.name + "` was never registered with Godot: " + reject_reason(p_row.name, p_row.reject, p_row.reject_detail) +
+						" Nothing was emitted.");
 	}
 	ScopedArena arena;
 	std::vector<vh_value> args;
@@ -2182,7 +2154,7 @@ Outcome emit_binding(NativeCall &r_call, GodotBridge &r_bridge, const GodotBridg
 
 Outcome subscribe_binding(NativeCall &r_call, GodotBridge &r_bridge, const GodotBridge::SignalBinding &p_row, Value p_callback) {
 	if (p_row.reject != VH_SIGNAL_OK) {
-		return raise(r_call, "Cannot subscribe to `" + p_row.name + "`: " + reject_reason(p_row.reject, p_row.reject_detail));
+		return raise(r_call, "Cannot subscribe to `" + p_row.name + "`: " + reject_reason(p_row.name, p_row.reject, p_row.reject_detail));
 	}
 	const int64_t callable_ref = r_bridge.make_method_callable(p_callback, p_row.shape, false);
 	if (callable_ref == 0) {
@@ -2311,7 +2283,7 @@ Outcome signal_await_native(NativeCall &r_call) {
 		return raise(r_call, "Await was called on an unbound `signal`, which names nothing and so will never be emitted.");
 	}
 	if (row->reject != VH_SIGNAL_OK) {
-		return raise(r_call, "Cannot await `" + row->name + "`: " + reject_reason(row->reject, row->reject_detail));
+		return raise(r_call, "Cannot await `" + row->name + "`: " + reject_reason(row->name, row->reject, row->reject_detail));
 	}
 	const int64_t handle = row->handle;
 	const std::string name = row->name;
