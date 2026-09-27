@@ -28,10 +28,17 @@ func run() -> void:
 	await wait_until(func() -> bool: return not EditorInterface.get_resource_filesystem().is_scanning(),
 			STEP_TIMEOUT_MS)
 	await frames(2)
+	# The second session run_tests.py starts, with VERSE_HOST_TEST_FATAL in the editor's own
+	# environment: nothing else runs in it, because every Play it made would die.
+	if OS.get_cmdline_user_args().has(FATAL_FLAG):
+		await _host_fatal_during_play()
+		finished = true
+		return
 	await _harness()
 	await _placeholders_and_saving()
 	await _code_editor()
 	await _debugger_and_profiler()
+	await _inspector_docks_and_dialogs()
 	finished = true
 
 
@@ -1491,6 +1498,557 @@ func _debugger_button(tooltip: String) -> Button:
 		if (button as Button).tooltip_text == tooltip:
 			return button
 	return null
+
+
+# --- the inspector, the docks and the dialogs (docs/editor-test-audit.md step 6) -----------------
+#
+# by-hand-findings.md's "R-EXP-8's @icon, and the five inspector hints", "The Node panel, for a
+# signal that is not <public>", B3 and "R-EXP-7's two editor-side halves": which control the
+# inspector builds, what the Scene dock and the create dialog draw, what the Node dock lists, what
+# "Make Function" writes and what the autoload list does with a Verse script. The glance at how any
+# of it renders stays by hand.
+
+const HINTS := "res://scripts/hints.verse"
+const SIGNALS := "res://scripts/signals.verse"
+# Written beside the copy's project.godot by run_tests.py before the import pass, so it is an
+# imported texture by the time anything asks for it; tests/integration itself carries none.
+const ICON := "res://icon.svg"
+
+const ICON_CONTROL_SOURCE := """@icon("res://icon.svg")
+extends Node2D
+"""
+
+# hints.verse is a @global_class, so its icon is looked up in the class registry; this one is not,
+# which is the path that asks the script itself (EditorData::get_script_icon).
+const ICON_PROBE := CASES_DIR + "/icon_probe.verse"
+const ICON_PROBE_SOURCE := """using { /Godot.org/Godot }
+
+@icon("res://icon.svg")
+icon_probe := class(node2d):
+
+	Which<public>()<transacts>:int = 1
+"""
+
+const NODE_PATH_DEFECT := "known defect: `@export_node_path` on a `string` reaches Godot as TYPE_STRING with PROPERTY_HINT_NODE_PATH_VALID_TYPES, and the inspector builds EditorPropertyNodePath only for a NodePath, so Target is drawn as a plain text field with no picker"
+const TOOL_AUTOLOAD_DEFECT := "known defect: a @tool Verse autoload is added to the editor's tree holding a placeholder instance -- tool_probe.verse answers can_instantiate() false after the session's Plays have built, and VerseScript::_can_instantiate is is_compiled() && is_tool(), so it is is_compiled() that is false -- so a call answers 'Attempt to call a method on a placeholder instance' and its _Ready never runs"
+const ICON_CACHE_WHY := "Godot's own behaviour, not the bridge's: the GDScript control still draws the deleted icon.svg too -- EditorData's script icon cache and the loaded texture outlive the file for the session, so the fallback needs a fresh editor"
+const GLOBAL_ICON_DEFECT := "known defect: a @global_class script's icon is read from the class registry (EditorData::get_script_icon, script_class_get_icon_path), which is filled from _get_global_class_name's icon_path, and VerseScriptLanguage::_get_global_class_name answers none -- so Godot draws Node2D's icon and never asks _get_class_icon_path"
+
+const LISTENER_SOURCE := """extends Node
+
+
+func heard(points: int) -> void:
+	print("own_listener heard ", points)
+
+
+func _ready() -> void:
+	get_parent().call_deferred("EmitOwn", 5)
+"""
+
+
+func _inspector_docks_and_dialogs() -> void:
+	await _inspector_hints()
+	await _class_icons()
+	await _node_dock()
+	await _make_function()
+	await _autoloads()
+
+
+# R-EXP-8 steps 1-6: "Portrait must be a file field with a browse button, and the dialog it opens
+# must filter to .png and .jpg. SaveFolder must browse to a directory ... Notes must be a multi-line
+# box ... Elements must be three checkboxes named Fire, Water and Earth, and ticking Fire then Earth
+# must store 5. Target must offer a node picker that refuses anything that is not a Node2D.
+# Mismatched must be absent."
+func _inspector_hints() -> void:
+	_mark("R-EXP-8: the inspector's controls for the five hints")
+	var root := Node2D.new()
+	root.name = "Hints"
+	root.set_script(load(HINTS))
+	for row in [["Mark", Node2D.new()], ["Bystander", Node.new()]]:
+		row[1].name = row[0]
+		root.add_child(row[1])
+		row[1].owner = root
+	root = await _open_new_scene(root, CASES_DIR.path_join("hints.tscn"))
+	if root == null:
+		check("R-EXP-8: the editor opens a scene holding hints.verse", false)
+		return
+	EditorInterface.inspect_object(root)
+	var properties := {}
+	await wait_until(func() -> bool:
+		properties.clear()
+		properties.merge(_inspector_properties())
+		return properties.has("Portrait") and properties.has("Plain"), 10000)
+	for row in [
+		["Portrait", "EditorPropertyPath", "R-EXP-8 (1): the inspector draws Portrait as a path field"],
+		["SaveFolder", "EditorPropertyPath", "R-EXP-8 (2): and SaveFolder as a path field"],
+		["Notes", "EditorPropertyMultilineText", "R-EXP-8 (3): and Notes as a multi-line box"],
+		["Elements", "EditorPropertyFlags", "R-EXP-8 (4): and Elements as a set of flags"],
+		["Plain", "EditorPropertyInteger", "and the unhinted Plain beside them as an integer field"],
+	]:
+		check_eq(row[2], properties[row[0]].get_class() if properties.has(row[0]) else "no control", row[1])
+	check("R-EXP-8 (6): Mismatched is absent from the inspector", not properties.has("Mismatched"))
+	var target_type := TYPE_NIL
+	for row in root.get_property_list():
+		if row["name"] == "Target":
+			target_type = row["type"]
+	var target_control: String = properties["Target"].get_class() if properties.has("Target") else "no control"
+	var picker_defect := target_control == "EditorPropertyText" and target_type == TYPE_STRING
+	if picker_defect:
+		skip("R-EXP-8 (5): and Target as a node picker", NODE_PATH_DEFECT)
+	else:
+		check_eq("R-EXP-8 (5): and Target as a node picker", target_control, "EditorPropertyNodePath")
+
+	var portrait := await _browse(properties.get("Portrait"), "Edit", "EditorFileDialog")
+	check("R-EXP-8 (1): Portrait's browse button opens a file dialog", portrait != null)
+	if portrait != null:
+		check_eq("R-EXP-8 (1): which picks a file", portrait.get("file_mode"), EditorFileDialog.FILE_MODE_OPEN_FILE)
+		check_eq("R-EXP-8 (1): filtered to .png and .jpg", Array(portrait.get("filters")), ["*.png", "*.jpg"])
+		(portrait as Window).hide()
+	var folder := await _browse(properties.get("SaveFolder"), "Edit", "EditorFileDialog")
+	check_eq("R-EXP-8 (2): SaveFolder's browse button opens a dialog that picks a directory",
+			folder.get("file_mode") if folder != null else -1, EditorFileDialog.FILE_MODE_OPEN_DIR)
+	if folder != null:
+		(folder as Window).hide()
+
+	var boxes := find_all(properties["Elements"], "CheckBox") if properties.has("Elements") else []
+	check_eq("R-EXP-8 (4): Elements is three checkboxes named Fire, Water and Earth",
+			boxes.map(func(box: CheckBox) -> String: return box.text), ["Fire", "Water", "Earth"])
+	if boxes.size() == 3:
+		for index in [0, 2]:
+			boxes[index].button_pressed = true
+			boxes[index].pressed.emit()
+			await frames(1)
+		check_eq("R-EXP-8 (4): ticking Fire then Earth stores 5", root.get("Elements"), 5)
+
+	if picker_defect:
+		for name in ["R-EXP-8 (5): Target's button opens a node picker", "R-EXP-8 (5): which offers the Node2D child",
+				"R-EXP-8 (5): and refuses the plain Node"]:
+			skip(name, NODE_PATH_DEFECT)
+		return
+	var picker := await _browse(properties.get("Target"), "Assign Node", "SceneTreeDialog")
+	check("R-EXP-8 (5): Target's button opens a node picker", picker != null)
+	if picker != null:
+		var mark := _tree_item_in(picker, "Mark")
+		var bystander := _tree_item_in(picker, "Bystander")
+		check("R-EXP-8 (5): which offers the Node2D child", mark != null and mark.is_selectable(0))
+		check("R-EXP-8 (5): and refuses the plain Node", bystander != null and not bystander.is_selectable(0))
+		(picker as Window).hide()
+
+
+func _inspector_properties() -> Dictionary:
+	var found := {}
+	for property in find_all(EditorInterface.get_inspector(), "EditorProperty"):
+		found[String((property as EditorProperty).get_edited_property())] = property
+	return found
+
+
+# Presses the property's button whose accessibility name is `button` -- the one the author clicks
+# -- and answers the dialog it opened, which each of these adds as its own child.
+func _browse(property: Node, button: String, dialog_class: String) -> Window:
+	if property == null:
+		return null
+	for candidate in find_all(property, "Button"):
+		if (candidate as Control).accessibility_name == button:
+			candidate.emit_signal("pressed")
+			break
+	var dialogs := []
+	await wait_until(func() -> bool:
+		dialogs.assign(find_all(property, dialog_class))
+		return not dialogs.is_empty() and (dialogs[0] as Window).visible, 5000)
+	return dialogs[0] if not dialogs.is_empty() else null
+
+
+func _tree_item_in(root: Node, text: String) -> TreeItem:
+	for tree in find_all(root, "Tree"):
+		var item := _find_tree_item((tree as Tree).get_root(), text)
+		if item != null:
+			return item
+	return null
+
+
+# R-EXP-8 step 7: "The scene tree and the create-node dialog must show icon.svg for the class,
+# rather than Node2D's own icon. Then delete the file and reopen: Godot must fall back rather than
+# draw nothing." The only caller of _get_class_icon_path is EditorData::get_script_icon_path, so
+# this is the one place it is reached. A GDScript with the same @icon is the control.
+func _class_icons() -> void:
+	_mark("R-EXP-8 (7): @icon in the Scene dock and the create dialog")
+	var control := _write_script(CASES_DIR.path_join("icon_control.gd"), ICON_CONTROL_SOURCE)
+	var control_root := Node2D.new()
+	control_root.name = "IconControl"
+	control_root.set_script(control)
+	if not ResourceLoader.exists(ICON) or not _pack(control_root, CASES_DIR.path_join("icon_control.tscn")):
+		check("R-EXP-8 (7): the copy carries res://icon.svg and the control scene saves", false)
+		return
+	var probe_file := FileAccess.open(ICON_PROBE, FileAccess.WRITE)
+	probe_file.store_string(ICON_PROBE_SOURCE)
+	probe_file.close()
+	var probe_root := Node2D.new()
+	probe_root.name = "IconProbe"
+	probe_root.set_script(load(ICON_PROBE))
+	if not _pack(probe_root, CASES_DIR.path_join("icon_probe.tscn")):
+		check("R-EXP-8 (7): the icon probe's scene saves", false)
+		return
+	var subjects := [
+		{"id": "verse", "tag": "", "what": "a Verse class", "scene": CASES_DIR.path_join("icon_probe.tscn"), "root": "IconProbe"},
+		{"id": "verse", "tag": "", "what": "a @global_class Verse class", "scene": CASES_DIR.path_join("hints.tscn"), "root": "Hints"},
+		{"id": "gd", "tag": "GDScript control: ", "what": "the class", "scene": CASES_DIR.path_join("icon_control.tscn"), "root": "IconControl"},
+	]
+	for s in subjects:
+		s.icon = await _scene_dock_icon(s.scene, s.root)
+		_check_icon(s, s.tag + "R-EXP-8 (7): the Scene dock draws %s with icon.svg" % s.what, s.icon)
+	_check_icon(subjects[1], "R-EXP-8 (7): the create dialog draws the global class Hints with icon.svg",
+			await _create_dialog_icon("Hints", "Node2D"))
+
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(ICON))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(ICON + ".import"))
+	EditorInterface.get_resource_filesystem().scan()
+	await frames(2)
+	await wait_until(func() -> bool: return not EditorInterface.get_resource_filesystem().is_scanning(), 30000)
+	# The control first: when Godot keeps drawing a deleted icon for GDScript, a Verse case that does
+	# the same is Godot's cache and not the bridge.
+	subjects.push_front(subjects.pop_back())
+	var cached := false
+	for s in subjects:
+		var name: String = s.tag + "R-EXP-8 (7): with icon.svg deleted, the Scene dock falls back to an icon of its own for %s" % s.what
+		if s.icon != ICON and s.root == "Hints":
+			skip(name, "there was no icon.svg to fall back from: " + GLOBAL_ICON_DEFECT)
+			continue
+		var icon := await _scene_dock_icon(s.scene, s.root, true)
+		var fell_back := icon != ICON and icon != "<none>"
+		if s.id == "gd":
+			cached = icon == ICON
+		if not fell_back and cached:
+			skip(name, ICON_CACHE_WHY)
+		else:
+			check(name, fell_back)
+
+
+# A theme icon has no path, which is what Node2D's own is and what the global-class defect draws.
+func _check_icon(s: Dictionary, name: String, icon: String) -> void:
+	if icon == "" and s.root == "Hints":
+		skip(name, GLOBAL_ICON_DEFECT)
+	else:
+		check_eq(name, icon, ICON)
+
+
+# The resource path of the icon the Scene dock draws beside the edited scene's root, "<none>" for
+# none and "" for one that is not a file (a theme icon). `reload` reopens the scene first, which is
+# the by-hand step's "reopen".
+func _scene_dock_icon(scene: String, root_name: String, reload := false) -> String:
+	var root := await _open_scene(scene)
+	if root != null and reload:
+		var old_id := root.get_instance_id()
+		EditorInterface.reload_scene_from_path(scene)
+		await wait_until(func() -> bool:
+			var now := EditorInterface.get_edited_scene_root()
+			return now != null and now.get_instance_id() != old_id, 10000)
+	var docks := find_all(EditorInterface.get_base_control(), "SceneTreeDock")
+	if docks.is_empty():
+		return "<no Scene dock>"
+	var icon := ["<none>"]
+	await wait_until(func() -> bool:
+		var item := _tree_item_in(docks[0], root_name)
+		if item == null or item.get_icon(0) == null:
+			return false
+		icon[0] = item.get_icon(0).resource_path
+		return true, 10000)
+	return icon[0]
+
+
+func _create_dialog_icon(class_name_: String, base: String) -> String:
+	EditorInterface.popup_create_dialog(func(_picked: StringName) -> void: pass, StringName(base))
+	await wait_until(func() -> bool: return _visible_create_dialog() != null, 5000)
+	var dialog := _visible_create_dialog()
+	if dialog == null:
+		return "<no create dialog>"
+	var boxes := find_all(dialog, "FilterLineEdit")
+	var icon := "<none>"
+	if not boxes.is_empty():
+		(boxes[0] as LineEdit).text = class_name_
+		(boxes[0] as LineEdit).text_changed.emit(class_name_)
+		await frames(2)
+		var item := _tree_item_in(dialog, class_name_)
+		if item != null and item.get_icon(0) != null:
+			icon = item.get_icon(0).resource_path
+	dialog.hide()
+	return icon
+
+
+# "The Node panel, for a signal that is not <public>": "put a script on a node with
+# Own<private>:event(int) and @export_signal above it, open the Node dock, and connect Own to a
+# method through the dialog. It must appear in the list beside the <public> ones, with the same
+# payload row, and the connection must save into the scene and fire at runtime." The dialog's own
+# write is connect(..., CONNECT_PERSIST) (ConnectionsDock::_make_or_edit_connection), made here.
+func _node_dock() -> void:
+	_mark("the Node dock's signal list")
+	var listener := _write_script(CASES_DIR.path_join("own_listener.gd"), LISTENER_SOURCE)
+	var root := Node2D.new()
+	root.name = "Signals"
+	root.set_script(load(SIGNALS))
+	var child := Node.new()
+	child.name = "Listener"
+	child.set_script(listener)
+	root.add_child(child)
+	child.owner = root
+	root.connect("Own", Callable(child, "heard"), CONNECT_PERSIST)
+	const SCENE := CASES_DIR + "/node_dock.tscn"
+	root = await _open_new_scene(root, SCENE)
+	if root == null:
+		check("the editor opens a scene holding signals.verse", false)
+		return
+	EditorInterface.get_selection().clear()
+	EditorInterface.get_selection().add_node(root)
+	var docks := find_all(EditorInterface.get_base_control(), "ConnectionsDock")
+	if docks.is_empty():
+		check("the editor has a ConnectionsDock", false)
+		return
+	var rows := {}
+	await wait_until(func() -> bool:
+		rows.clear()
+		rows.merge(_signal_rows(docks[0]))
+		return rows.keys().any(func(text: String) -> bool: return text.begins_with("Own(")), 10000)
+	var own: String = _row_named(rows, "Own(")
+	check("the Node dock lists the <private> Own", not own.is_empty())
+	check("with its int payload, as it draws a <public> one's", own.ends_with(": int)")
+			and _row_named(rows, "Scored(").ends_with(": int)"))
+	for name in ["Hit(", "Unspecified(", "Guarded(", "Quiet("]:
+		check("and lists %s) beside it" % name, not _row_named(rows, name).is_empty())
+	check("the persisted connection is listed under Own",
+			rows.get(own, []).any(func(text: String) -> bool: return text.contains("heard")))
+
+	check_eq("the scene holding the connection saves", _save_edited_scene(), OK)
+	check("and the .tscn carries the connection",
+			_scene_text(SCENE).contains('[connection signal="Own" from="." to="Listener" method="heard"'))
+	var output := await play_and_read(SCENE, ["own_listener heard"])
+	check("and the connection fires at runtime", output.contains("own_listener heard 5"))
+
+
+# The Node dock's tree, as {signal row: [its connection rows]}.
+func _signal_rows(dock: Node) -> Dictionary:
+	var rows := {}
+	for tree in find_all(dock, "Tree"):
+		_collect_signal_rows((tree as Tree).get_root(), rows)
+	return rows
+
+
+func _collect_signal_rows(item: TreeItem, rows: Dictionary) -> void:
+	if item == null:
+		return
+	for child in item.get_children():
+		var text := child.get_text(0)
+		if text.contains("("):
+			rows[text] = child.get_children().map(func(row: TreeItem) -> String: return row.get_text(0))
+		_collect_signal_rows(child, rows)
+
+
+func _row_named(rows: Dictionary, prefix: String) -> String:
+	for text in rows:
+		if String(text).begins_with(prefix):
+			return text
+	return ""
+
+
+# B3: "Connecting a signal with Make Function checked writes a stub that does not compile." Godot's
+# Connect dialog emits EditorNode's script_add_function_request with the arguments it builds
+# (connections_dialog.cpp:651-655, "name: Type"), which is what reaches _make_function through
+# ScriptTextEditor::add_callback; Godot then saves the script, and the analysis of that save says
+# whether the stub compiles.
+func _make_function() -> void:
+	_mark("B3: the stub Make Function writes")
+	var script: Script = load(SIGNALS)
+	var root := EditorInterface.get_edited_scene_root()
+	var editor_node: Node = EditorInterface.get_base_control().get_parent()
+	if root == null or root.get_script() != script or editor_node == null or not editor_node.is_class("EditorNode"):
+		check("B3: the node dock's scene is still open under EditorNode", false)
+		return
+	var code := await code_edit_for(script)
+	if code == null:
+		check("B3: signals.verse opens in the script editor", false)
+		return
+	var original := code.text
+	for row in [["Hit", "_on_signals_hit", "a signal with no payload"],
+			["Own", "_on_signals_own", "a signal with an int payload"]]:
+		var args := _dialog_args(root, row[0])
+		editor_node.emit_signal("script_add_function_request", root, row[1], args)
+		await frames(1)
+		var at := code.text.find("\t%s<public>(" % row[1])
+		var stub := code.text.substr(at) if at >= 0 else ""
+		var placeholder := ")<transacts>:void =\n\t\t{} # Replace with function body.\n"
+		if stub.ends_with(placeholder):
+			check("B3: for %s, Make Function writes a stub ending in Godot's own placeholder" % row[2], true)
+		else:
+			check_eq("B3: for %s, Make Function writes a stub ending in Godot's own placeholder" % row[2], stub, "... " + placeholder)
+		# A broken file empties the method list, so the stub either joins it or takes EmitOwn out.
+		var outcome := {}
+		await wait_until(func() -> bool:
+			outcome["joined"] = _declares(script, row[1])
+			return outcome["joined"] or not _declares(script, "EmitOwn"), ANALYSIS_TIMEOUT_MS)
+		var name := "B3: for %s, the stub compiles" % row[2]
+		if outcome.get("joined", false):
+			check(name, true)
+		elif stub.contains(":?"):
+			skip(name, "known defect: Godot's Connect dialog passes each argument as `name: Type`, with a space, and verse_type_for_godot_type is handed ` %s`, so the parameter is written `%s:?`, which does not compile -- the stub was %s"
+					% [args[0].get_slice(":", 1).strip_edges() if not args.is_empty() else "", args[0].get_slice(":", 0) if not args.is_empty() else "", stub.strip_edges()])
+		else:
+			check(name, false)
+		code.text = original
+		await _resave(script, original, "EmitOwn", true)
+
+
+# What ConnectionsDock hands script_add_function_request for `signal_name`: each argument as
+# "name: Type", the name `argN` when the signal has none.
+func _dialog_args(node: Object, signal_name: String) -> PackedStringArray:
+	var args := PackedStringArray()
+	for row in node.get_signal_list():
+		if row["name"] != signal_name:
+			continue
+		for i in row["args"].size():
+			var arg: Dictionary = row["args"][i]
+			var type_name: String = arg["class_name"] if arg["type"] == TYPE_OBJECT and arg["class_name"] != &"" else type_string(arg["type"])
+			if arg["type"] == TYPE_NIL:
+				type_name = "Variant"
+			args.append("%s: %s" % [arg["name"] if not String(arg["name"]).is_empty() else "arg%d" % i, type_name])
+	return args
+
+
+# R-EXP-7: "Project > Project Settings > Globals, add res://scripts/settings_resource.verse. Godot
+# must refuse it with its own sentence and no crash. Then add res://scripts/game_state.verse, which
+# must be accepted." And "a @tool autoload answers from a @tool script in the editor" while a plain
+# one is not instantiated there. The Globals tab's Add button is EditorAutoloadSettings::autoload_add.
+func _autoloads() -> void:
+	_mark("R-EXP-7: the autoload list")
+	var lists := find_all(plugin.get_tree().root, "EditorAutoloadSettings")
+	if lists.is_empty():
+		check("R-EXP-7: the editor has an EditorAutoloadSettings", false)
+		return
+	var autoloads: Node = lists[0]
+	var refused := "does not inherit from 'Node'."
+	var tree_root := plugin.get_tree().root
+
+	var before := editor_log_text()
+	var answered: bool = autoloads.call("autoload_add", "SettingsProbe", "res://scripts/settings_resource.verse")
+	await frames(2)
+	var said := editor_log_text().substr(before.length())
+	check("R-EXP-7: adding settings_resource.verse as an autoload is refused with Godot's own sentence",
+			said.contains("Failed to create an autoload, script '") and said.contains(refused))
+	check_eq("R-EXP-7: autoload_add answers true for it all the same, which is Godot's own behaviour", answered, true)
+	check("R-EXP-7: and the bridge adds no sentence of its own", RegEx.create_from_string("VG\\d{4}: ").search(said) == null)
+	check("R-EXP-7: and no node is made for it", tree_root.get_node_or_null("SettingsProbe") == null)
+	autoloads.call("autoload_remove", "SettingsProbe")
+	await frames(2)
+
+	before = editor_log_text()
+	answered = autoloads.call("autoload_add", "GameStateProbe", "res://scripts/game_state.verse")
+	await frames(2)
+	said = editor_log_text().substr(before.length())
+	check("R-EXP-7: game_state.verse is accepted as an autoload",
+			answered and ProjectSettings.has_setting("autoload/GameStateProbe") and not said.contains("Failed to create an autoload"))
+	check("R-EXP-7: and, with no @tool, is not instantiated in the editor",
+			tree_root.get_node_or_null("GameStateProbe") == null and tree_root.get_node_or_null("GameState") == null)
+	autoloads.call("autoload_remove", "GameStateProbe")
+	await frames(2)
+
+	before = editor_log_text()
+	autoloads.call("autoload_add", "ToolProbe", "res://scripts/tool_probe.verse")
+	var added := await wait_until(func() -> bool: return tree_root.get_node_or_null("ToolProbe") != null, 10000)
+	check("R-EXP-7: a @tool Verse autoload is instantiated in the editor", added)
+	if added:
+		var probe := tree_root.get_node("ToolProbe")
+		var script: Script = probe.get_script()
+		check("R-EXP-7: holding its script", script != null and script.resource_path == "res://scripts/tool_probe.verse")
+		# A placeholder answers a call with a script error that ends this function, so it is asked
+		# only of a script that can instantiate.
+		if script != null and not script.can_instantiate():
+			for name in ["R-EXP-7: and answers a method from the last built generation", "R-EXP-7: its _Ready ran in the editor"]:
+				skip(name, TOOL_AUTOLOAD_DEFECT)
+		else:
+			check_eq("R-EXP-7: and answers a method from the last built generation", probe.call("Which"), "tool")
+			await wait_until(func() -> bool: return editor_log_text().substr(before.length()).contains("tool_probe ready"), 5000)
+			check("R-EXP-7: its _Ready ran in the editor", editor_log_text().substr(before.length()).contains("tool_probe ready"))
+	autoloads.call("autoload_remove", "ToolProbe")
+	check("R-EXP-7: and removing it takes the node out of the editor",
+			await wait_until(func() -> bool: return tree_root.get_node_or_null("ToolProbe") == null, 10000))
+
+
+# --- a host fatal error during Play (docs/editor-test-audit.md step 7) ---------------------------
+#
+# by-hand-findings.md "A host fatal error during Play": "set VERSE_HOST_TEST_FATAL=check in the
+# environment the editor is started from ... and press Play. The game must close at once, and the
+# editor's Output panel must show 'The game ended in a Verse host fatal error:' with the failed
+# check's message and a stack naming GodotVerse::FireTestFatal(). Press Play again without the
+# variable set, and nothing about the fatal error may print a second time." run_tests.py starts
+# this session with the variable set; the editor's own host is the one the consumer hides it from.
+
+const FATAL_FLAG := "--verse-editor-fatal"
+const FATAL_VARIABLE := "VERSE_HOST_TEST_FATAL"
+const FATAL_REPORT := "VG4113: "
+const FATAL_MESSAGE := "VERSE_HOST_TEST_FATAL=check asked for a failed check."
+const FATAL_FRAME := "GodotVerse::FireTestFatal()"
+
+
+func _host_fatal_during_play() -> void:
+	_mark("B43: the editor's own host, started with the variable set")
+	check_eq("B43: the editor was started with VERSE_HOST_TEST_FATAL=check", OS.get_environment(FATAL_VARIABLE), "check")
+	check("Play is armed to start the game headless", play_is_headless())
+	var probe: Script = load(SAVE_PROBE)
+	await frames(30)
+	check("B43: the editor's own host loads and keeps ticking", probe != null and _declares(probe, "Answer"))
+	const SCENE := CASES_DIR + "/fatal.tscn"
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(CASES_DIR))
+	var root := Node.new()
+	root.name = "Idle"
+	root.set_script(_write_script(CASES_DIR.path_join("idle.gd"), IDLE_SOURCE))
+	if not _pack(root, SCENE):
+		check("B43: the Play scene saves", false)
+		return
+
+	_mark("B43: Play with the variable set")
+	var record_path := ProjectSettings.globalize_path("user://logs/verse_crash.log")
+	var seen := {"record": ""}
+	if not play_scene(SCENE):
+		return
+	var ended := await wait_until(func() -> bool:
+		if FileAccess.file_exists(record_path):
+			seen.record = FileAccess.get_file_as_string(record_path)
+		return not EditorInterface.is_playing_scene(), 60000)
+	check("B43: the game ends by itself", ended)
+	if not ended:
+		EditorInterface.stop_playing_scene()
+		return
+	check("B43: the game's host wrote user://logs/verse_crash.log before the process ended",
+			String(seen.record).contains(FATAL_MESSAGE))
+	var reported := await wait_until(func() -> bool: return editor_log_text().contains(FATAL_REPORT), 10000)
+	check("B43: when Play ends, the Output panel says the game ended in a host fatal error", reported)
+	var text := editor_log_text()
+	var report := text.substr(text.find(FATAL_REPORT))
+	check("B43: with the failed check's message", report.contains(FATAL_MESSAGE))
+	check("B43: and a stack naming GodotVerse::FireTestFatal()", report.contains(FATAL_FRAME))
+	check("B43: the editor removes the record it reported", not FileAccess.file_exists(record_path))
+	check("B43: and the editor itself is still running its host", _declares(probe, "Answer"))
+
+	# The Output panel is cleared at every Play (run/output/always_clear_output_on_play), so from
+	# here on any report in it is a second one.
+	_mark("B43: Play again without the variable")
+	OS.unset_environment(FATAL_VARIABLE)
+	var output := await play_and_read(SCENE, ["idle game up"])
+	check("B43: without the variable the game comes up", output.contains("idle game up"))
+	await frames(10)
+	check_eq("B43: and nothing about the fatal error prints a second time", editor_log_text().count(FATAL_REPORT), 0)
+	check("B43: nor as a previous run's record at the game's host load", not editor_log_text().contains("VG4110: "))
+
+	# The editor's host was armed at its own vh_init, which is behind it, so setting the variable
+	# now reaches only the game Play starts next.
+	_mark("B43: Play with a native crash")
+	OS.set_environment(FATAL_VARIABLE, "access_violation")
+	if play_scene(SCENE):
+		ended = await wait_until(func() -> bool: return not EditorInterface.is_playing_scene(), 60000)
+		check("B43: a game whose host crashes natively ends by itself", ended)
+		if not ended:
+			EditorInterface.stop_playing_scene()
+		await frames(10)
+		check("B43: and leaves no record, which is Godot's crash handler's to report", not FileAccess.file_exists(record_path))
+		check("B43: so the editor reports no host fatal error for it", not editor_log_text().contains(FATAL_REPORT))
+	OS.unset_environment(FATAL_VARIABLE)
 
 
 # --- helpers ------------------------------------------------------------------------------------

@@ -488,8 +488,8 @@ executable. If a future engine drop provides one, that script finds and execs it
 
 ### Tests
 
-    python tools/run_tests.py                    # every layer but editor and debug-wire; the one command (R-QUAL-3)
-    python tools/run_tests.py --only units       # or units / abi / contract / integration / export / web / web-threads / editor / debug-wire
+    python tools/run_tests.py                    # every layer but editor, debug-wire and multiplayer; the one command (R-QUAL-3)
+    python tools/run_tests.py --only units       # or units / abi / contract / integration / export / web / web-threads / editor / debug-wire / multiplayer
     python tools/run_tests.py --only units,abi   # or several, comma-separated
     python tools/run_tests.py --build            # rebuild the test binaries first
 
@@ -689,8 +689,29 @@ integration. Its last group plays `tests/integration/debugger/debug_play.tscn` a
 own Debugger panel: gutter breakpoints, the stack panel, Stack Variables, the step buttons, Skip
 Breakpoints, a live toggle and the Profiler tab, on `scripts/debug_play.verse` beside a GDScript
 control. A lambda captures a local **by value**, so a `wait_until` condition gathers into an array
-or a dictionary it mutates rather than assigning one. (Observed at 2026-09: 193 cases, 181 passed
-and 12 skipped, about 52 s including the import pass.)
+or a dictionary it mutates rather than assigning one. Its step-6 group reads the inspector's
+controls for R-EXP-8's hints, `@icon` in the Scene dock and the create dialog (the only caller of
+`_get_class_icon_path`), the Node dock's signal list with a `<private>` one and a persisted
+connection, B3's "Make Function" stub through `script_add_function_request`, and R-EXP-7's
+autoload list through `EditorAutoloadSettings.autoload_add`. **A second session** (`editor host
+fatal`) reopens the same copy with `VERSE_HOST_TEST_FATAL=check` in the editor's own environment
+and `--verse-editor-fatal`, and runs B43 alone: the game Play starts dies, the record is written,
+the editor reports it when Play ends and survives, and nothing repeats on the next Play. Each
+session's whole output is kept in `bin/editor.log` / `bin/editor_host_fatal.log`, which is where a
+GDScript error that ended a group early is printed -- Godot then carries on in the caller, so the
+only sign in the case lines is that some are missing. (Observed at 2026-09: 257 cases in the two
+sessions, 233 passed and 24 skipped, about 135 s including the import pass.)
+
+**multiplayer** — opt-in the same way. `tools/run_multiplayer.py` starts `multiplayer/peer.tscn`
+in tests/integration twice, a host and a client over ENet on localhost, and the host walks
+by-hand-findings.md's six R-EXP-9 steps: `authority` refused from the client and honoured from the
+host, `any_peer` and `call_local` on `Nudge`, `Ordinary` and the misspelled `@rpc` refused at the
+caller, and -- through `multiplayer/logging_peer.gd`, a `MultiplayerPeerExtension` around the ENet
+peer -- the transfer mode and channel each call left with and arrived on. Godot's own refusal
+sentences are asserted from each game's output. A layer of its own because it shares nothing with
+`editor` or `debug-wire` and is the one that runs two games at once. In place, so like debug-wire it
+needs tests/integration's import scan (without it `Mob` is unresolved and the games fail to parse).
+(Observed at 2026-09: 38 cases, 38 passed, about 7 s.)
 
 **debug-wire** — opt-in the same way. `tools/debug_wire.py` is the editor's end of Godot's
 remote-debug protocol (the framing, `encode_variant`, the message shapes, all read from 4.7.2), and

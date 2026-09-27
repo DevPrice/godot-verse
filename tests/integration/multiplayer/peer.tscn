@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://multiplayer/peer.gd" id="1_peer"]
+[ext_resource type="Script" path="res://scripts/rpcs.verse" id="2_rpcs"]
+
+[node name="Peer" type="Node"]
+script = ExtResource("1_peer")
+
+[node name="Rpcs" type="Node2D" parent="."]
+script = ExtResource("2_rpcs")

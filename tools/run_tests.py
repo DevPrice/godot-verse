@@ -13,16 +13,18 @@ R-QUAL-3. The three layers R-QUAL-1 names, in the order a failure is cheapest to
   web-threads  the same with the threads library and template, served with COOP/COEP
   editor       tests/integration in a headless editor, driven by tests/editor's plugin (opt-in)
   debug-wire   a headless game of tests/integration driven over the remote-debug protocol by tools/debug_wire.py (opt-in)
+  multiplayer  two headless games of tests/integration exchanging Verse @rpc calls over ENet, by tools/run_multiplayer.py (opt-in)
 
 Each layer is skipped rather than failed when what it needs is absent -- a contributor without a UE
 checkout still gets the unit layer -- and a skip is reported as a skip, never as a pass.
 
-The editor and debug-wire layers are opt-in: a run with no --only runs every other layer, and only a
---only naming one runs it (docs/editor-test-audit.md).
+The editor, debug-wire and multiplayer layers are opt-in: a run with no --only runs every other
+layer, and only a --only naming one runs it (docs/editor-test-audit.md).
 
-  python tools/run_tests.py                 # everything that can run here but the two opt-in layers
+  python tools/run_tests.py                 # everything that can run here but the three opt-in layers
   python tools/run_tests.py --only editor   # the editor layer
   python tools/run_tests.py --only debug-wire  # the debugger and profiler over the wire
+  python tools/run_tests.py --only multiplayer  # R-EXP-9's second peer
   python tools/run_tests.py --only export   # one layer
   python tools/run_tests.py --only units,abi  # or several
   python tools/run_tests.py --build         # rebuild the test binaries first
@@ -1843,6 +1845,8 @@ EDITOR_DEBUG_PORT = 6118
 # Bounds the whole run; editor_cases.gd's own watchdog bounds each step well inside it, and names it.
 EDITOR_LAYER_TIMEOUT = 600
 EDITOR_CASES_ADDON = REPO / "tests" / "editor" / "addons" / "verse_editor_cases"
+EDITOR_ICON_SVG = ('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16">'
+                   '<rect width="16" height="16" fill="#478cbf"/></svg>\n')
 
 
 def _editor_layer_project(base_project: Path, godot: Path) -> tuple[Path, dict[str, str]]:
@@ -1862,6 +1866,10 @@ def _editor_layer_project(base_project: Path, godot: Path) -> tuple[Path, dict[s
         f.write('\n[editor]\n\nrun/main_run_args="--headless"\n'
                 '\n[editor_plugins]\n\n'
                 f'enabled=PackedStringArray("res://addons/{EDITOR_CASES_ADDON.name}/plugin.cfg")\n')
+
+    # hints.verse's @icon names it (R-EXP-8 step 7), and it is written before the import pass so it
+    # is an imported texture by the time the Scene dock asks; the committed project carries none.
+    (project / "icon.svg").write_text(EDITOR_ICON_SVG, encoding="utf-8")
 
     home = work / "home"
     godot_env.write_editor_settings(home, godot, language="en", debug_port=EDITOR_DEBUG_PORT)
@@ -1901,47 +1909,63 @@ def run_editor(results: Results, engine: Path | None, godot: Path | None) -> Non
                        env=env, capture_output=True, text=True, errors="replace",
                        timeout=EDITOR_LAYER_TIMEOUT)
 
-        print("[run_tests] --- editor ---")
-        try:
-            completed = subprocess.run(
-                [str(godot), "--headless", "--editor", "--path", str(project),
-                 "--", "--verse-editor-cases", f"--verse-editor-port={EDITOR_DEBUG_PORT}"],
-                env=env, capture_output=True, text=True, errors="replace",
-                timeout=EDITOR_LAYER_TIMEOUT)
-            output = (completed.stdout or "") + (completed.stderr or "")
-            returncode = completed.returncode
-        except subprocess.TimeoutExpired as timeout_error:
-            stdout = timeout_error.stdout or ""
-            output = stdout if isinstance(stdout, str) else stdout.decode("utf-8", "replace")
-            returncode = None
-            print(f"[editor] the editor ran for {EDITOR_LAYER_TIMEOUT} s without quitting: FAIL")
-        # The editor's own output is thousands of progress lines; its cases are what this layer reads.
-        for line in output.splitlines():
-            if line.startswith("[editor]"):
-                print(line)
-
-        cases = results.take_cases("editor", output, "editor")
-        counts = test_records.summary_counts(output, "editor")
-        tally = tuple(sum(1 for case in cases if case.status == status)
-                      for status in (test_records.PASS, test_records.FAIL, test_records.SKIP))
-        ok = returncode == 0 and bool(cases) and not test_records.duplicates(cases)
-        if counts is None:
-            ok = False
-            print("[editor] the editor printed no summary line: FAIL -- its last lines:")
-            for line in [line for line in output.splitlines() if line.strip()][-12:]:
-                print(f"[editor]   {line.strip()}")
-        elif counts != tally:
-            results.harness_failure("editor", "case lines agree with the summary",
-                                    f"the summary says {counts} (passed, failed, skipped) and the "
-                                    f"case lines add up to {tally}")
-            ok = False
-        if any(case.status == test_records.FAIL for case in cases):
-            ok = False
-        if returncode not in (0, None):
-            print(f"[editor] the editor exited {returncode}, not 0")
-        results.record("editor", ok)
+        _run_editor_session(results, "editor", godot, project, env, [])
+        # by-hand-findings.md "A host fatal error during Play": a second session over the same,
+        # already-imported copy, started with the variable in the editor's own environment -- which
+        # is the by-hand step, and the only way to show the consumer hiding it from the editor's
+        # host while the game Play starts still inherits it.
+        _run_editor_session(results, "editor host fatal", godot, project,
+                            dict(env, VERSE_HOST_TEST_FATAL="check"), ["--verse-editor-fatal"])
     finally:
         shutil.rmtree(project.parent, ignore_errors=True)
+
+
+def _run_editor_session(results: Results, suite: str, godot: Path, project: Path,
+                        env: dict[str, str], extra_args: list[str]) -> None:
+    print(f"[run_tests] --- {suite} ---")
+    try:
+        completed = subprocess.run(
+            [str(godot), "--headless", "--editor", "--path", str(project),
+             "--", "--verse-editor-cases", f"--verse-editor-port={EDITOR_DEBUG_PORT}"] + extra_args,
+            env=env, capture_output=True, text=True, errors="replace",
+            timeout=EDITOR_LAYER_TIMEOUT)
+        output = (completed.stdout or "") + (completed.stderr or "")
+        returncode = completed.returncode
+    except subprocess.TimeoutExpired as timeout_error:
+        stdout = timeout_error.stdout or ""
+        output = stdout if isinstance(stdout, str) else stdout.decode("utf-8", "replace")
+        returncode = None
+        print(f"[editor] the editor ran for {EDITOR_LAYER_TIMEOUT} s without quitting: FAIL")
+    # The editor's own output is thousands of progress lines; its cases are what this layer reads,
+    # and the rest is kept for the one thing a case line cannot say -- a GDScript error that ended
+    # a group early, which Godot prints and then carries on from in the caller.
+    log_path = REPO / "bin" / f"{suite.replace(' ', '_')}.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(output, encoding="utf-8", errors="replace")
+    for line in output.splitlines():
+        if line.startswith("[editor]"):
+            print(line)
+
+    cases = results.take_cases(suite, output, "editor")
+    counts = test_records.summary_counts(output, "editor")
+    tally = tuple(sum(1 for case in cases if case.status == status)
+                  for status in (test_records.PASS, test_records.FAIL, test_records.SKIP))
+    ok = returncode == 0 and bool(cases) and not test_records.duplicates(cases)
+    if counts is None:
+        ok = False
+        print("[editor] the editor printed no summary line: FAIL -- its last lines:")
+        for line in [line for line in output.splitlines() if line.strip()][-12:]:
+            print(f"[editor]   {line.strip()}")
+    elif counts != tally:
+        results.harness_failure(suite, "case lines agree with the summary",
+                                f"the summary says {counts} (passed, failed, skipped) and the "
+                                f"case lines add up to {tally}")
+        ok = False
+    if any(case.status == test_records.FAIL for case in cases):
+        ok = False
+    if returncode not in (0, None):
+        print(f"[editor] the editor exited {returncode}, not 0")
+    results.record(suite, ok)
 
 
 def run_debug_wire(results: Results, engine: Path | None, godot: Path | None) -> None:
@@ -1972,11 +1996,40 @@ def run_debug_wire(results: Results, engine: Path | None, godot: Path | None) ->
         results, require_line="passed, ", cases="debug-wire")
 
 
+def run_multiplayer(results: Results, engine: Path | None, godot: Path | None) -> None:
+    """docs/editor-test-audit.md step 8: R-EXP-9's second peer. tools/run_multiplayer.py starts two
+    headless games of tests/integration's multiplayer/peer.tscn, a host and a client over ENet on
+    localhost, and the host walks by-hand-findings.md's six steps.
+
+    A layer of its own rather than part of `debug-wire` or `editor`, because it shares nothing with
+    either: no editor, no remote-debug wire, and it is the one layer that runs two games at once
+    and opens a UDP port. Opt-in for the reason both of those are -- it is Godot's multiplayer
+    that is under test as much as the bridge's config, which is a foreign contract re-read on a
+    bump -- and because two cold Verse builds at once cost more than it is worth on every run. In
+    place, like debug-wire, so it needs only the integration layer's one import scan.
+    """
+    project = REPO / "tests" / "integration"
+    if godot is None:
+        results.skip("multiplayer", "no Godot binary -- set GODOT or pass --godot")
+        return
+    if engine is None:
+        results.skip("multiplayer", "no Unreal checkout -- set UE_ROOT or pass --engine")
+        return
+    why = stage_extension(project)
+    if why is not None:
+        results.skip("multiplayer", why)
+        return
+    run("multiplayer", [sys.executable, str(REPO / "tools" / "run_multiplayer.py"),
+                        "--godot", str(godot), "--project", str(project)],
+        results, require_line="passed, ", cases="multiplayer")
+
+
 LAYERS = ["units", "abi", "contract", "integration", "export", "web", "web-threads", "editor",
-          "debug-wire"]
-# What a run with no --only runs. The editor and debug-wire layers are left out on purpose: both
-# are opt-in.
-DEFAULT_LAYERS = [layer for layer in LAYERS if layer not in ("editor", "debug-wire")]
+          "debug-wire", "multiplayer"]
+# What a run with no --only runs. The editor, debug-wire and multiplayer layers are left out on
+# purpose: all three are opt-in.
+OPT_IN_LAYERS = ("editor", "debug-wire", "multiplayer")
+DEFAULT_LAYERS = [layer for layer in LAYERS if layer not in OPT_IN_LAYERS]
 
 
 def _layer_list(text: str) -> list[str]:
@@ -2057,7 +2110,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--only", type=_layer_list,
                         help=f"run these layers, comma-separated: {', '.join(LAYERS)} "
-                             f"(default: all but editor and debug-wire)")
+                             f"(default: all but {', '.join(OPT_IN_LAYERS)})")
     parser.add_argument("--build", action="store_true", help="rebuild the test binaries first")
     parser.add_argument("--engine", help="the Unreal checkout (default: UE_ROOT, then ../UnrealEngine)")
     parser.add_argument("--godot", help="the Godot binary (default: GODOT, then PATH)")
@@ -2114,6 +2167,9 @@ def main() -> None:
     if "debug-wire" in only:
         results.layer = "debug-wire"
         run_debug_wire(results, engine, godot)
+    if "multiplayer" in only:
+        results.layer = "multiplayer"
+        run_multiplayer(results, engine, godot)
 
     cases = [record for record in results.records if record.kind == "case"]
     failing = [record for record in results.records
