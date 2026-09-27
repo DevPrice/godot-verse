@@ -46,13 +46,29 @@ bool int_argument(NativeCall &r_call, uint32_t p_index, int64_t &r_value) {
 	return int_to_int64(argument(r_call, p_index), r_value, error) == Outcome::Ok;
 }
 
+#define VM_TAG_CASE(m_tag, m_godot, m_family, m_components) case m_tag:
+
+// A reference id in the consumer's table: a container, a Callable, a Signal or a packed array.
 bool is_reference_tag(int64_t p_tag) {
-	return p_tag >= VH_VARIANT_CALLABLE && p_tag <= VH_VARIANT_PACKED_VECTOR4_ARRAY && p_tag != VH_VARIANT_OBJECT;
+	switch (p_tag) {
+		VH_VARIANT_REFERENCE_TAGS(VM_TAG_CASE)
+		VH_VARIANT_PACKED_TAGS(VM_TAG_CASE)
+			return true;
+		default:
+			return false;
+	}
 }
 
 bool is_string_tag(int64_t p_tag) {
-	return p_tag == VH_VARIANT_STRING || p_tag == VH_VARIANT_STRING_NAME || p_tag == VH_VARIANT_NODE_PATH;
+	switch (p_tag) {
+		VH_VARIANT_STRING_TAGS(VM_TAG_CASE)
+			return true;
+		default:
+			return false;
+	}
 }
+
+#undef VM_TAG_CASE
 
 const verse_math::layout *math_layout(int64_t p_tag) {
 	for (const verse_math::layout &layout : verse_math::layouts) {
@@ -761,7 +777,7 @@ Value GodotBridge::element_from_wire(const vh_value &p_wire, int32_t p_tag) {
 	int32_t math = 0;
 	if (math_layout(p_wire.VariantTag) != nullptr) {
 		math = p_wire.VariantTag;
-	} else if (p_tag >= VH_VARIANT_PACKED_VECTOR2_ARRAY) {
+	} else if (p_tag != VH_VARIANT_NIL) {
 		for (const verse_math::layout &layout : verse_math::layouts) {
 			if (layout.packed_array_tag == p_tag) {
 				math = layout.variant_tag;

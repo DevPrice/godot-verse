@@ -3,6 +3,8 @@
 case and exits non-zero if any case fails.
 """
 
+import functools
+import json
 import sys
 import tempfile
 import textwrap
@@ -14,6 +16,11 @@ sys.path.insert(0, str(REPO_ROOT / "tools"))
 import gen_verse_api as g  # noqa: E402
 
 failures = []
+
+
+@functools.cache
+def load_api():
+    return json.loads((REPO_ROOT / g.EXTENSION_API).read_text(encoding="utf-8"))
 
 
 def check(name, got, want):
@@ -238,19 +245,42 @@ def test_container_properties_stay_methods():
     check("a container type is not a var", "godot_array" in g.CONTAINER_PROPERTY_TYPES, True)
 
 
-def test_math_layout_matches_the_wire():
-    """Every math type's flattened leaves must be the lane count src/verse_value.cpp writes.
-
-    The two are separate pieces of code that have to agree component for component; a type written
-    with three components and read with two truncates silently, which no other test would catch.
-    """
+def test_variant_tags_header_carries_the_layout():
+    """The C++ sides' component counts come from generated tables only: src/verse_value.cpp
+    static_asserts each count it writes and reads against GodotMathLayout.gen.h, and the tag table's
+    Components column against the same. Both are rendered from MATH_LAYOUT, so this checks the
+    column is its leaf count and that every lane has a row in the family the wire gives it."""
+    api = load_api()
+    text = g.render_variant_tags_header(api)
     for name in g.MATH_TYPES:
-        lanes = g.math_leaf_lanes(name)
-        got = (
-            sum(1 for _, kind in lanes if kind == "int"),
-            sum(1 for _, kind in lanes if kind == "float"),
-        )
-        check(f"{name} occupies the lanes the wire gives it", got, g.MATH_LANES[name])
+        tag = g.math_variant_tag(name)
+        godot = tag[len("VH_VARIANT_"):]
+        check(f"{name}'s row carries its leaf count",
+              f"X({tag}, {godot}, VH_LANE_MATH, {len(g.math_leaf_lanes(name))})" in text, True)
+    families = {"TYPE_RID": "SCALAR", "TYPE_OBJECT": "OBJECT", "TYPE_STRING_NAME": "STRING",
+                "TYPE_SIGNAL": "REFERENCE", "TYPE_PACKED_VECTOR2_ARRAY": "PACKED"}
+    for lane in g.VARIANT_LANES:
+        if lane.godot_type in families:
+            check(f"{lane.godot_type}'s family", g.lane_family(lane), families[lane.godot_type])
+    check("the enum ends at the ABI's count", "VH_VARIANT_MAX = 39" in text, True)
+
+
+def test_variant_tags_refuse_a_renumbering():
+    """vh_variant_tag's numbers are the ABI's, so an extension_api.json that moves one stops
+    generation rather than renumbering the wire."""
+    api = json.loads(json.dumps(load_api()))
+    for enum in api["global_enums"]:
+        if enum["name"] == "Variant.Type":
+            for value in enum["values"]:
+                if value["name"] == "TYPE_RID":
+                    value["value"] = 99
+    try:
+        g.variant_tag_rows(api)
+        refused = False
+    except ValueError as error:
+        refused = "TYPE_RID" in str(error)
+    check("a moved Variant::Type is refused, naming it", refused, True)
+    g.check_variant_lanes(load_api())
 
 
 def test_integer_vector_defaults_stay_integers():
@@ -1638,7 +1668,8 @@ def main():
     test_packed_arrays_marshal_as_verse_arrays()
     test_reference_types_are_wrappers()
     test_container_properties_stay_methods()
-    test_math_layout_matches_the_wire()
+    test_variant_tags_header_carries_the_layout()
+    test_variant_tags_refuse_a_renumbering()
     test_integer_vector_defaults_stay_integers()
     test_nested_math_structs_are_not_vars()
     test_ancestor_pull_in()

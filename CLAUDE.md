@@ -728,6 +728,7 @@ the editor and `export_check.gd` as an autoload in an export.
 | `host/Verse/GodotClasses.native.verse` | `tools/gen_verse_api.py` | `godot-cpp/gdextension/extension_api.json` |
 | `src/verse_api_classes.h` | `tools/gen_verse_api.py` | same |
 | `host/Private/GodotMathLayout.gen.h` | `tools/gen_verse_api.py` | same — the math types' field trees, so the host builds one the way the Verse struct declares it |
+| `include/verse_host_variant_tags.gen.h` | `tools/gen_verse_api.py` | `VARIANT_LANES` — `vh_variant_tag` itself, which `verse_host_abi.h` includes, and `VH_VARIANT_TAGS(X)`: each tag's Godot `Variant::Type`, its lane family and a math type's component count, plus one X-macro per family. Its numbers are pinned in `VH_VARIANT_TAG_ABI`, and generation fails if Godot's would move one. `build_host.py` stages it beside the ABI header |
 | `src/verse_api_skipped.h` | `tools/gen_verse_api.py` | same — every Godot member the mirror does not carry under its own name, and why, which is what `_validate` turns into a sentence (R-SCN-2) |
 | `host/Private/GodotClassNames.gen.h` | `tools/gen_verse_api.py` | same — every Godot class and the mirrored Verse class an object of it crosses as, which is what R-SCN-6's cast is built on. Every class, not only the emitted ones: a `--classes-file` build still has to make a handle cross as *something*, so each row names its nearest emitted ancestor |
 | `docs/nonatomic-methods.md` | `tools/gen_verse_api.py` | same — R-AUD-3's list. Written by the pass that writes the mirror, so it cannot drift |

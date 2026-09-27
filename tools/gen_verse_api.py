@@ -22,6 +22,7 @@ GENERATED_PATH = "host/Verse/GodotClasses.native.verse"
 CLASSES_HEADER_PATH = "src/verse_api_classes.h"
 MATH_LAYOUT_HEADER_PATH = "host/Private/GodotMathLayout.gen.h"
 CLASS_NAMES_HEADER_PATH = "host/Private/GodotClassNames.gen.h"
+VARIANT_TAGS_HEADER_PATH = "include/verse_host_variant_tags.gen.h"
 DEFAULT_CLASSES_FILE = "tools/verse_api_classes.txt"
 KEYWORDS_HEADER = "src/verse_keywords.h"
 EXTENSION_API = "godot-cpp/gdextension/extension_api-4-7.json"
@@ -611,8 +612,8 @@ class TypeResolver:
 # so includes both the derived and the redundant: `Rect2.end` is `position + size`, and
 # `Plane.x/y/z` are the components of `Plane.normal` spelled again. Flattening those would put six
 # lanes where the wire carries four. What is here is the canonical decomposition, and it has to
-# agree component for component with src/verse_value.cpp -- MATH_LANES below is the check that it
-# does, and tests/verse_api_gen asserts it.
+# agree component for component with src/verse_value.cpp -- which static_asserts every component
+# count it writes or reads against GodotMathLayout.gen.h, generated from this.
 #
 # Data only. The ~30 methods each of these carries in Godot (`Length`, `Normalized`, `Rotated`) are
 # R-SCN-3, which the roadmap puts in Phase 2 -- and generating them there for all sixteen beats
@@ -656,16 +657,6 @@ MATH_PACKED_ARRAYS = {
 # The vh_variant_tag enumerator for a Godot type, as the C header spells it.
 def math_variant_tag(godot_name: str) -> str:
     return "VH_VARIANT_" + "_".join(t.upper() for t in split_pascal(godot_name))
-
-# How many lanes of each kind a type occupies, as src/verse_value.cpp writes it and as
-# GodotBindings.cpp's LanesFor reads it. Stated here so a layout edited on one side and not the
-# other fails a test rather than truncating a value at runtime.
-MATH_LANES = {
-    "Vector2": (0, 2), "Vector2i": (2, 0), "Vector3": (0, 3), "Vector3i": (3, 0),
-    "Vector4": (0, 4), "Vector4i": (4, 0), "Rect2": (0, 4), "Rect2i": (4, 0),
-    "Plane": (0, 4), "Quaternion": (0, 4), "AABB": (0, 6), "Basis": (0, 9),
-    "Transform2D": (0, 6), "Transform3D": (0, 12), "Projection": (0, 16), "Color": (0, 4),
-}
 
 # The Verse tag constant for a Godot type, as GodotApi.native.verse spells it.
 MATH_TAGS = {name: "Tag" + ("Aabb" if name == "AABB" else name) for name in MATH_LAYOUT}
@@ -1052,6 +1043,143 @@ def check_variant_lanes(api: dict) -> dict:
     GODOT_VARIANT_TYPE_BY_TAG.clear()
     GODOT_VARIANT_TYPE_BY_TAG.update({str(number): name for name, number in values.items()})
     return values
+
+
+# vh_variant_tag's numbers as the ABI fixed them: Godot's own Variant::Type, frozen. They are read
+# out of extension_api.json and checked against this rather than trusted, because a Godot that
+# renumbered would otherwise renumber the wire silently -- a consumer and a host built on either
+# side of the bump would each compile and read every value off the wrong lane. Changing a number
+# here is an ABI major bump (include/verse_host_abi.h's policy).
+VH_VARIANT_TAG_ABI = {
+    "TYPE_NIL": 0, "TYPE_BOOL": 1, "TYPE_INT": 2, "TYPE_FLOAT": 3, "TYPE_STRING": 4,
+    "TYPE_VECTOR2": 5, "TYPE_VECTOR2I": 6, "TYPE_RECT2": 7, "TYPE_RECT2I": 8, "TYPE_VECTOR3": 9,
+    "TYPE_VECTOR3I": 10, "TYPE_TRANSFORM2D": 11, "TYPE_VECTOR4": 12, "TYPE_VECTOR4I": 13,
+    "TYPE_PLANE": 14, "TYPE_QUATERNION": 15, "TYPE_AABB": 16, "TYPE_BASIS": 17,
+    "TYPE_TRANSFORM3D": 18, "TYPE_PROJECTION": 19, "TYPE_COLOR": 20, "TYPE_STRING_NAME": 21,
+    "TYPE_NODE_PATH": 22, "TYPE_RID": 23, "TYPE_OBJECT": 24, "TYPE_CALLABLE": 25, "TYPE_SIGNAL": 26,
+    "TYPE_DICTIONARY": 27, "TYPE_ARRAY": 28, "TYPE_PACKED_BYTE_ARRAY": 29,
+    "TYPE_PACKED_INT32_ARRAY": 30, "TYPE_PACKED_INT64_ARRAY": 31, "TYPE_PACKED_FLOAT32_ARRAY": 32,
+    "TYPE_PACKED_FLOAT64_ARRAY": 33, "TYPE_PACKED_STRING_ARRAY": 34, "TYPE_PACKED_VECTOR2_ARRAY": 35,
+    "TYPE_PACKED_VECTOR3_ARRAY": 36, "TYPE_PACKED_COLOR_ARRAY": 37, "TYPE_PACKED_VECTOR4_ARRAY": 38,
+}
+
+# How a lane's value crosses, which is what the C++ sides classify a tag by. The order is the
+# vh_lane_family enum's.
+LANE_FAMILIES = ["NONE", "SCALAR", "STRING", "MATH", "OBJECT", "REFERENCE", "PACKED"]
+
+
+def lane_family(lane: VariantLane) -> str:
+    """SCALAR for a value in one of vh_value's scalar lanes (RID's number included), STRING for the
+    three Godot types a Verse `string` carries, MATH for a component tuple, OBJECT for an instance
+    id, REFERENCE for an id in the consumer's table, and PACKED for a packed array, which crosses as
+    a reference id too."""
+    if lane.reader in MATH_LAYOUT:
+        return "MATH"
+    if lane.godot_type.startswith("TYPE_PACKED_"):
+        return "PACKED"
+    if lane.godot_type == "TYPE_OBJECT":
+        return "OBJECT"
+    if lane.verse_type == "string":
+        return "STRING"
+    if lane.verse_type in {name for name, _ in REFERENCE_TYPES}:
+        return "REFERENCE"
+    if lane.verse_type in ("logic", "int", "float", "rid"):
+        return "SCALAR"
+    raise ValueError(f"no lane family for {lane.godot_type}")
+
+
+def variant_tag_rows(api: dict) -> list:
+    """(enumerator, Godot Variant::Type name, family, component count, number), in number order.
+
+    Fails generation when extension_api.json numbers a type differently from VH_VARIANT_TAG_ABI,
+    or has one the ABI has never numbered.
+    """
+    values = check_variant_lanes(api)
+    live = {name: number for name, number in values.items() if name != "TYPE_MAX"}
+    if live != VH_VARIANT_TAG_ABI:
+        changed = sorted(f"{name}: ABI {VH_VARIANT_TAG_ABI.get(name)}, extension_api.json {live.get(name)}"
+                         for name in set(live) | set(VH_VARIANT_TAG_ABI)
+                         if live.get(name) != VH_VARIANT_TAG_ABI.get(name))
+        raise ValueError("Variant::Type no longer matches vh_variant_tag's numbering, which would "
+                         "change the ABI: " + "; ".join(changed))
+    rows = [("VH_VARIANT_NIL", "NIL", "NONE", 0, VH_VARIANT_TAG_ABI[VARIANT_NIL])]
+    for lane in VARIANT_LANES:
+        godot = lane.godot_type[len("TYPE_"):]
+        family = lane_family(lane)
+        components = len(math_leaf_lanes(lane.reader)) if family == "MATH" else 0
+        rows.append((f"VH_VARIANT_{godot}", godot, family, components, VH_VARIANT_TAG_ABI[lane.godot_type]))
+    return sorted(rows, key=lambda row: row[4])
+
+
+VARIANT_TAGS_HEADER_TEMPLATE = """/* Generated by tools/gen_verse_api.py from godot-cpp/gdextension/extension_api-4-7.json
+ * ({version}). Do not edit by hand.
+ *
+ * vh_variant_tag and what each tag is, for include/verse_host_abi.h, which includes this where the
+ * enum is needed. One row per tag, from the generator's VARIANT_LANES -- the table the mirror's
+ * readers and builders are emitted from -- so a lane added there reaches every C++ switch that
+ * expands these, and a switch over the enum that does not handle it fails to compile.
+ */
+#ifndef VERSE_HOST_VARIANT_TAGS_GEN_H
+#define VERSE_HOST_VARIANT_TAGS_GEN_H
+
+/* Godot's Variant::Type, as the wire carries it. vh_type says how the payload is laid out;
+ * this says which Godot type to rebuild from it, which vh_type alone cannot express -- a
+ * two-float tuple is equally a Vector2, a Vector2i or a plain array.
+ *
+ * 0 (Godot's TYPE_NIL) means "infer from vh_type".
+ * The values are Godot's own and are frozen: the generator refuses an extension_api.json that
+ * numbers them differently, because renumbering one is an ABI major bump. */
+typedef enum vh_variant_tag
+{{
+{enumerators}
+
+\tVH_VARIANT_MAX = {count}
+}} vh_variant_tag;
+
+/* How a tag's value crosses. */
+typedef enum vh_lane_family
+{{
+\tVH_LANE_NONE = 0,   /* VH_VARIANT_NIL: nothing to carry */
+\tVH_LANE_SCALAR,     /* one scalar lane of vh_value: logic, int, float, and a RID's number */
+\tVH_LANE_STRING,     /* VH_TYPE_STRING, for the three Godot types a Verse `string` carries */
+\tVH_LANE_MATH,       /* a tuple of Components scalars, in GodotMathLayout.gen.h's field order */
+\tVH_LANE_OBJECT,     /* an instance id, as VH_TYPE_INT */
+\tVH_LANE_REFERENCE,  /* an id in the consumer's reference table, as VH_TYPE_REF */
+\tVH_LANE_PACKED      /* a packed array: a reference id too, whose elements read as a sequence */
+}} vh_lane_family;
+
+/* X(Tag, GodotType, Family, Components): every tag but VH_VARIANT_MAX, in number order. GodotType
+ * is Godot's Variant::Type enumerator without the enum -- `VECTOR2` -- and Components is the scalar
+ * leaf count of a VH_LANE_MATH type and 0 for every other. */
+#define VH_VARIANT_TAGS(X) \\
+{all_rows}
+
+/* The same rows, one family at a time. */
+{family_macros}
+
+#endif /* VERSE_HOST_VARIANT_TAGS_GEN_H */
+"""
+
+
+def render_variant_tags_header(api: dict) -> str:
+    rows = variant_tag_rows(api)
+
+    def x_rows(selected: list) -> str:
+        lines = [f"\tX({tag}, {godot}, VH_LANE_{family}, {components})"
+                 for tag, godot, family, components, _ in selected]
+        return " \\\n".join(lines)
+
+    family_macros = []
+    for family in LANE_FAMILIES:
+        selected = [row for row in rows if row[2] == family]
+        family_macros.append(f"#define VH_VARIANT_{family}_TAGS(X) \\\n{x_rows(selected)}")
+    return VARIANT_TAGS_HEADER_TEMPLATE.format(
+        version=api["header"]["version_full_name"],
+        enumerators="\n".join(f"\t{tag} = {number}," for tag, _, _, _, number in rows),
+        count=len(rows),
+        all_rows=x_rows(rows),
+        family_macros="\n\n".join(family_macros),
+    )
 
 
 def emit_math_packed_converters() -> list:
@@ -4457,6 +4585,7 @@ def main() -> int:
     parser.add_argument("--out", default=GENERATED_PATH)
     parser.add_argument("--math-layout-header", default=MATH_LAYOUT_HEADER_PATH)
     parser.add_argument("--class-names-header", default=CLASS_NAMES_HEADER_PATH)
+    parser.add_argument("--variant-tags-header", default=VARIANT_TAGS_HEADER_PATH)
     parser.add_argument("--classes-header", default=CLASSES_HEADER_PATH)
     parser.add_argument("--skipped-header", default=SKIPPED_HEADER_PATH)
     parser.add_argument("--nonatomic", default=NONATOMIC_PATH,
@@ -4491,8 +4620,13 @@ def main() -> int:
         return 1
 
     # Before generation rather than during rendering: a typed array of objects is spelled with a
-    # Variant::Type *number*, so resolving one needs the numbers, and TypeResolver runs first.
-    check_variant_lanes(api)
+    # Variant::Type *number*, so resolving one needs the numbers, and TypeResolver runs first. The
+    # numbers are the ABI's too, and a renumbering stops generation before anything is written.
+    try:
+        variant_tag_rows(api)
+    except ValueError as error:
+        print(f"[gen_verse_api] error: {error}", file=sys.stderr)
+        return 1
     enums = collect_enums(api)
     check_enum_names(enums, api)
     ENUMS_BY_VERSE_NAME.update({info.verse_name: info for info in enums.values()})
@@ -4532,6 +4666,10 @@ def main() -> int:
     math_layout_path = resolve(root, args.math_layout_header)
     math_layout_path.parent.mkdir(parents=True, exist_ok=True)
     math_layout_path.write_text(render_math_layout_header(api), encoding="utf-8", newline="\n")
+
+    variant_tags_path = resolve(root, args.variant_tags_header)
+    variant_tags_path.parent.mkdir(parents=True, exist_ok=True)
+    variant_tags_path.write_text(render_variant_tags_header(api), encoding="utf-8", newline="\n")
 
     class_names_path = resolve(root, args.class_names_header)
     class_names_path.parent.mkdir(parents=True, exist_ok=True)

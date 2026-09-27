@@ -38,7 +38,15 @@
 
 #include <cstring>
 
+#include "../host/Private/GodotMathLayout.gen.h"
+
 using namespace godot;
+
+#define VERSE_TAG_IS_GODOTS(m_tag, m_godot, m_family, m_components) \
+	static_assert((int)Variant::m_godot == m_tag, #m_tag " is not Variant::" #m_godot);
+VH_VARIANT_TAGS(VERSE_TAG_IS_GODOTS)
+#undef VERSE_TAG_IS_GODOTS
+static_assert((int)Variant::VARIANT_MAX == VH_VARIANT_MAX, "Godot has a Variant::Type vh_variant_tag does not");
 
 VerseArena::VerseArena() {
 	arena.Alloc = &VerseArena::alloc;
@@ -99,6 +107,35 @@ vh_pair *alloc_pairs(vh_arena *p_arena, int32_t p_count) {
 	return static_cast<vh_pair *>(mem);
 }
 
+// The scalar leaves under a math type, counted from the generated layout the host and vm/ build and
+// read one by, so the literal counts below are checked against it rather than trusted.
+constexpr int32_t math_components(int32_t p_tag) {
+	for (const verse_math::layout &layout : verse_math::layouts) {
+		if (layout.variant_tag != p_tag) {
+			continue;
+		}
+		int32_t count = 0;
+		for (int32_t i = 0; i < layout.field_count; i++) {
+			count += layout.fields[i].nested_tag != 0 ? math_components(layout.fields[i].nested_tag) : 1;
+		}
+		return count;
+	}
+	return 0;
+}
+
+#define VERSE_MATH_COUNT_AGREES(m_tag, m_godot, m_family, m_components) \
+	static_assert(math_components(m_tag) == m_components, #m_tag "'s component count differs between the two generated tables");
+VH_VARIANT_MATH_TAGS(VERSE_MATH_COUNT_AGREES)
+#undef VERSE_MATH_COUNT_AGREES
+
+constexpr int32_t max_math_components() {
+	int32_t most = 0;
+	for (const verse_math::layout &layout : verse_math::layouts) {
+		most = math_components(layout.variant_tag) > most ? math_components(layout.variant_tag) : most;
+	}
+	return most;
+}
+
 // Every fixed-size math Variant crosses as a tuple of its components in Godot's own order, so
 // one pair of helpers covers Vector2 through Projection.
 bool floats_to_tuple(vh_arena *p_arena, const double *p_components, int32_t p_count, int32_t p_tag, vh_value &r_out) {
@@ -115,6 +152,12 @@ bool floats_to_tuple(vh_arena *p_arena, const double *p_components, int32_t p_co
 	r_out.Seq.Items = items;
 	r_out.Seq.Count = p_count;
 	return true;
+}
+
+template <int32_t TAG, size_t N>
+bool math_to_tuple(vh_arena *p_arena, const double (&p_components)[N], vh_value &r_out) {
+	static_assert(math_components(TAG) == (int32_t)N, "writes a different number of components than the layout declares");
+	return floats_to_tuple(p_arena, p_components, (int32_t)N, TAG, r_out);
 }
 
 // Reads up to p_max components out of a tuple or array value, zero-filling the rest, and
@@ -211,49 +254,53 @@ double double_of(const vh_value &p_value) {
 }
 
 Variant math_variant(int32_t p_tag, const vh_value &p_value) {
-	double c[16];
-	tuple_to_floats(p_value, c, 16);
+	double c[max_math_components()];
+	tuple_to_floats(p_value, c, max_math_components());
+
+#define VERSE_MATH_CASE(m_tag, m_count) \
+	case m_tag: \
+		static_assert(math_components(m_tag) == m_count, #m_tag " reads a different number of components than the layout declares");
 
 	switch (p_tag) {
-		case VH_VARIANT_VECTOR2:
+		VERSE_MATH_CASE(VH_VARIANT_VECTOR2, 2)
 			return Vector2((real_t)c[0], (real_t)c[1]);
-		case VH_VARIANT_VECTOR2I:
+		VERSE_MATH_CASE(VH_VARIANT_VECTOR2I, 2)
 			return Vector2i((int32_t)c[0], (int32_t)c[1]);
-		case VH_VARIANT_VECTOR3:
+		VERSE_MATH_CASE(VH_VARIANT_VECTOR3, 3)
 			return Vector3((real_t)c[0], (real_t)c[1], (real_t)c[2]);
-		case VH_VARIANT_VECTOR3I:
+		VERSE_MATH_CASE(VH_VARIANT_VECTOR3I, 3)
 			return Vector3i((int32_t)c[0], (int32_t)c[1], (int32_t)c[2]);
-		case VH_VARIANT_VECTOR4:
+		VERSE_MATH_CASE(VH_VARIANT_VECTOR4, 4)
 			return Vector4((real_t)c[0], (real_t)c[1], (real_t)c[2], (real_t)c[3]);
-		case VH_VARIANT_VECTOR4I:
+		VERSE_MATH_CASE(VH_VARIANT_VECTOR4I, 4)
 			return Vector4i((int32_t)c[0], (int32_t)c[1], (int32_t)c[2], (int32_t)c[3]);
-		case VH_VARIANT_RECT2:
+		VERSE_MATH_CASE(VH_VARIANT_RECT2, 4)
 			return Rect2((real_t)c[0], (real_t)c[1], (real_t)c[2], (real_t)c[3]);
-		case VH_VARIANT_RECT2I:
+		VERSE_MATH_CASE(VH_VARIANT_RECT2I, 4)
 			return Rect2i((int32_t)c[0], (int32_t)c[1], (int32_t)c[2], (int32_t)c[3]);
-		case VH_VARIANT_COLOR:
+		VERSE_MATH_CASE(VH_VARIANT_COLOR, 4)
 			return Color((float)c[0], (float)c[1], (float)c[2], (float)c[3]);
-		case VH_VARIANT_QUATERNION:
+		VERSE_MATH_CASE(VH_VARIANT_QUATERNION, 4)
 			return Quaternion((real_t)c[0], (real_t)c[1], (real_t)c[2], (real_t)c[3]);
-		case VH_VARIANT_PLANE:
+		VERSE_MATH_CASE(VH_VARIANT_PLANE, 4)
 			return Plane((real_t)c[0], (real_t)c[1], (real_t)c[2], (real_t)c[3]);
-		case VH_VARIANT_AABB:
+		VERSE_MATH_CASE(VH_VARIANT_AABB, 6)
 			return AABB(Vector3((real_t)c[0], (real_t)c[1], (real_t)c[2]),
 					Vector3((real_t)c[3], (real_t)c[4], (real_t)c[5]));
-		case VH_VARIANT_TRANSFORM2D:
+		VERSE_MATH_CASE(VH_VARIANT_TRANSFORM2D, 6)
 			return Transform2D(Vector2((real_t)c[0], (real_t)c[1]),
 					Vector2((real_t)c[2], (real_t)c[3]),
 					Vector2((real_t)c[4], (real_t)c[5]));
-		case VH_VARIANT_BASIS:
+		VERSE_MATH_CASE(VH_VARIANT_BASIS, 9)
 			return Basis(Vector3((real_t)c[0], (real_t)c[1], (real_t)c[2]),
 					Vector3((real_t)c[3], (real_t)c[4], (real_t)c[5]),
 					Vector3((real_t)c[6], (real_t)c[7], (real_t)c[8]));
-		case VH_VARIANT_TRANSFORM3D:
+		VERSE_MATH_CASE(VH_VARIANT_TRANSFORM3D, 12)
 			return Transform3D(Basis(Vector3((real_t)c[0], (real_t)c[1], (real_t)c[2]),
 									 Vector3((real_t)c[3], (real_t)c[4], (real_t)c[5]),
 									 Vector3((real_t)c[6], (real_t)c[7], (real_t)c[8])),
 					Vector3((real_t)c[9], (real_t)c[10], (real_t)c[11]));
-		case VH_VARIANT_PROJECTION:
+		VERSE_MATH_CASE(VH_VARIANT_PROJECTION, 16)
 			return Projection(Vector4((real_t)c[0], (real_t)c[1], (real_t)c[2], (real_t)c[3]),
 					Vector4((real_t)c[4], (real_t)c[5], (real_t)c[6], (real_t)c[7]),
 					Vector4((real_t)c[8], (real_t)c[9], (real_t)c[10], (real_t)c[11]),
@@ -261,6 +308,7 @@ Variant math_variant(int32_t p_tag, const vh_value &p_value) {
 		default:
 			return Variant();
 	}
+#undef VERSE_MATH_CASE
 }
 
 // Every scalar under a sequence, one level of nesting deep.
@@ -439,70 +487,70 @@ bool variant_to_vh(const Variant &p_value, vh_arena *p_arena, vh_value &r_out) {
 		case Variant::VECTOR2: {
 			const Vector2 v = p_value;
 			const double c[2] = { (double)v.x, (double)v.y };
-			return floats_to_tuple(p_arena, c, 2, VH_VARIANT_VECTOR2, r_out);
+			return math_to_tuple<VH_VARIANT_VECTOR2>(p_arena, c, r_out);
 		}
 		case Variant::VECTOR2I: {
 			const Vector2i v = p_value;
 			const double c[2] = { (double)v.x, (double)v.y };
-			return floats_to_tuple(p_arena, c, 2, VH_VARIANT_VECTOR2I, r_out);
+			return math_to_tuple<VH_VARIANT_VECTOR2I>(p_arena, c, r_out);
 		}
 		case Variant::VECTOR3: {
 			const Vector3 v = p_value;
 			const double c[3] = { (double)v.x, (double)v.y, (double)v.z };
-			return floats_to_tuple(p_arena, c, 3, VH_VARIANT_VECTOR3, r_out);
+			return math_to_tuple<VH_VARIANT_VECTOR3>(p_arena, c, r_out);
 		}
 		case Variant::VECTOR3I: {
 			const Vector3i v = p_value;
 			const double c[3] = { (double)v.x, (double)v.y, (double)v.z };
-			return floats_to_tuple(p_arena, c, 3, VH_VARIANT_VECTOR3I, r_out);
+			return math_to_tuple<VH_VARIANT_VECTOR3I>(p_arena, c, r_out);
 		}
 		case Variant::VECTOR4: {
 			const Vector4 v = p_value;
 			const double c[4] = { (double)v.x, (double)v.y, (double)v.z, (double)v.w };
-			return floats_to_tuple(p_arena, c, 4, VH_VARIANT_VECTOR4, r_out);
+			return math_to_tuple<VH_VARIANT_VECTOR4>(p_arena, c, r_out);
 		}
 		case Variant::VECTOR4I: {
 			const Vector4i v = p_value;
 			const double c[4] = { (double)v.x, (double)v.y, (double)v.z, (double)v.w };
-			return floats_to_tuple(p_arena, c, 4, VH_VARIANT_VECTOR4I, r_out);
+			return math_to_tuple<VH_VARIANT_VECTOR4I>(p_arena, c, r_out);
 		}
 		case Variant::RECT2: {
 			const Rect2 v = p_value;
 			const double c[4] = { (double)v.position.x, (double)v.position.y, (double)v.size.x, (double)v.size.y };
-			return floats_to_tuple(p_arena, c, 4, VH_VARIANT_RECT2, r_out);
+			return math_to_tuple<VH_VARIANT_RECT2>(p_arena, c, r_out);
 		}
 		case Variant::RECT2I: {
 			const Rect2i v = p_value;
 			const double c[4] = { (double)v.position.x, (double)v.position.y, (double)v.size.x, (double)v.size.y };
-			return floats_to_tuple(p_arena, c, 4, VH_VARIANT_RECT2I, r_out);
+			return math_to_tuple<VH_VARIANT_RECT2I>(p_arena, c, r_out);
 		}
 		case Variant::COLOR: {
 			const Color v = p_value;
 			const double c[4] = { (double)v.r, (double)v.g, (double)v.b, (double)v.a };
-			return floats_to_tuple(p_arena, c, 4, VH_VARIANT_COLOR, r_out);
+			return math_to_tuple<VH_VARIANT_COLOR>(p_arena, c, r_out);
 		}
 		case Variant::QUATERNION: {
 			const Quaternion v = p_value;
 			const double c[4] = { (double)v.x, (double)v.y, (double)v.z, (double)v.w };
-			return floats_to_tuple(p_arena, c, 4, VH_VARIANT_QUATERNION, r_out);
+			return math_to_tuple<VH_VARIANT_QUATERNION>(p_arena, c, r_out);
 		}
 		case Variant::PLANE: {
 			const Plane v = p_value;
 			const double c[4] = { (double)v.normal.x, (double)v.normal.y, (double)v.normal.z, (double)v.d };
-			return floats_to_tuple(p_arena, c, 4, VH_VARIANT_PLANE, r_out);
+			return math_to_tuple<VH_VARIANT_PLANE>(p_arena, c, r_out);
 		}
 		case Variant::AABB: {
 			const AABB v = p_value;
 			const double c[6] = { (double)v.position.x, (double)v.position.y, (double)v.position.z,
 				(double)v.size.x, (double)v.size.y, (double)v.size.z };
-			return floats_to_tuple(p_arena, c, 6, VH_VARIANT_AABB, r_out);
+			return math_to_tuple<VH_VARIANT_AABB>(p_arena, c, r_out);
 		}
 		case Variant::TRANSFORM2D: {
 			const Transform2D v = p_value;
 			const double c[6] = { (double)v.columns[0].x, (double)v.columns[0].y,
 				(double)v.columns[1].x, (double)v.columns[1].y,
 				(double)v.columns[2].x, (double)v.columns[2].y };
-			return floats_to_tuple(p_arena, c, 6, VH_VARIANT_TRANSFORM2D, r_out);
+			return math_to_tuple<VH_VARIANT_TRANSFORM2D>(p_arena, c, r_out);
 		}
 		case Variant::BASIS: {
 			const Basis v = p_value;
@@ -513,7 +561,7 @@ bool variant_to_vh(const Variant &p_value, vh_arena *p_arena, vh_value &r_out) {
 			const double c[9] = { (double)cx.x, (double)cx.y, (double)cx.z,
 				(double)cy.x, (double)cy.y, (double)cy.z,
 				(double)cz.x, (double)cz.y, (double)cz.z };
-			return floats_to_tuple(p_arena, c, 9, VH_VARIANT_BASIS, r_out);
+			return math_to_tuple<VH_VARIANT_BASIS>(p_arena, c, r_out);
 		}
 		case Variant::TRANSFORM3D: {
 			const Transform3D v = p_value;
@@ -523,7 +571,7 @@ bool variant_to_vh(const Variant &p_value, vh_arena *p_arena, vh_value &r_out) {
 				(double)cy.x, (double)cy.y, (double)cy.z,
 				(double)cz.x, (double)cz.y, (double)cz.z,
 				(double)v.origin.x, (double)v.origin.y, (double)v.origin.z };
-			return floats_to_tuple(p_arena, c, 12, VH_VARIANT_TRANSFORM3D, r_out);
+			return math_to_tuple<VH_VARIANT_TRANSFORM3D>(p_arena, c, r_out);
 		}
 		case Variant::PROJECTION: {
 			const Projection v = p_value;
@@ -534,32 +582,17 @@ bool variant_to_vh(const Variant &p_value, vh_arena *p_arena, vh_value &r_out) {
 				c[col * 4 + 2] = (double)v.columns[col].z;
 				c[col * 4 + 3] = (double)v.columns[col].w;
 			}
-			return floats_to_tuple(p_arena, c, 16, VH_VARIANT_PROJECTION, r_out);
+			return math_to_tuple<VH_VARIANT_PROJECTION>(p_arena, c, r_out);
 		}
 
 		// The reference types. Copying an Array or a Dictionary across would turn Godot's
 		// reference semantics into value semantics without saying so, and a Callable cannot be
 		// decomposed at all; the packed arrays are values but have no fixed width. All of them
 		// cross as an id into the table, which the host releases when Verse drops the wrapper.
-		case Variant::ARRAY:
-		case Variant::DICTIONARY:
-		case Variant::CALLABLE:
-		case Variant::SIGNAL:
-			r_out.Type = VH_TYPE_REF;
-			r_out.VariantTag = (int32_t)p_value.get_type();
-			r_out.Ref = verse_ref_table().mint(p_value);
-			return true;
-
-		case Variant::PACKED_BYTE_ARRAY:
-		case Variant::PACKED_INT32_ARRAY:
-		case Variant::PACKED_INT64_ARRAY:
-		case Variant::PACKED_FLOAT32_ARRAY:
-		case Variant::PACKED_FLOAT64_ARRAY:
-		case Variant::PACKED_STRING_ARRAY:
-		case Variant::PACKED_VECTOR2_ARRAY:
-		case Variant::PACKED_VECTOR3_ARRAY:
-		case Variant::PACKED_COLOR_ARRAY:
-		case Variant::PACKED_VECTOR4_ARRAY:
+#define VERSE_GODOT_CASE(m_tag, m_godot, m_family, m_components) case Variant::m_godot:
+		VH_VARIANT_REFERENCE_TAGS(VERSE_GODOT_CASE)
+		VH_VARIANT_PACKED_TAGS(VERSE_GODOT_CASE)
+#undef VERSE_GODOT_CASE
 			r_out.Type = VH_TYPE_REF;
 			r_out.VariantTag = (int32_t)p_value.get_type();
 			r_out.Ref = verse_ref_table().mint(p_value);
@@ -607,41 +640,16 @@ Variant vh_to_variant(const vh_value &p_value) {
 		case VH_VARIANT_RID:
 			return UtilityFunctions::rid_from_int64(int_of(p_value));
 
-		case VH_VARIANT_VECTOR2:
-		case VH_VARIANT_VECTOR2I:
-		case VH_VARIANT_VECTOR3:
-		case VH_VARIANT_VECTOR3I:
-		case VH_VARIANT_VECTOR4:
-		case VH_VARIANT_VECTOR4I:
-		case VH_VARIANT_RECT2:
-		case VH_VARIANT_RECT2I:
-		case VH_VARIANT_COLOR:
-		case VH_VARIANT_QUATERNION:
-		case VH_VARIANT_PLANE:
-		case VH_VARIANT_AABB:
-		case VH_VARIANT_TRANSFORM2D:
-		case VH_VARIANT_BASIS:
-		case VH_VARIANT_TRANSFORM3D:
-		case VH_VARIANT_PROJECTION:
+#define VERSE_TAG_CASE(m_tag, m_godot, m_family, m_components) case m_tag:
+		VH_VARIANT_MATH_TAGS(VERSE_TAG_CASE)
 			return math_variant(p_value.VariantTag, p_value);
 
-		case VH_VARIANT_PACKED_BYTE_ARRAY:
-		case VH_VARIANT_PACKED_INT32_ARRAY:
-		case VH_VARIANT_PACKED_INT64_ARRAY:
-		case VH_VARIANT_PACKED_FLOAT32_ARRAY:
-		case VH_VARIANT_PACKED_FLOAT64_ARRAY:
-		case VH_VARIANT_PACKED_STRING_ARRAY:
-		case VH_VARIANT_PACKED_VECTOR2_ARRAY:
-		case VH_VARIANT_PACKED_VECTOR3_ARRAY:
-		case VH_VARIANT_PACKED_COLOR_ARRAY:
-		case VH_VARIANT_PACKED_VECTOR4_ARRAY:
+		VH_VARIANT_PACKED_TAGS(VERSE_TAG_CASE)
 			return packed_variant(p_value.VariantTag, p_value);
 
 		// Handled by variant_to_vh's own VH_TYPE_REF check above, before this function is entered.
-		case VH_VARIANT_CALLABLE:
-		case VH_VARIANT_SIGNAL:
-		case VH_VARIANT_DICTIONARY:
-		case VH_VARIANT_ARRAY:
+		VH_VARIANT_REFERENCE_TAGS(VERSE_TAG_CASE)
+#undef VERSE_TAG_CASE
 		case VH_VARIANT_MAX:
 			break;
 	}

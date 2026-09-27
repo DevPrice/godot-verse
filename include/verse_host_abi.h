@@ -167,56 +167,9 @@ typedef enum vh_type
 typedef struct vh_value vh_value;
 typedef struct vh_pair vh_pair;
 
-/* Godot's Variant::Type, as the wire carries it. vh_type says how the payload is laid out;
- * this says which Godot type to rebuild from it, which vh_type alone cannot express -- a
- * two-float tuple is equally a Vector2, a Vector2i or a plain array.
- *
- * 0 (Godot's TYPE_NIL) means "infer from vh_type".
- * The values are Godot's own and must not be renumbered; extension_api.json is the source. */
-typedef enum vh_variant_tag
-{
-	VH_VARIANT_NIL = 0,
-	VH_VARIANT_BOOL = 1,
-	VH_VARIANT_INT = 2,
-	VH_VARIANT_FLOAT = 3,
-	VH_VARIANT_STRING = 4,
-	VH_VARIANT_VECTOR2 = 5,
-	VH_VARIANT_VECTOR2I = 6,
-	VH_VARIANT_RECT2 = 7,
-	VH_VARIANT_RECT2I = 8,
-	VH_VARIANT_VECTOR3 = 9,
-	VH_VARIANT_VECTOR3I = 10,
-	VH_VARIANT_TRANSFORM2D = 11,
-	VH_VARIANT_VECTOR4 = 12,
-	VH_VARIANT_VECTOR4I = 13,
-	VH_VARIANT_PLANE = 14,
-	VH_VARIANT_QUATERNION = 15,
-	VH_VARIANT_AABB = 16,
-	VH_VARIANT_BASIS = 17,
-	VH_VARIANT_TRANSFORM3D = 18,
-	VH_VARIANT_PROJECTION = 19,
-	VH_VARIANT_COLOR = 20,
-	VH_VARIANT_STRING_NAME = 21,
-	VH_VARIANT_NODE_PATH = 22,
-	VH_VARIANT_RID = 23,
-	VH_VARIANT_OBJECT = 24,
-	VH_VARIANT_CALLABLE = 25,
-	VH_VARIANT_SIGNAL = 26,
-	VH_VARIANT_DICTIONARY = 27,
-	VH_VARIANT_ARRAY = 28,
-	VH_VARIANT_PACKED_BYTE_ARRAY = 29,
-	VH_VARIANT_PACKED_INT32_ARRAY = 30,
-	VH_VARIANT_PACKED_INT64_ARRAY = 31,
-	VH_VARIANT_PACKED_FLOAT32_ARRAY = 32,
-	VH_VARIANT_PACKED_FLOAT64_ARRAY = 33,
-	VH_VARIANT_PACKED_STRING_ARRAY = 34,
-	VH_VARIANT_PACKED_VECTOR2_ARRAY = 35,
-	VH_VARIANT_PACKED_VECTOR3_ARRAY = 36,
-	VH_VARIANT_PACKED_COLOR_ARRAY = 37,
-	VH_VARIANT_PACKED_VECTOR4_ARRAY = 38,
-
-	VH_VARIANT_MAX = 39
-} vh_variant_tag;
+/* vh_variant_tag, and the VH_VARIANT_TAGS table of what each tag is, generated from the lanes the
+ * mirror is emitted from. */
+#include "verse_host_variant_tags.gen.h"
 
 /* Reference values.
  *

@@ -342,9 +342,11 @@ def main() -> None:
         print(f"[build_host] removing staged copy at {dst}")
         shutil.rmtree(dst)
 
-    # Both DLLs compile against the same ABI header, so it lives outside host/ and is staged in.
+    # Both DLLs compile against the same ABI header, so it lives outside host/ and is staged in,
+    # beside the generated header it includes.
     staged_extra = {
         "Public/verse_host_abi.h": repo / "include" / "verse_host_abi.h",
+        "Public/verse_host_variant_tags.gen.h": repo / "include" / "verse_host_variant_tags.gen.h",
     }
     # The build id is written last and digests everything else: it is the one staged file that
     # cannot be an input to itself.
