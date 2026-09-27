@@ -1168,6 +1168,17 @@ def run_export(results: Results, engine: Path | None, godot: Path | None) -> Non
         results.record("export", ok)
 
 
+def scrubbed_game_env() -> dict[str, str]:
+    """The environment B14 ran an exported game in by hand (R-DIST-10): no UE_ROOT, VERSE_HOST_DLL
+    or VERSE_COOKER, and a PATH reaching Windows alone, so nothing can lead the game to the Unreal
+    checkout, to Godot or to bin/. A game that still finds its host found it by where it runs."""
+    unset = {"UE_ROOT", "VERSE_HOST_DLL", "VERSE_COOKER", "PATH"}
+    env = {name: value for name, value in os.environ.items() if name.upper() not in unset}
+    system_root = os.environ.get("SystemRoot", r"C:\Windows")
+    env["PATH"] = os.pathsep.join([str(Path(system_root) / "system32"), system_root])
+    return env
+
+
 def _launch_export(results: Results, exe: Path) -> bool:
     """Runs the exported game and asserts what its cases reported.
 
@@ -1179,10 +1190,11 @@ def _launch_export(results: Results, exe: Path) -> bool:
     real seconds, so a case that waits on one never advances. `--verse-check` goes after `--`, where
     OS.get_cmdline_user_args() reads it and Godot's own parser cannot collide with it.
     """
-    print(f"[export] launching {exe.name}")
+    print(f"[export] launching {exe.name}, with no toolchain in its environment")
     try:
         completed = subprocess.run(
             [str(exe), "--headless", "--fixed-fps", "60", "--", "--verse-check"],
+            cwd=str(exe.parent), env=scrubbed_game_env(),
             capture_output=True, text=True, errors="replace", timeout=600)
     except subprocess.TimeoutExpired:
         print("[export] the exported game ran for 600 s without finishing: FAIL")
@@ -1383,6 +1395,7 @@ def run_export_vm(results: Results, engine: Path | None, godot: Path | None) -> 
             try:
                 launched = subprocess.run(
                     [str(out), "--headless", "--fixed-fps", "60", "--", "--verse-check"],
+                    cwd=str(out.parent), env=scrubbed_game_env(),
                     capture_output=True, text=True, errors="replace", timeout=EXPORT_VM_LAUNCH_TIMEOUT)
                 launch_output = (launched.stdout or "") + (launched.stderr or "")
                 if launched.returncode == 0:

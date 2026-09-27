@@ -2484,6 +2484,7 @@ func begin() -> void:
 					refined.append(String(option["insert_text"]))
 				_check("and the analysis keeps them rather than replacing them",
 						refined.has("Hit(") and refined.size() > opened.size())
+		_check_completion_carets()
 		_end_editor_only()
 		_begin_override_completion()
 	else:
@@ -2498,6 +2499,69 @@ func begin() -> void:
 	_tx = Node2D.new()
 	_tx.set_script(tx_script)
 	tree.root.add_child(_tx)
+
+
+# The popup at the carets by-hand-findings.md sent a person to type at: a member list after a
+# mirrored receiver (B24), a failable call completing with its `[` and the hint standing at the caret
+# after it (B27's first cause), and the two spellings of `?` that are ordinary code and have no names
+# to offer -- the one that does is asked in the override section, which can pose its buffer. Whether
+# CodeEdit then opens the popup is the editor layer's to assert; what it would draw is asserted here.
+func _check_completion_carets() -> void:
+	const PATH := "res://scripts/completion_probe.verse"
+	var source := FileAccess.get_file_as_string(PATH).replace("\r\n", "\n")
+	# The two carets whose buffer does not parse go first. Each flush replaces the snapshot every
+	# class-keyed read answers from with the analysis of that buffer, and one that does not parse
+	# describes no class at all -- so asked last, it left every Verse node after this section with no
+	# methods, and the cases after it failing for a reason that had nothing to do with them.
+	var after := ["if (Held?", "Held:?", "Other.", "GetInputSingleton().", "GetNode[", "IsActionPressed["]
+	var positions := PackedInt32Array()
+	for text in after:
+		var at := source.find(text)
+		if at < 0:
+			_check("completion_probe.verse writes %s" % text, false)
+			return
+		var head := source.substr(0, at + String(text).length())
+		positions.append(head.count("\n"))
+		positions.append(head.length() - (head.rfind("\n") + 1))
+	var rows: Array = _verse_language().call("probe_complete", PATH, positions)
+	if rows.size() != after.size():
+		_check_eq("the completion seam answers every caret in completion_probe.verse", rows.size(), after.size())
+		return
+	var at_caret := {}
+	for i in after.size():
+		at_caret[after[i]] = rows[i]
+
+	var members: Dictionary = at_caret["Other."]
+	_check("a member popup after a mirrored receiver offers its members",
+			_option_inserts(members, "options").size() > 100)
+	var accessors := []
+	for list in ["first_options", "options"]:
+		for option in members[list]:
+			var shown := String(option["display"])
+			var name := shown.substr(0, shown.find("(")) if shown.contains("(") else shown
+			if name.ends_with("Getter") or name.ends_with("Setter"):
+				accessors.append(shown)
+	_check_eq("and none of them is a class var accessor no script can spell", accessors, [])
+
+	_check("a failable method completes with its bracket, which is what makes Godot re-ask",
+			_option_inserts(members, "options").has("GetNode["))
+	_check("and so does a failable predicate on a singleton",
+			_option_inserts(at_caret["GetInputSingleton()."], "options").has("IsActionPressed["))
+	_check("the argument hint stands the moment `GetNode[` lands",
+			String(at_caret["GetNode["]["call_hint"]).begins_with("GetNode["))
+	_check("and the moment `IsActionPressed[` does",
+			String(at_caret["IsActionPressed["]["call_hint"]).begins_with("IsActionPressed["))
+
+	for spelling in [["if (Held?", "a postfix `?` offers nothing"], ["Held:?", "an option type's `?` offers nothing"]]:
+		var row: Dictionary = at_caret[spelling[0]]
+		_check(spelling[1], row["first_options"].is_empty() and row["options"].is_empty())
+
+
+func _option_inserts(row: Dictionary, list: String) -> Array:
+	var inserts := []
+	for option in row.get(list, []):
+		inserts.append(String(option["insert_text"]))
+	return inserts
 
 
 # The Verse language object. ScriptLanguage exposes no `get_name` to ClassDB -- `get_class()` is
@@ -2517,8 +2581,9 @@ func _verse_language() -> Object:
 # probe_complete_code asks exactly as the script editor does -- no build, no flush -- and the frames
 # between the first ask and the last are _frame's, which is where the completion analysis starts and
 # lands. Each frame's ask is the editor's re-ask, and the one that queues nothing is the refined
-# answer. The cases are printed together once all three buffers have answered, so the export's one
-# skip stands for all of them.
+# answer. The cases are printed together once every buffer has answered, so the export's one skip
+# stands for all of them -- the named-argument buffer's too, which rides this queue for the same
+# reason the override buffers do.
 #
 # The second buffer carries a syntax error further down the file, which is what an author's buffer
 # does for most of the time they are typing. An analysis that does not parse describes no class at
@@ -2526,10 +2591,13 @@ func _verse_language() -> Object:
 # the five names the parser knows by itself, and the next caret's first popup with it.
 const OVERRIDE_COMPLETION := "override declarations in the completion popup"
 const OVERRIDE_PROBE_PATH := "res://scripts/override_complete_probe.verse"
+const NAMED_PROBE_PATH := "res://scripts/completion_probe.verse"
+const NAMED_ARGUMENT := "?ExactMatch := true]"
 # An analysis is ~1 s and a headless frame is not paced, so this is a wall-clock bound.
 const OVERRIDE_COMPLETION_TIMEOUT_MS := 60000
 var _override_buffers: Array = []
 var _override_answers: Array = []
+var _override_path := ""
 var _override_code := ""
 var _override_first: Dictionary = {}
 var _override_started_ms := 0
@@ -2549,18 +2617,27 @@ func _begin_override_completion() -> void:
 	# A new member begun on its own line, the caret behind the `_` an author types first.
 	var clean := source.substr(0, at) + "\t_" + char(0xFFFF) + "\n" + source.substr(at)
 	var broken := clean + "\tUnfinished():int =\n"
-	_override_buffers = [clean, broken, clean]
+	_override_buffers = [[OVERRIDE_PROBE_PATH, clean], [OVERRIDE_PROBE_PATH, broken],
+			[OVERRIDE_PROBE_PATH, clean]]
+	# The named-argument popup, which probe_complete cannot pose: the buffer the editor holds the
+	# instant `?E` is typed has the `]` it closed after the caret and nothing else, and no caret in a
+	# file that compiles leaves that behind it.
+	var named_source := FileAccess.get_file_as_string(NAMED_PROBE_PATH).replace("\r\n", "\n")
+	if named_source.contains(NAMED_ARGUMENT):
+		_override_buffers.append([NAMED_PROBE_PATH,
+				named_source.replace(NAMED_ARGUMENT, "?E" + char(0xFFFF) + "]")])
 	_ask_next_override_buffer()
 
 
 func _ask_next_override_buffer() -> void:
-	_override_code = _override_buffers[_override_answers.size()]
-	_override_first = _verse_language().call("probe_complete_code", OVERRIDE_PROBE_PATH, _override_code)
+	_override_path = _override_buffers[_override_answers.size()][0]
+	_override_code = _override_buffers[_override_answers.size()][1]
+	_override_first = _verse_language().call("probe_complete_code", _override_path, _override_code)
 	_override_started_ms = Time.get_ticks_msec()
 
 
 func _poll_override_completion() -> void:
-	var answer: Dictionary = _verse_language().call("probe_complete_code", OVERRIDE_PROBE_PATH, _override_code)
+	var answer: Dictionary = _verse_language().call("probe_complete_code", _override_path, _override_code)
 	var timed_out := Time.get_ticks_msec() - _override_started_ms > OVERRIDE_COMPLETION_TIMEOUT_MS
 	if answer.get("awaiting_analysis", false) and not timed_out:
 		return
@@ -2583,6 +2660,13 @@ func _poll_override_completion() -> void:
 			_has_prefixed(refined, "_Ready<override>("))
 	_check("and the _Process declaration after the refresh",
 			_has_prefixed(refined, "_Process<override>("))
+	# The five script-level hooks the native root declares by hand, which Godot's own API dump does not
+	# carry -- four of them offered nowhere until each had a LIFECYCLE_METHODS row (B22).
+	for hook in ["_Notification", "_Get", "_Set", "_GetPropertyList", "_ValidateProperty"]:
+		_check("the first popup offers the hand-written %s hook as an override" % hook,
+				_has_prefixed(first, hook + "<override>("))
+		_check("and the refined popup offers %s too" % hook,
+				_has_prefixed(refined, hook + "<override>("))
 	# Godot filters the options against what was typed, by the text it draws and inserts; an option
 	# that does not begin with the `_` is one the author never sees however right it is.
 	var spelled := true
@@ -2599,6 +2683,17 @@ func _poll_override_completion() -> void:
 			_has_prefixed(_override_displays(_override_answers[1][1]), "_Ready<override>("))
 	_check("and the first popup after that analysis still offers it",
 			_has_prefixed(_override_displays(_override_answers[2][0]), "_Ready<override>("))
+
+	_check("completion_probe.verse passes ExactMatch by name", _override_answers.size() > 3)
+	var named: Dictionary = _override_answers[3][1] if _override_answers.size() > 3 else {}
+	var named_options := []
+	for option in named.get("options", []):
+		named_options.append([String(option.get("display", "")), String(option.get("insert_text", ""))])
+	# The name alone is inserted: the `?` stays the author's, the way an attribute's `@` does.
+	_check_eq("a `?` opening an argument offers the callee's named parameter, inserted without a second `?`",
+			named_options, [["ExactMatch:logic", "ExactMatch := "]])
+	_check("with the hint above it keeping the named parameter's `?`",
+			String(named.get("call_hint", "")).contains("?ExactMatch:logic"))
 	_end_editor_only()
 
 

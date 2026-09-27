@@ -605,7 +605,9 @@ passes the engine no command line**, so `run_web.py --godot-arg` rewrites its `G
 it the test driver's `--verse-check` gate never opens and the game sits idle, which reads as a hang.
 
 **export** — exports `tests/integration` headless, asserts the *tree* it produced, then **launches
-it** and holds what its cases reported to **the editor run's own case list**, so a case that stops
+it** in B14's environment (`scrubbed_game_env`: `UE_ROOT`, `VERSE_HOST_DLL` and `VERSE_COOKER`
+unset, `PATH` cut to Windows' own two directories, the export's directory as the working directory,
+and export-vm's launch likewise) and holds what its cases reported to **the editor run's own case list**, so a case that stops
 running in an export reads as a failure, by name, rather than as a shorter log. Every case the
 editor run printed must be printed by the export too, passing or skipped with a reason
 `test_cases.gd` marks editor-only (`EDITOR_ONLY`, or a reason beginning `editor only: `); a case the
