@@ -7,14 +7,16 @@
 #include "Containers/UnrealString.h"
 #include "Containers/Utf8String.h"
 
+class UClass;
+
 namespace uLang {
 class CClass;
 class CSemanticProgram;
 }
 
 /// What HostScript.cpp owns and the units split out of it read: the IDE's semantic program, the
-/// project's source snippets and the trace switch. Each is a function rather than an extern global,
-/// so a unit cannot write what it only has reason to read.
+/// project's source snippets, the trace switch and the published generation's classes. Each is a
+/// function rather than an extern global, so a unit cannot write what it only has reason to read.
 namespace GodotVerse {
 
 /// The semantic program the IDE currently holds, or null before the IDE exists or once it is
@@ -32,5 +34,15 @@ AUTORTFM_DISABLE const uLang::CClass* FindScriptClassLive(FUtf8StringView ClassN
 
 /// Whether VH_TRACE_ANALYSIS asked for a trace to stderr.
 AUTORTFM_DISABLE bool AnalysisTraceEnabled();
+
+/// The UClass of a mirrored Godot class -- `node2d` -- in the published program, or null.
+AUTORTFM_DISABLE UClass* FindMirroredClass(FUtf8StringView ClassName);
+
+/// The project's own class of this name, in the generation currently published.
+AUTORTFM_DISABLE UClass* FindGodotClass(FUtf8StringView ClassName);
+
+/// The binding class of this name. Never module-qualified: the bindings package is generated as one
+/// snippet with no modules in it.
+AUTORTFM_DISABLE UClass* FindBindingClass(FUtf8StringView ClassName);
 
 } // namespace GodotVerse

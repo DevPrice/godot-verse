@@ -563,44 +563,6 @@ AUTORTFM_DISABLE vh_value VariantToWire(const verse::variant& Value,
                                         FUtf8String& OutText,
                                         TArray<vh_value>& OutComponents);
 
-/// Builds a wire value from a Verse value that is one of the mirrored math structs -- `vector2`,
-/// `color`, `transform3d` -- identified from the value alone rather than from a declaration.
-///
-/// Every other caller knows what it is reading and passes an FMemberType; the debugger does not,
-/// because a stopped frame carries no declaration and reaching for one would mean asking the
-/// semantic program from inside the interpreter. What makes it answerable anyway is that a struct
-/// value names its own class: `VNamedType::GetBaseName()` is the key the generated layout table is
-/// keyed by.
-///
-/// False for anything that is not one of them -- including a class of the author's that happens to
-/// share a name, because the fields are read by their *decorated* keys
-/// (`(/Godot.org/Godot/vector2:)X`) and a namesake has none of them.
-AUTORTFM_DISABLE bool ReadMathStruct(Verse::FRunningContext Context,
-                                     Verse::VValue Value,
-                                     FFieldStorage& OutStorage,
-                                     vh_value& OutValue);
-
-/// Builds a wire value from *any* Verse value that identifies itself, which is ReadMathStruct's
-/// question asked of every type rather than only of the math structs: an int, a float, a logic, a
-/// string, a Godot object and the 16 math structs. False for everything else.
-///
-/// Two callers, and they want it for the same reason from opposite directions. The debugger has a
-/// register and no declaration. `Variant(Value:any)` has an argument whose declared type is `any`,
-/// which says nothing by construction -- the type dispatch Verse cannot do at compile time, done
-/// here at run time instead.
-///
-/// **The order of the tests is load-bearing and not obvious.** `true` is an option around `false`,
-/// so a cell holding a Godot object reads as a logic if it is asked before the object test; and a
-/// string is a `VArrayBase` of Char8/Char32, so it has to be settled before anything that treats an
-/// array as an array. What cannot be settled at all is what the value does not know about itself:
-/// an empty array cannot say what it holds, a `false` cannot say whether it is a logic or an empty
-/// option, and a `[]int` cannot say which of Godot's three integer packings was meant. Those are
-/// the lanes that keep a named builder.
-AUTORTFM_DISABLE bool ReadSelfDescribingValue(Verse::FRunningContext Context,
-                                              Verse::VValue Value,
-                                              FFieldStorage& OutStorage,
-                                              vh_value& OutValue);
-
 /// The statics of one class, as GetClassStatics answers them. Values and Storage run parallel to
 /// Statics, with a wire value per *constant* and a function's slot left empty.
 ///

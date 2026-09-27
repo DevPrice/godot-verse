@@ -8,6 +8,7 @@
 #include "Containers/Utf8String.h"
 #include "GodotClasses.h"
 #include "HAL/PlatformTime.h"
+#include "HostMarshal.h"
 #include "HostRuntime.h"
 #include "String/Find.h"
 #include "VerseVM/Inline/VVMValueInline.h"

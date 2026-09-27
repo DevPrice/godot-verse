@@ -7,6 +7,7 @@
 #include "GodotClasses.h"
 #include "HostRuntime.h"
 #include "HostEventLoop.h"
+#include "HostMarshal.h"
 #include "HostScript.h"
 #include "Templates/UniquePtr.h"
 #include "VerseString.h"
