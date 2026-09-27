@@ -36,48 +36,9 @@ VerseHostLibrary::~VerseHostLibrary() {
 }
 
 void VerseHostLibrary::clear_function_pointers() {
-	AbiVersion = nullptr;
-	HostKind = nullptr;
-	Init = nullptr;
-	Shutdown = nullptr;
-	Tick = nullptr;
-	CompileProject = nullptr;
-	SetBindings = nullptr;
-	ResolveUnknownName = nullptr;
-	CheckProject = nullptr;
-	CheckProjectBegin = nullptr;
-	CheckProjectPoll = nullptr;
-	CheckProjectBusy = nullptr;
-	HasClass = nullptr;
-	Instantiate = nullptr;
-	ReleaseInstance = nullptr;
-	InstanceHasFunction = nullptr;
-	InstanceCall = nullptr;
-	CallbackInvoke = nullptr;
-	CallbackRelease = nullptr;
-	ClassMethodList = nullptr;
-	ClassSignalList = nullptr;
-	ClassRpcList = nullptr;
-	ClassStaticList = nullptr;
-	ClassIsAbstract = nullptr;
-	ClassBaseType = nullptr;
-	ClassExportList = nullptr;
-	InstanceGetField = nullptr;
-	ClassDefaultField = nullptr;
-	InstanceSetField = nullptr;
-	InstanceSetFieldInstance = nullptr;
-	InstanceToString = nullptr;
-	LookupSymbol = nullptr;
-	CompleteSymbol = nullptr;
-	ClassMembers = nullptr;
-	ClassOverrideCandidates = nullptr;
-	SignatureAt = nullptr;
-	DebugSetEnabled = nullptr;
-	DebugStackCount = nullptr;
-	DebugStackFrame = nullptr;
-	DebugStackValues = nullptr;
-	ProfilingSetEnabled = nullptr;
-	ProfilingRead = nullptr;
+#define VERSE_HOST_CLEAR(m_member, m_symbol, m_fn, m_presence, m_role) m_member = nullptr;
+	VH_ENTRY_POINTS(VERSE_HOST_CLEAR)
+#undef VERSE_HOST_CLEAR
 }
 
 bool VerseHostLibrary::load(const String &p_dll_path, String &r_error) {
@@ -99,55 +60,14 @@ bool VerseHostLibrary::load(const String &p_dll_path, String &r_error) {
 	}
 
 	bool ok = true;
-	ok = ok && resolve_required(handle, "vh_abi_version", AbiVersion, r_error);
-	ok = ok && resolve_required(handle, "vh_init", Init, r_error);
-	ok = ok && resolve_required(handle, "vh_shutdown", Shutdown, r_error);
-	ok = ok && resolve_required(handle, "vh_tick", Tick, r_error);
-	ok = ok && resolve_required(handle, "vh_has_class", HasClass, r_error);
-	ok = ok && resolve_required(handle, "vh_instantiate", Instantiate, r_error);
-	ok = ok && resolve_required(handle, "vh_release_instance", ReleaseInstance, r_error);
-	ok = ok && resolve_required(handle, "vh_instance_has_function", InstanceHasFunction, r_error);
-	ok = ok && resolve_required(handle, "vh_instance_call", InstanceCall, r_error);
-	ok = ok && resolve_required(handle, "vh_callback_invoke", CallbackInvoke, r_error);
-	ok = ok && resolve_required(handle, "vh_callback_release", CallbackRelease, r_error);
-	ok = ok && resolve_required(handle, "vh_class_method_list", ClassMethodList, r_error);
-	ok = ok && resolve_required(handle, "vh_class_signal_list", ClassSignalList, r_error);
-	ok = ok && resolve_required(handle, "vh_class_static_list", ClassStaticList, r_error);
-	ok = ok && resolve_required(handle, "vh_class_is_abstract", ClassIsAbstract, r_error);
-	// Optional: a host older than ABI 8.4 has not got it, and the consumer only asks where the
-	// source text is gone -- which is a host this bridge shipped, so never one of those.
-	resolve_optional(handle, "vh_class_base_type", ClassBaseType);
-	// Optional rather than required, for the reason vh_class_base_type is: a host built before
-	// ABI 8.7 has no such export, and refusing to load against one would turn a missing feature
-	// into a dead editor.
-	resolve_optional(handle, "vh_class_rpc_list", ClassRpcList);
-	ok = ok && resolve_required(handle, "vh_class_export_list", ClassExportList, r_error);
-	ok = ok && resolve_required(handle, "vh_instance_get_field", InstanceGetField, r_error);
-	ok = ok && resolve_required(handle, "vh_class_default_field", ClassDefaultField, r_error);
-	ok = ok && resolve_required(handle, "vh_instance_set_field", InstanceSetField, r_error);
-	ok = ok && resolve_required(handle, "vh_instance_set_field_instance", InstanceSetFieldInstance, r_error);
-	ok = ok && resolve_required(handle, "vh_instance_to_string", InstanceToString, r_error);
-	ok = ok && resolve_required(handle, "vh_debug_set_enabled", DebugSetEnabled, r_error);
-	ok = ok && resolve_required(handle, "vh_debug_stack_count", DebugStackCount, r_error);
-	ok = ok && resolve_required(handle, "vh_debug_stack_frame", DebugStackFrame, r_error);
-	ok = ok && resolve_required(handle, "vh_debug_stack_values", DebugStackValues, r_error);
-	ok = ok && resolve_required(handle, "vh_profiling_set_enabled", ProfilingSetEnabled, r_error);
-	ok = ok && resolve_required(handle, "vh_profiling_read", ProfilingRead, r_error);
-
-	// The eleven that need a compiler, plus vh_host_kind, which a host older than 8.2 has not got.
-	resolve_optional(handle, "vh_host_kind", HostKind);
-	resolve_optional(handle, "vh_compile_project", CompileProject);
-	resolve_optional(handle, "vh_set_bindings", SetBindings);
-	resolve_optional(handle, "vh_resolve_unknown_name", ResolveUnknownName);
-	resolve_optional(handle, "vh_check_project", CheckProject);
-	resolve_optional(handle, "vh_check_project_begin", CheckProjectBegin);
-	resolve_optional(handle, "vh_check_project_poll", CheckProjectPoll);
-	resolve_optional(handle, "vh_check_project_busy", CheckProjectBusy);
-	resolve_optional(handle, "vh_lookup_symbol", LookupSymbol);
-	resolve_optional(handle, "vh_complete_symbol", CompleteSymbol);
-	resolve_optional(handle, "vh_class_members", ClassMembers);
-	resolve_optional(handle, "vh_class_override_candidates", ClassOverrideCandidates);
-	resolve_optional(handle, "vh_signature_at", SignatureAt);
+#define VERSE_HOST_RESOLVE(m_member, m_symbol, m_fn, m_presence, m_role) \
+	if constexpr (m_presence == VH_ENTRY_REQUIRED) { \
+		ok = ok && resolve_required(handle, #m_symbol, m_member, r_error); \
+	} else { \
+		resolve_optional(handle, #m_symbol, m_member); \
+	}
+	VH_ENTRY_POINTS(VERSE_HOST_RESOLVE)
+#undef VERSE_HOST_RESOLVE
 
 	if (!ok) {
 		clear_function_pointers();
@@ -182,52 +102,11 @@ bool VerseHostLibrary::load_static() {
 		unload();
 	}
 
-	// Every entry point vm/'s vh_abi.cpp defines, required and optional alike: unlike a DLL that
-	// might predate one of these, vm/ is built from the same include/verse_host_abi.h this file
-	// is, so there is nothing here for it to be missing. The twelve compiler-side ones are real
-	// functions too, answering VH_ERR_UNSUPPORTED, exactly as a WITH_VERSE_COMPILER=0 UE host does.
-	AbiVersion = &vh_abi_version;
-	HostKind = &vh_host_kind;
-	Init = &vh_init;
-	Shutdown = &vh_shutdown;
-	Tick = &vh_tick;
-	CompileProject = &vh_compile_project;
-	SetBindings = &vh_set_bindings;
-	ResolveUnknownName = &vh_resolve_unknown_name;
-	CheckProject = &vh_check_project;
-	CheckProjectBegin = &vh_check_project_begin;
-	CheckProjectPoll = &vh_check_project_poll;
-	CheckProjectBusy = &vh_check_project_busy;
-	HasClass = &vh_has_class;
-	Instantiate = &vh_instantiate;
-	ReleaseInstance = &vh_release_instance;
-	InstanceHasFunction = &vh_instance_has_function;
-	InstanceCall = &vh_instance_call;
-	CallbackInvoke = &vh_callback_invoke;
-	CallbackRelease = &vh_callback_release;
-	ClassMethodList = &vh_class_method_list;
-	ClassSignalList = &vh_class_signal_list;
-	ClassRpcList = &vh_class_rpc_list;
-	ClassStaticList = &vh_class_static_list;
-	ClassIsAbstract = &vh_class_is_abstract;
-	ClassBaseType = &vh_class_base_type;
-	ClassExportList = &vh_class_export_list;
-	InstanceGetField = &vh_instance_get_field;
-	ClassDefaultField = &vh_class_default_field;
-	InstanceSetField = &vh_instance_set_field;
-	InstanceSetFieldInstance = &vh_instance_set_field_instance;
-	InstanceToString = &vh_instance_to_string;
-	LookupSymbol = &vh_lookup_symbol;
-	CompleteSymbol = &vh_complete_symbol;
-	ClassMembers = &vh_class_members;
-	ClassOverrideCandidates = &vh_class_override_candidates;
-	SignatureAt = &vh_signature_at;
-	DebugSetEnabled = &vh_debug_set_enabled;
-	DebugStackCount = &vh_debug_stack_count;
-	DebugStackFrame = &vh_debug_stack_frame;
-	DebugStackValues = &vh_debug_stack_values;
-	ProfilingSetEnabled = &vh_profiling_set_enabled;
-	ProfilingRead = &vh_profiling_read;
+	// Every entry point, required and optional alike: vm/ defines them all (vm/vm_abi.cpp), the
+	// compiler-side ones answering VH_ERR_UNSUPPORTED exactly as a WITH_VERSE_COMPILER=0 UE host does.
+#define VERSE_HOST_BIND(m_member, m_symbol, m_fn, m_presence, m_role) m_member = &m_symbol;
+	VH_ENTRY_POINTS(VERSE_HOST_BIND)
+#undef VERSE_HOST_BIND
 
 	loaded = true;
 	return true;

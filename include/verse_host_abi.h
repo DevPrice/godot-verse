@@ -2137,6 +2137,73 @@ typedef int32_t (*vh_debug_stack_values_fn)(int32_t, int32_t, const vh_debug_val
 typedef int32_t (*vh_profiling_set_enabled_fn)(vh_bool);
 typedef int32_t (*vh_profiling_read_fn)(vh_bool, const vh_profile_row**, int32_t*);
 
+/* Every entry point, one row each: X(Member, Symbol, FnType, Presence, Role).
+ *
+ * Member is the consumer's name for it, Symbol the exported name and FnType its typedef above.
+ * Expand this rather than listing entry points by hand: a list that has to be kept in step with
+ * the header is how vh_set_bindings came to be resolved and never cleared.
+ *
+ * Presence is whether a consumer refuses a library that lacks the symbol. VH_ENTRY_OPTIONAL is
+ * the compiler-side rows, the three a host older than their minor does not export (vh_host_kind
+ * at 8.2, vh_class_base_type at 8.4, vh_class_rpc_list at 8.7), and the two no consumer calls
+ * (vh_collect_garbage, vh_run_main). A consumer leaves an absent optional entry point null and
+ * degrades rather than failing to load.
+ *
+ * Role is VH_ENTRY_COMPILER for the twelve that need a Verse compiler. Every host exports every
+ * row -- the UE runtime host and vm/ included -- and a host without a compiler answers those
+ * twelve VH_ERR_UNSUPPORTED (vh_check_project_busy, which has no status, answers 0). */
+#define VH_ENTRY_OPTIONAL 0
+#define VH_ENTRY_REQUIRED 1
+
+#define VH_ENTRY_ANY 0
+#define VH_ENTRY_COMPILER 1
+
+#define VH_ENTRY_POINTS(X) \
+	X(AbiVersion, vh_abi_version, vh_abi_version_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(HostKind, vh_host_kind, vh_host_kind_fn, VH_ENTRY_OPTIONAL, VH_ENTRY_ANY) \
+	X(Init, vh_init, vh_init_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(Shutdown, vh_shutdown, vh_shutdown_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(Tick, vh_tick, vh_tick_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(CollectGarbage, vh_collect_garbage, vh_collect_garbage_fn, VH_ENTRY_OPTIONAL, VH_ENTRY_ANY) \
+	X(SetBindings, vh_set_bindings, vh_set_bindings_fn, VH_ENTRY_OPTIONAL, VH_ENTRY_COMPILER) \
+	X(CompileProject, vh_compile_project, vh_compile_project_fn, VH_ENTRY_OPTIONAL, VH_ENTRY_COMPILER) \
+	X(ResolveUnknownName, vh_resolve_unknown_name, vh_resolve_unknown_name_fn, VH_ENTRY_OPTIONAL, VH_ENTRY_COMPILER) \
+	X(CheckProject, vh_check_project, vh_check_project_fn, VH_ENTRY_OPTIONAL, VH_ENTRY_COMPILER) \
+	X(CheckProjectBegin, vh_check_project_begin, vh_check_project_begin_fn, VH_ENTRY_OPTIONAL, VH_ENTRY_COMPILER) \
+	X(CheckProjectPoll, vh_check_project_poll, vh_check_project_poll_fn, VH_ENTRY_OPTIONAL, VH_ENTRY_COMPILER) \
+	X(CheckProjectBusy, vh_check_project_busy, vh_check_project_busy_fn, VH_ENTRY_OPTIONAL, VH_ENTRY_COMPILER) \
+	X(RunMain, vh_run_main, vh_run_main_fn, VH_ENTRY_OPTIONAL, VH_ENTRY_ANY) \
+	X(HasClass, vh_has_class, vh_has_class_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(Instantiate, vh_instantiate, vh_instantiate_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(ReleaseInstance, vh_release_instance, vh_release_instance_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(ClassMethodList, vh_class_method_list, vh_class_method_list_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(ClassSignalList, vh_class_signal_list, vh_class_signal_list_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(ClassRpcList, vh_class_rpc_list, vh_class_rpc_list_fn, VH_ENTRY_OPTIONAL, VH_ENTRY_ANY) \
+	X(ClassStaticList, vh_class_static_list, vh_class_static_list_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(ClassIsAbstract, vh_class_is_abstract, vh_class_is_abstract_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(ClassBaseType, vh_class_base_type, vh_class_base_type_fn, VH_ENTRY_OPTIONAL, VH_ENTRY_ANY) \
+	X(InstanceHasFunction, vh_instance_has_function, vh_instance_has_function_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(InstanceCall, vh_instance_call, vh_instance_call_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(CallbackInvoke, vh_callback_invoke, vh_callback_invoke_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(CallbackRelease, vh_callback_release, vh_callback_release_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(ClassExportList, vh_class_export_list, vh_class_export_list_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(InstanceGetField, vh_instance_get_field, vh_instance_get_field_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(ClassDefaultField, vh_class_default_field, vh_class_default_field_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(InstanceSetField, vh_instance_set_field, vh_instance_set_field_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(InstanceSetFieldInstance, vh_instance_set_field_instance, vh_instance_set_field_instance_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(InstanceToString, vh_instance_to_string, vh_instance_to_string_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(LookupSymbol, vh_lookup_symbol, vh_lookup_symbol_fn, VH_ENTRY_OPTIONAL, VH_ENTRY_COMPILER) \
+	X(CompleteSymbol, vh_complete_symbol, vh_complete_symbol_fn, VH_ENTRY_OPTIONAL, VH_ENTRY_COMPILER) \
+	X(ClassMembers, vh_class_members, vh_class_members_fn, VH_ENTRY_OPTIONAL, VH_ENTRY_COMPILER) \
+	X(ClassOverrideCandidates, vh_class_override_candidates, vh_class_override_candidates_fn, VH_ENTRY_OPTIONAL, VH_ENTRY_COMPILER) \
+	X(SignatureAt, vh_signature_at, vh_signature_at_fn, VH_ENTRY_OPTIONAL, VH_ENTRY_COMPILER) \
+	X(DebugSetEnabled, vh_debug_set_enabled, vh_debug_set_enabled_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(DebugStackCount, vh_debug_stack_count, vh_debug_stack_count_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(DebugStackFrame, vh_debug_stack_frame, vh_debug_stack_frame_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(DebugStackValues, vh_debug_stack_values, vh_debug_stack_values_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(ProfilingSetEnabled, vh_profiling_set_enabled, vh_profiling_set_enabled_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
+	X(ProfilingRead, vh_profiling_read, vh_profiling_read_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY)
+
 #ifdef __cplusplus
 }
 #endif

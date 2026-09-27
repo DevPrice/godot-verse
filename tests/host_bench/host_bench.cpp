@@ -122,6 +122,9 @@ Fn Resolve(HMODULE Module, const char* Name, bool* Ok)
 	return reinterpret_cast<Fn>(Proc);
 }
 
+// One token names both the export and its typedef, so the two cannot be paired wrongly.
+#define HOST_BENCH_RESOLVE(Symbol) Resolve<Symbol##_fn>(Module, #Symbol, &Ok)
+
 /// The bytes of the mirror the host will read at runtime, which is the size the numbers below are
 /// a function of. Reported so a log says which mirror it measured without being told.
 void ReportMirrorSize(const fs::path& EngineDir)
@@ -240,23 +243,23 @@ int main(int argc, char** argv)
 	}
 
 	bool Ok = true;
-	auto InitFn = Resolve<vh_init_fn>(Module, "vh_init", &Ok);
-	auto ShutdownFn = Resolve<vh_shutdown_fn>(Module, "vh_shutdown", &Ok);
-	auto CompileProjectFn = Resolve<vh_compile_project_fn>(Module, "vh_compile_project", &Ok);
-	auto CheckProjectFn = Resolve<vh_check_project_fn>(Module, "vh_check_project", &Ok);
-	auto InstantiateFn = Resolve<vh_instantiate_fn>(Module, "vh_instantiate", &Ok);
-	auto ReleaseInstanceFn = Resolve<vh_release_instance_fn>(Module, "vh_release_instance", &Ok);
-	auto InstanceCallFn = Resolve<vh_instance_call_fn>(Module, "vh_instance_call", &Ok);
-	auto TickFn = Resolve<vh_tick_fn>(Module, "vh_tick", &Ok);
-	auto CheckProjectBeginFn = Resolve<vh_check_project_begin_fn>(Module, "vh_check_project_begin", &Ok);
-	auto CheckProjectPollFn = Resolve<vh_check_project_poll_fn>(Module, "vh_check_project_poll", &Ok);
-	auto CompleteSymbolFn = Resolve<vh_complete_symbol_fn>(Module, "vh_complete_symbol", &Ok);
-	auto SignatureAtFn = Resolve<vh_signature_at_fn>(Module, "vh_signature_at", &Ok);
-	auto LookupSymbolFn = Resolve<vh_lookup_symbol_fn>(Module, "vh_lookup_symbol", &Ok);
-	auto ClassMembersFn = Resolve<vh_class_members_fn>(Module, "vh_class_members", &Ok);
-	auto OverrideCandidatesFn = Resolve<vh_class_override_candidates_fn>(Module, "vh_class_override_candidates", &Ok);
-	auto ClassExportListFn = Resolve<vh_class_export_list_fn>(Module, "vh_class_export_list", &Ok);
-	auto DebugSetEnabledFn = Resolve<vh_debug_set_enabled_fn>(Module, "vh_debug_set_enabled", &Ok);
+	auto InitFn = HOST_BENCH_RESOLVE(vh_init);
+	auto ShutdownFn = HOST_BENCH_RESOLVE(vh_shutdown);
+	auto CompileProjectFn = HOST_BENCH_RESOLVE(vh_compile_project);
+	auto CheckProjectFn = HOST_BENCH_RESOLVE(vh_check_project);
+	auto InstantiateFn = HOST_BENCH_RESOLVE(vh_instantiate);
+	auto ReleaseInstanceFn = HOST_BENCH_RESOLVE(vh_release_instance);
+	auto InstanceCallFn = HOST_BENCH_RESOLVE(vh_instance_call);
+	auto TickFn = HOST_BENCH_RESOLVE(vh_tick);
+	auto CheckProjectBeginFn = HOST_BENCH_RESOLVE(vh_check_project_begin);
+	auto CheckProjectPollFn = HOST_BENCH_RESOLVE(vh_check_project_poll);
+	auto CompleteSymbolFn = HOST_BENCH_RESOLVE(vh_complete_symbol);
+	auto SignatureAtFn = HOST_BENCH_RESOLVE(vh_signature_at);
+	auto LookupSymbolFn = HOST_BENCH_RESOLVE(vh_lookup_symbol);
+	auto ClassMembersFn = HOST_BENCH_RESOLVE(vh_class_members);
+	auto OverrideCandidatesFn = HOST_BENCH_RESOLVE(vh_class_override_candidates);
+	auto ClassExportListFn = HOST_BENCH_RESOLVE(vh_class_export_list);
+	auto DebugSetEnabledFn = HOST_BENCH_RESOLVE(vh_debug_set_enabled);
 	if (!Ok)
 	{
 		return 1;

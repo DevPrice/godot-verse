@@ -23,9 +23,8 @@ public:
 
 	// Loads dll_path and resolves every vh_* entry point. On failure, out_error names the
 	// first missing *required* symbol (or the reason the library itself could not be loaded)
-	// and the library is left unloaded. The compiler-side entries are optional: the runtime
-	// host has no compiler and does not export them, so they stay null and their callers
-	// answer ERR_UNAVAILABLE.
+	// and the library is left unloaded. An optional entry point (VH_ENTRY_OPTIONAL) that is
+	// absent stays null, and its callers answer ERR_UNAVAILABLE.
 	bool load(const godot::String &dll_path, godot::String &out_error);
 
 #ifdef VERSE_VM_STATIC
@@ -43,48 +42,9 @@ public:
 	// than ABI 8.2, which exports nothing to ask and was always the editor host.
 	int32_t host_kind() const;
 
-	vh_abi_version_fn AbiVersion = nullptr;
-	vh_host_kind_fn HostKind = nullptr;
-	vh_init_fn Init = nullptr;
-	vh_shutdown_fn Shutdown = nullptr;
-	vh_tick_fn Tick = nullptr;
-	vh_compile_project_fn CompileProject = nullptr;
-	vh_set_bindings_fn SetBindings = nullptr;
-	vh_resolve_unknown_name_fn ResolveUnknownName = nullptr;
-	vh_check_project_fn CheckProject = nullptr;
-	vh_check_project_begin_fn CheckProjectBegin = nullptr;
-	vh_check_project_poll_fn CheckProjectPoll = nullptr;
-	vh_check_project_busy_fn CheckProjectBusy = nullptr;
-	vh_has_class_fn HasClass = nullptr;
-	vh_instantiate_fn Instantiate = nullptr;
-	vh_release_instance_fn ReleaseInstance = nullptr;
-	vh_instance_has_function_fn InstanceHasFunction = nullptr;
-	vh_instance_call_fn InstanceCall = nullptr;
-	vh_callback_invoke_fn CallbackInvoke = nullptr;
-	vh_callback_release_fn CallbackRelease = nullptr;
-	vh_class_method_list_fn ClassMethodList = nullptr;
-	vh_class_signal_list_fn ClassSignalList = nullptr;
-	vh_class_rpc_list_fn ClassRpcList = nullptr;
-	vh_class_static_list_fn ClassStaticList = nullptr;
-	vh_class_is_abstract_fn ClassIsAbstract = nullptr;
-	vh_class_base_type_fn ClassBaseType = nullptr;
-	vh_class_export_list_fn ClassExportList = nullptr;
-	vh_instance_get_field_fn InstanceGetField = nullptr;
-	vh_class_default_field_fn ClassDefaultField = nullptr;
-	vh_instance_set_field_fn InstanceSetField = nullptr;
-	vh_instance_set_field_instance_fn InstanceSetFieldInstance = nullptr;
-	vh_instance_to_string_fn InstanceToString = nullptr;
-	vh_lookup_symbol_fn LookupSymbol = nullptr;
-	vh_complete_symbol_fn CompleteSymbol = nullptr;
-	vh_class_members_fn ClassMembers = nullptr;
-	vh_class_override_candidates_fn ClassOverrideCandidates = nullptr;
-	vh_signature_at_fn SignatureAt = nullptr;
-	vh_debug_set_enabled_fn DebugSetEnabled = nullptr;
-	vh_debug_stack_count_fn DebugStackCount = nullptr;
-	vh_debug_stack_frame_fn DebugStackFrame = nullptr;
-	vh_debug_stack_values_fn DebugStackValues = nullptr;
-	vh_profiling_set_enabled_fn ProfilingSetEnabled = nullptr;
-	vh_profiling_read_fn ProfilingRead = nullptr;
+#define VERSE_HOST_MEMBER(m_member, m_symbol, m_fn, m_presence, m_role) m_fn m_member = nullptr;
+	VH_ENTRY_POINTS(VERSE_HOST_MEMBER)
+#undef VERSE_HOST_MEMBER
 
 private:
 	void clear_function_pointers();

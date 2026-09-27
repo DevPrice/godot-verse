@@ -175,6 +175,9 @@ static Fn Resolve(HMODULE Module, const char* Name)
 	}
 	return reinterpret_cast<Fn>(Proc);
 }
+
+// One token names both the export and its typedef, so the two cannot be paired wrongly.
+#define COOKED_PROBE_RESOLVE(Symbol) Resolve<Symbol##_fn>(Module, #Symbol)
 #endif
 
 // --sample, after --bench: a second thread suspends the benchmarking one about every millisecond,
@@ -427,15 +430,15 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
-	auto HostKindFn = Resolve<vh_host_kind_fn>(Module, "vh_host_kind");
-	auto InitFn = Resolve<vh_init_fn>(Module, "vh_init");
-	auto ShutdownFn = Resolve<vh_shutdown_fn>(Module, "vh_shutdown");
-	auto HasClassFn = Resolve<vh_has_class_fn>(Module, "vh_has_class");
-	auto InstantiateFn = Resolve<vh_instantiate_fn>(Module, "vh_instantiate");
-	auto InstanceCallFn = Resolve<vh_instance_call_fn>(Module, "vh_instance_call");
-	auto ClassMethodListFn = Resolve<vh_class_method_list_fn>(Module, "vh_class_method_list");
-	auto ReleaseInstanceFn = Resolve<vh_release_instance_fn>(Module, "vh_release_instance");
-	auto TickFn = Resolve<vh_tick_fn>(Module, "vh_tick");
+	auto HostKindFn = COOKED_PROBE_RESOLVE(vh_host_kind);
+	auto InitFn = COOKED_PROBE_RESOLVE(vh_init);
+	auto ShutdownFn = COOKED_PROBE_RESOLVE(vh_shutdown);
+	auto HasClassFn = COOKED_PROBE_RESOLVE(vh_has_class);
+	auto InstantiateFn = COOKED_PROBE_RESOLVE(vh_instantiate);
+	auto InstanceCallFn = COOKED_PROBE_RESOLVE(vh_instance_call);
+	auto ClassMethodListFn = COOKED_PROBE_RESOLVE(vh_class_method_list);
+	auto ReleaseInstanceFn = COOKED_PROBE_RESOLVE(vh_release_instance);
+	auto TickFn = COOKED_PROBE_RESOLVE(vh_tick);
 	if (!InitFn || !ShutdownFn || !HasClassFn || !InstantiateFn || !InstanceCallFn || !ClassMethodListFn)
 	{
 		return 1;

@@ -549,50 +549,26 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
+	// Every entry point, not only the ones used below: the editor host exports all of them, and
+	// this is the one place a missing export is a test failure rather than a degraded consumer.
 	bool ResolveOk = true;
-	auto AbiVersionFn = Resolve<vh_abi_version_fn>(Module, "vh_abi_version", &ResolveOk);
-	auto InitFn = Resolve<vh_init_fn>(Module, "vh_init", &ResolveOk);
-	auto ShutdownFn = Resolve<vh_shutdown_fn>(Module, "vh_shutdown", &ResolveOk);
-	auto TickFn = Resolve<vh_tick_fn>(Module, "vh_tick", &ResolveOk);
-	auto CollectGarbageFn = Resolve<vh_collect_garbage_fn>(Module, "vh_collect_garbage", &ResolveOk);
-	auto ClassBaseTypeFn = Resolve<vh_class_base_type_fn>(Module, "vh_class_base_type", &ResolveOk);
-	auto CompileProjectFn = Resolve<vh_compile_project_fn>(Module, "vh_compile_project", &ResolveOk);
-	auto SetBindingsFn = Resolve<vh_set_bindings_fn>(Module, "vh_set_bindings", &ResolveOk);
-	auto HasClassFn = Resolve<vh_has_class_fn>(Module, "vh_has_class", &ResolveOk);
-	auto ClassExportListFn = Resolve<vh_class_export_list_fn>(Module, "vh_class_export_list", &ResolveOk);
-	auto ClassDefaultFieldFn = Resolve<vh_class_default_field_fn>(Module, "vh_class_default_field", &ResolveOk);
-	auto InstantiateFn = Resolve<vh_instantiate_fn>(Module, "vh_instantiate", &ResolveOk);
-	auto ReleaseInstanceFn = Resolve<vh_release_instance_fn>(Module, "vh_release_instance", &ResolveOk);
-	auto InstanceCallFn = Resolve<vh_instance_call_fn>(Module, "vh_instance_call", &ResolveOk);
-	auto ClassMethodListFn = Resolve<vh_class_method_list_fn>(Module, "vh_class_method_list", &ResolveOk);
-	auto GetFieldFn = Resolve<vh_instance_get_field_fn>(Module, "vh_instance_get_field", &ResolveOk);
-	auto SetFieldFn = Resolve<vh_instance_set_field_fn>(Module, "vh_instance_set_field", &ResolveOk);
-	auto SetFieldInstanceFn = Resolve<vh_instance_set_field_instance_fn>(Module, "vh_instance_set_field_instance", &ResolveOk);
-	auto LookupSymbolFn = Resolve<vh_lookup_symbol_fn>(Module, "vh_lookup_symbol", &ResolveOk);
-	auto CompleteSymbolFn = Resolve<vh_complete_symbol_fn>(Module, "vh_complete_symbol", &ResolveOk);
-	auto ClassMembersFn = Resolve<vh_class_members_fn>(Module, "vh_class_members", &ResolveOk);
-	auto OverrideCandidatesFn = Resolve<vh_class_override_candidates_fn>(Module, "vh_class_override_candidates", &ResolveOk);
-	auto SignatureAtFn = Resolve<vh_signature_at_fn>(Module, "vh_signature_at", &ResolveOk);
-	auto CheckProjectFn = Resolve<vh_check_project_fn>(Module, "vh_check_project", &ResolveOk);
-	auto ResolveUnknownNameFn = Resolve<vh_resolve_unknown_name_fn>(Module, "vh_resolve_unknown_name", &ResolveOk);
-	auto CheckBeginFn = Resolve<vh_check_project_begin_fn>(Module, "vh_check_project_begin", &ResolveOk);
-	auto CheckProjectPollFn = Resolve<vh_check_project_poll_fn>(Module, "vh_check_project_poll", &ResolveOk);
-	auto CheckBusyFn = Resolve<vh_check_project_busy_fn>(Module, "vh_check_project_busy", &ResolveOk);
-	auto RunMainFn = Resolve<vh_run_main_fn>(Module, "vh_run_main", &ResolveOk);
-	auto DebugSetEnabledFn = Resolve<vh_debug_set_enabled_fn>(Module, "vh_debug_set_enabled", &ResolveOk);
-	auto DebugStackCountFn = Resolve<vh_debug_stack_count_fn>(Module, "vh_debug_stack_count", &ResolveOk);
-	auto DebugStackFrameFn = Resolve<vh_debug_stack_frame_fn>(Module, "vh_debug_stack_frame", &ResolveOk);
-	auto DebugStackValuesFn = Resolve<vh_debug_stack_values_fn>(Module, "vh_debug_stack_values", &ResolveOk);
-	auto ProfilingSetEnabledFn = Resolve<vh_profiling_set_enabled_fn>(Module, "vh_profiling_set_enabled", &ResolveOk);
-	auto ProfilingReadFn = Resolve<vh_profiling_read_fn>(Module, "vh_profiling_read", &ResolveOk);
+	struct
+	{
+#define SMOKE_ENTRY_MEMBER(Member, Symbol, FnType, Presence, Role) FnType Member = nullptr;
+		VH_ENTRY_POINTS(SMOKE_ENTRY_MEMBER)
+#undef SMOKE_ENTRY_MEMBER
+	} Host;
+#define SMOKE_RESOLVE_ENTRY(Member, Symbol, FnType, Presence, Role) Host.Member = Resolve<FnType>(Module, #Symbol, &ResolveOk);
+	VH_ENTRY_POINTS(SMOKE_RESOLVE_ENTRY)
+#undef SMOKE_RESOLVE_ENTRY
 	if (!Step("resolve exports", ResolveOk))
 	{
 		return 1;
 	}
 
-	if (!Step("vh_abi_version", AbiVersionFn() == VH_ABI_VERSION))
+	if (!Step("vh_abi_version", Host.AbiVersion() == VH_ABI_VERSION))
 	{
-		fprintf(stderr, "[smoke] abi version mismatch: got %d, expected %d\n", AbiVersionFn(), VH_ABI_VERSION);
+		fprintf(stderr, "[smoke] abi version mismatch: got %d, expected %d\n", Host.AbiVersion(), VH_ABI_VERSION);
 		return 1;
 	}
 
@@ -619,7 +595,7 @@ int main(int argc, char** argv)
 	Desc.RuntimeErrorCtx = nullptr;
 	Desc.EnableDebugger = 0;
 
-	if (!Step("vh_init", InitFn(&Desc) == VH_OK))
+	if (!Step("vh_init", Host.Init(&Desc) == VH_OK))
 	{
 		return 1;
 	}
@@ -637,7 +613,7 @@ int main(int argc, char** argv)
 	const fs::path ModuleProbePath = ScratchDir / "module_probe.verse";
 	if (!Step("write the reload fixture", WriteFileUtf8(ReloadPath, ReloadProbeSource(1))))
 	{
-	ShutdownFn();
+	Host.Shutdown();
 		return 1;
 	}
 
@@ -669,13 +645,13 @@ int main(int argc, char** argv)
 			{ "RapierJoint2D", 13, nullptr, 0, "rapier_joint", 12 },
 		};
 		Step("vh_set_bindings",
-			 SetBindingsFn(BindingsRosterOne, (int32_t)strlen(BindingsRosterOne), Roster, 2) == VH_OK);
+			 Host.SetBindings(BindingsRosterOne, (int32_t)strlen(BindingsRosterOne), Roster, 2) == VH_OK);
 	}
 
 	int32_t Generation = 0;
-	if (!Step("vh_compile_project", CompileProjectFn(ProjectFiles, 7, &Generation) == VH_OK))
+	if (!Step("vh_compile_project", Host.CompileProject(ProjectFiles, 7, &Generation) == VH_OK))
 	{
-		ShutdownFn();
+		Host.Shutdown();
 		return 1;
 	}
 	Step("the first build is generation 1", Generation == 1);
@@ -689,7 +665,7 @@ int main(int argc, char** argv)
 	{
 		auto ReadInt = [&](vh_instance* Target, const char* Decorated) {
 			vh_value Result{};
-			if (InstanceCallFn(Target, Decorated, nullptr, 0, nullptr, &Result) != VH_OK
+			if (Host.InstanceCall(Target, Decorated, nullptr, 0, nullptr, &Result) != VH_OK
 				|| Result.Type != VH_TYPE_INT)
 			{
 				return (int64_t)-1;
@@ -698,7 +674,7 @@ int main(int argc, char** argv)
 		};
 
 		vh_instance* Bound = nullptr;
-		const bool Made = InstantiateFn("bindings", 77, &Bound) == VH_OK && Bound != nullptr;
+		const bool Made = Host.Instantiate("bindings", 77, &Bound) == VH_OK && Bound != nullptr;
 		Step("a script resolves a class from the bindings package", Made);
 		if (Made)
 		{
@@ -717,10 +693,10 @@ int main(int argc, char** argv)
 
 			vh_value IsRef{};
 			Step("and a binding is its mirrored base, to Verse's own downcast",
-				 InstanceCallFn(Bound, "(/user@localhost/bindings:)AskIsRefCounted", nullptr, 0, nullptr, &IsRef) == VH_OK
+				 Host.InstanceCall(Bound, "(/user@localhost/bindings:)AskIsRefCounted", nullptr, 0, nullptr, &IsRef) == VH_OK
 					 && IsRef.Type == VH_TYPE_LOGIC && IsRef.Logic != 0);
 
-			ReleaseInstanceFn(Bound);
+			Host.ReleaseInstance(Bound);
 		}
 	}
 
@@ -728,7 +704,7 @@ int main(int argc, char** argv)
 	// to be older than the second generation.
 	vh_instance* GenerationOne = nullptr;
 	Step("vh_instantiate against generation 1",
-		 InstantiateFn("reload_probe", 3, &GenerationOne) == VH_OK && GenerationOne != nullptr);
+		 Host.Instantiate("reload_probe", 3, &GenerationOne) == VH_OK && GenerationOne != nullptr);
 
 	// Symbol lookup, asked before anything has edited a buffer. That is the state the editor is
 	// in at startup, and it is the interesting one: the build just done generated code, which
@@ -769,15 +745,15 @@ int main(int argc, char** argv)
 			// analysis is in flight, and the same thing to do about it.
 			const vh_lookup_desc* TooEarly = nullptr;
 			LookupOk = Step("a position does not resolve straight after a build",
-						   LookupSymbolFn(ExportsPathUtf8.c_str(), UseRow, UseColumn, &TooEarly) == VH_ERR_STATE)
+						   Host.LookupSymbol(ExportsPathUtf8.c_str(), UseRow, UseColumn, &TooEarly) == VH_ERR_STATE)
 					&& LookupOk;
 
 			LookupOk = Step("one analysis puts the AST back",
-						   CheckProjectFn(ExportsPathUtf8.c_str(), ExportsSource.c_str()) == VH_OK)
+						   Host.CheckProject(ExportsPathUtf8.c_str(), ExportsSource.c_str()) == VH_OK)
 					&& LookupOk;
 
 			const vh_lookup_desc* Lookup = nullptr;
-			LookupOk = Step("vh_lookup_symbol", LookupSymbolFn(ExportsPathUtf8.c_str(), UseRow, UseColumn, &Lookup) == VH_OK) && LookupOk;
+			LookupOk = Step("vh_lookup_symbol", Host.LookupSymbol(ExportsPathUtf8.c_str(), UseRow, UseColumn, &Lookup) == VH_OK) && LookupOk;
 			if (Lookup)
 			{
 				LookupOk = Step("the use resolves to Speed", Text(Lookup->NameUtf8, Lookup->NameLen) == "Speed") && LookupOk;
@@ -806,7 +782,7 @@ int main(int argc, char** argv)
 				RowColumnOf(ExportsSource, ProbeUse + 4, ProbeRow, ProbeColumn);
 				const vh_lookup_desc* ProbeLookup = nullptr;
 				if (Step("vh_lookup_symbol on a mirrored Godot property",
-						LookupSymbolFn(ExportsPathUtf8.c_str(), ProbeRow, ProbeColumn, &ProbeLookup) == VH_OK)
+						Host.LookupSymbol(ExportsPathUtf8.c_str(), ProbeRow, ProbeColumn, &ProbeLookup) == VH_OK)
 					&& ProbeLookup)
 				{
 					LookupOk = Step("it resolves to Position", Text(ProbeLookup->NameUtf8, ProbeLookup->NameLen) == "Position") && LookupOk;
@@ -828,7 +804,7 @@ int main(int argc, char** argv)
 				int32_t ScaleColumn = 0;
 				RowColumnOf(ExportsSource, ScaleUse + 4, ScaleRow, ScaleColumn);
 				const vh_lookup_desc* ScaleLookup = nullptr;
-				if (Step("vh_lookup_symbol on a var", LookupSymbolFn(ExportsPathUtf8.c_str(), ScaleRow, ScaleColumn, &ScaleLookup) == VH_OK) && ScaleLookup)
+				if (Step("vh_lookup_symbol on a var", Host.LookupSymbol(ExportsPathUtf8.c_str(), ScaleRow, ScaleColumn, &ScaleLookup) == VH_OK) && ScaleLookup)
 				{
 					LookupOk = Step("Scale is a var", ScaleLookup->IsVar != 0) && LookupOk;
 				}
@@ -850,7 +826,7 @@ int main(int argc, char** argv)
 				RowColumnOf(ExportsSource, VectorUse, VectorRow, VectorColumn);
 				const vh_lookup_desc* VectorLookup = nullptr;
 				if (Step("vh_lookup_symbol on an archetype's class",
-						LookupSymbolFn(ExportsPathUtf8.c_str(), VectorRow, VectorColumn, &VectorLookup) == VH_OK)
+						Host.LookupSymbol(ExportsPathUtf8.c_str(), VectorRow, VectorColumn, &VectorLookup) == VH_OK)
 					&& VectorLookup)
 				{
 					LookupOk = Step("it resolves to vector2", Text(VectorLookup->NameUtf8, VectorLookup->NameLen) == "vector2") && LookupOk;
@@ -875,7 +851,7 @@ int main(int argc, char** argv)
 				RowColumnOf(ExportsSource, BaseUse + 1, BaseRow, BaseColumn);
 				const vh_lookup_desc* BaseLookup = nullptr;
 				if (Step("vh_lookup_symbol on a class header's base",
-						LookupSymbolFn(ExportsPathUtf8.c_str(), BaseRow, BaseColumn, &BaseLookup) == VH_OK)
+						Host.LookupSymbol(ExportsPathUtf8.c_str(), BaseRow, BaseColumn, &BaseLookup) == VH_OK)
 					&& BaseLookup)
 				{
 					LookupOk = Step("it resolves to object", Text(BaseLookup->NameUtf8, BaseLookup->NameLen) == "object") && LookupOk;
@@ -903,7 +879,7 @@ int main(int argc, char** argv)
 				RowColumnOf(ExportsSource, SqrtUse, SqrtRow, SqrtColumn);
 				const vh_lookup_desc* SqrtLookup = nullptr;
 				if (Step("vh_lookup_symbol on a Verse standard library function",
-						LookupSymbolFn(ExportsPathUtf8.c_str(), SqrtRow, SqrtColumn, &SqrtLookup) == VH_OK)
+						Host.LookupSymbol(ExportsPathUtf8.c_str(), SqrtRow, SqrtColumn, &SqrtLookup) == VH_OK)
 					&& SqrtLookup)
 				{
 					const std::string Doc = Text(SqrtLookup->DocUtf8, SqrtLookup->DocLen);
@@ -938,7 +914,7 @@ int main(int argc, char** argv)
 				RowColumnOf(ExportsSource, BumpDecl, BumpRow, BumpColumn);
 				const vh_lookup_desc* BumpLookup = nullptr;
 				if (Step("vh_lookup_symbol on a method's own declaration",
-						LookupSymbolFn(ExportsPathUtf8.c_str(), BumpRow, BumpColumn, &BumpLookup) == VH_OK)
+						Host.LookupSymbol(ExportsPathUtf8.c_str(), BumpRow, BumpColumn, &BumpLookup) == VH_OK)
 					&& BumpLookup)
 				{
 					LookupOk = Step("it resolves to Bump", Text(BumpLookup->NameUtf8, BumpLookup->NameLen) == "Bump") && LookupOk;
@@ -953,7 +929,7 @@ int main(int argc, char** argv)
 				// nothing must not fall back to the function whose locus spans it.
 				const vh_lookup_desc* Inside = nullptr;
 				LookupOk = Step("a blank column in the body still resolves to nothing",
-							   LookupSymbolFn(ExportsPathUtf8.c_str(), BumpRow + 1, 0, &Inside) == VH_ERR_NOT_FOUND)
+							   Host.LookupSymbol(ExportsPathUtf8.c_str(), BumpRow + 1, 0, &Inside) == VH_ERR_NOT_FOUND)
 						&& LookupOk;
 			}
 
@@ -968,7 +944,7 @@ int main(int argc, char** argv)
 				RowColumnOf(ExportsSource, ReadyDecl, ReadyRow, ReadyColumn);
 				const vh_lookup_desc* ReadyLookup = nullptr;
 				if (Step("vh_lookup_symbol on an override",
-						LookupSymbolFn(ExportsPathUtf8.c_str(), ReadyRow, ReadyColumn, &ReadyLookup) == VH_OK)
+						Host.LookupSymbol(ExportsPathUtf8.c_str(), ReadyRow, ReadyColumn, &ReadyLookup) == VH_OK)
 					&& ReadyLookup)
 				{
 					LookupOk = Step("it knows the cursor is on a definition", ReadyLookup->IsDefinition != 0) && LookupOk;
@@ -997,7 +973,7 @@ int main(int argc, char** argv)
 				int32_t CallColumn = 0;
 				RowColumnOf(ExportsSource, ProbeCall, CallRow, CallColumn);
 				const vh_lookup_desc* CallLookup = nullptr;
-				if (Step("vh_lookup_symbol on a call", LookupSymbolFn(ExportsPathUtf8.c_str(), CallRow, CallColumn, &CallLookup) == VH_OK)
+				if (Step("vh_lookup_symbol on a call", Host.LookupSymbol(ExportsPathUtf8.c_str(), CallRow, CallColumn, &CallLookup) == VH_OK)
 					&& CallLookup)
 				{
 					LookupOk = Step("a call site is not reported as a definition", CallLookup->IsDefinition == 0) && LookupOk;
@@ -1034,7 +1010,7 @@ int main(int argc, char** argv)
 					int32_t Column = 0;
 					RowColumnOf(*G.Source, At + 1, Row, Column);
 					const vh_lookup_desc* Found = nullptr;
-					const bool Resolved = LookupSymbolFn(G.Path, Row, Column, &Found) == VH_OK && Found != nullptr;
+					const bool Resolved = Host.LookupSymbol(G.Path, Row, Column, &Found) == VH_OK && Found != nullptr;
 					const std::string Owner = Resolved ? Text(Found->OwnerUtf8, Found->OwnerLen) : std::string();
 					const std::string DeclaredIn = Resolved ? Text(Found->PathUtf8, Found->PathLen) : std::string();
 					LookupOk = Step(G.What,
@@ -1071,7 +1047,7 @@ int main(int argc, char** argv)
 					int32_t Column = 0;
 					RowColumnOf(ExportsSource, At + S.Offset, Row, Column);
 					const vh_lookup_desc* Found = nullptr;
-					const int32_t Status = LookupSymbolFn(ExportsPathUtf8.c_str(), Row, Column, &Found);
+					const int32_t Status = Host.LookupSymbol(ExportsPathUtf8.c_str(), Row, Column, &Found);
 					if (S.Expect == nullptr)
 					{
 						LookupOk = Step(S.What, Status == VH_ERR_NOT_FOUND) && LookupOk;
@@ -1103,7 +1079,7 @@ int main(int argc, char** argv)
 					RowColumnOf(ExportsSource, At + F.Offset, Row, Column);
 					const vh_lookup_desc* Found = nullptr;
 					LookupOk = Step(F.What,
-								   LookupSymbolFn(ExportsPathUtf8.c_str(), Row, Column, &Found) == VH_OK
+								   Host.LookupSymbol(ExportsPathUtf8.c_str(), Row, Column, &Found) == VH_OK
 									   && Found && (Found->IsParameter != 0) == F.Expect)
 							&& LookupOk;
 				}
@@ -1120,7 +1096,7 @@ int main(int argc, char** argv)
 				RowColumnOf(ExportsSource, FieldUse + strlen("Position."), FieldRow, FieldColumn);
 				const vh_lookup_desc* FieldLookup = nullptr;
 				if (Step("vh_lookup_symbol on a field of a value type",
-						LookupSymbolFn(ExportsPathUtf8.c_str(), FieldRow, FieldColumn, &FieldLookup) == VH_OK)
+						Host.LookupSymbol(ExportsPathUtf8.c_str(), FieldRow, FieldColumn, &FieldLookup) == VH_OK)
 					&& FieldLookup)
 				{
 					LookupOk = Step("it resolves to X", Text(FieldLookup->NameUtf8, FieldLookup->NameLen) == "X") && LookupOk;
@@ -1138,7 +1114,7 @@ int main(int argc, char** argv)
 			// rather than whichever definition happens to span the row.
 			const vh_lookup_desc* Nothing = nullptr;
 			LookupOk = Step("a column past the end of a line resolves to nothing",
-						   LookupSymbolFn(ExportsPathUtf8.c_str(), DeclRow, 500, &Nothing) == VH_ERR_NOT_FOUND)
+						   Host.LookupSymbol(ExportsPathUtf8.c_str(), DeclRow, 500, &Nothing) == VH_ERR_NOT_FOUND)
 					&& LookupOk;
 		}
 	}
@@ -1170,7 +1146,7 @@ int main(int argc, char** argv)
 		// blocking one.
 		auto AnalyseCompletionBuffer = [&](const std::string& Buffer) {
 			SuppressDiagnostics = true;
-			CheckProjectFn(ExportsPathUtf8.c_str(), Buffer.c_str());
+			Host.CheckProject(ExportsPathUtf8.c_str(), Buffer.c_str());
 			SuppressDiagnostics = false;
 		};
 
@@ -1199,13 +1175,13 @@ int main(int argc, char** argv)
 			// case below therefore runs the analysis itself, which is what the GDExtension does --
 			// queue the completion buffer, answer with what is free, ask again when it lands.
 			CompleteOk = Step("a buffer the host has not analysed refuses rather than analysing",
-							 CompleteSymbolFn(ExportsPathUtf8.c_str(), Typing.c_str(), RecvRow, RecvColumn,
+							 Host.CompleteSymbol(ExportsPathUtf8.c_str(), Typing.c_str(), RecvRow, RecvColumn,
 											  VH_COMPLETE_MEMBERS, &Items, &Count) == VH_ERR_STATE)
 					  && CompleteOk;
 
 			AnalyseCompletionBuffer(Typing);
 			if (Step("vh_complete_symbol on a half-typed member",
-					CompleteSymbolFn(ExportsPathUtf8.c_str(), Typing.c_str(), RecvRow, RecvColumn,
+					Host.CompleteSymbol(ExportsPathUtf8.c_str(), Typing.c_str(), RecvRow, RecvColumn,
 									 VH_COMPLETE_MEMBERS, &Items, &Count) == VH_OK))
 			{
 				CompleteOk = Step("it offers vector2's X", Offers(Items, Count, "X") != nullptr) && CompleteOk;
@@ -1250,7 +1226,7 @@ int main(int argc, char** argv)
 				RowColumnOf(TintTyping, TintUse + strlen("Tint") - 1, RecvRow, RecvColumn);
 				AnalyseCompletionBuffer(TintTyping);
 				if (Step("vh_complete_symbol on a color",
-						CompleteSymbolFn(ExportsPathUtf8.c_str(), TintTyping.c_str(), RecvRow, RecvColumn,
+						Host.CompleteSymbol(ExportsPathUtf8.c_str(), TintTyping.c_str(), RecvRow, RecvColumn,
 										 VH_COMPLETE_MEMBERS, &Items, &Count) == VH_OK))
 				{
 					CompleteOk = Step("it offers color's own field", Offers(Items, Count, "B") != nullptr) && CompleteOk;
@@ -1284,7 +1260,7 @@ int main(int argc, char** argv)
 				RowColumnOf(CallTyping, TintUse + strlen(CallReceiver) - 1, RecvRow, RecvColumn);
 				AnalyseCompletionBuffer(CallTyping);
 				if (Step("vh_complete_symbol on a call's result",
-						CompleteSymbolFn(ExportsPathUtf8.c_str(), CallTyping.c_str(), RecvRow, RecvColumn,
+						Host.CompleteSymbol(ExportsPathUtf8.c_str(), CallTyping.c_str(), RecvRow, RecvColumn,
 										 VH_COMPLETE_MEMBERS, &Items, &Count) == VH_OK))
 				{
 					CompleteOk = Step("it offers the answered color's own field",
@@ -1302,7 +1278,7 @@ int main(int argc, char** argv)
 				// compiler refuses.
 				RowColumnOf(CallTyping, TintUse + strlen("Tint.Lerp") - 1, RecvRow, RecvColumn);
 				CompleteOk = Step("but the callee's own name still answers nothing",
-								 CompleteSymbolFn(ExportsPathUtf8.c_str(), CallTyping.c_str(), RecvRow, RecvColumn,
+								 Host.CompleteSymbol(ExportsPathUtf8.c_str(), CallTyping.c_str(), RecvRow, RecvColumn,
 												  VH_COMPLETE_MEMBERS, &Items, &Count) == VH_ERR_NOT_FOUND)
 						  && CompleteOk;
 			}
@@ -1322,7 +1298,7 @@ int main(int argc, char** argv)
 				RowColumnOf(EventTyping, EventUse + strlen("Pinged") - 1, RecvRow, RecvColumn);
 				AnalyseCompletionBuffer(EventTyping);
 				if (Step("vh_complete_symbol on a parametric receiver",
-						CompleteSymbolFn(ExportsPathUtf8.c_str(), EventTyping.c_str(), RecvRow, RecvColumn,
+						Host.CompleteSymbol(ExportsPathUtf8.c_str(), EventTyping.c_str(), RecvRow, RecvColumn,
 										 VH_COMPLETE_MEMBERS, &Items, &Count) == VH_OK))
 				{
 					CompleteOk = Step("it offers the class' own Await", Offers(Items, Count, "Await") != nullptr) && CompleteOk;
@@ -1353,7 +1329,7 @@ int main(int argc, char** argv)
 				RowColumnOf(ProcessModeTyping, ProcessModeUse + strlen("node_process_mode") - 1, RecvRow, RecvColumn);
 				AnalyseCompletionBuffer(ProcessModeTyping);
 				if (Step("vh_complete_symbol on a mirrored enum named as a type",
-						CompleteSymbolFn(ExportsPathUtf8.c_str(), ProcessModeTyping.c_str(), RecvRow, RecvColumn,
+						Host.CompleteSymbol(ExportsPathUtf8.c_str(), ProcessModeTyping.c_str(), RecvRow, RecvColumn,
 										 VH_COMPLETE_MEMBERS, &Items, &Count) == VH_OK))
 				{
 					CompleteOk = Step("it offers Inherit", Offers(Items, Count, "Inherit") != nullptr) && CompleteOk;
@@ -1383,7 +1359,7 @@ int main(int argc, char** argv)
 				RowColumnOf(ExportsModeTyping, ExportsModeUse + strlen("exports_mode") - 1, RecvRow, RecvColumn);
 				AnalyseCompletionBuffer(ExportsModeTyping);
 				if (Step("vh_complete_symbol on the fixture's own enum named as a type",
-						CompleteSymbolFn(ExportsPathUtf8.c_str(), ExportsModeTyping.c_str(), RecvRow, RecvColumn,
+						Host.CompleteSymbol(ExportsPathUtf8.c_str(), ExportsModeTyping.c_str(), RecvRow, RecvColumn,
 										 VH_COMPLETE_MEMBERS, &Items, &Count) == VH_OK))
 				{
 					CompleteOk = Step("it offers Idle", Offers(Items, Count, "Idle") != nullptr) && CompleteOk;
@@ -1408,7 +1384,7 @@ int main(int argc, char** argv)
 				RowColumnOf(ModeTyping, ModeUse + strlen("Mode") - 1, RecvRow, RecvColumn);
 				AnalyseCompletionBuffer(ModeTyping);
 				if (Step("vh_complete_symbol on an enum-typed value",
-						CompleteSymbolFn(ExportsPathUtf8.c_str(), ModeTyping.c_str(), RecvRow, RecvColumn,
+						Host.CompleteSymbol(ExportsPathUtf8.c_str(), ModeTyping.c_str(), RecvRow, RecvColumn,
 										 VH_COMPLETE_MEMBERS, &Items, &Count) == VH_OK))
 				{
 					CompleteOk = Step("the value offers Idle", Offers(Items, Count, "Idle") != nullptr) && CompleteOk;
@@ -1431,7 +1407,7 @@ int main(int argc, char** argv)
 			RowColumnOf(SelfTyping, FieldUse + strlen("Self") - 1, RecvRow, RecvColumn);
 			AnalyseCompletionBuffer(SelfTyping);
 			if (Step("vh_complete_symbol on a node",
-					CompleteSymbolFn(ExportsPathUtf8.c_str(), SelfTyping.c_str(), RecvRow, RecvColumn,
+					Host.CompleteSymbol(ExportsPathUtf8.c_str(), SelfTyping.c_str(), RecvRow, RecvColumn,
 									 VH_COMPLETE_MEMBERS, &Items, &Count) == VH_OK))
 			{
 				CompleteOk = Step("it offers the class' own Probe", Offers(Items, Count, "Probe") != nullptr) && CompleteOk;
@@ -1476,7 +1452,7 @@ int main(int argc, char** argv)
 				RowColumnOf(ScopeTyping, LocalUse + strlen("X := "), ScopeRow, ScopeColumn);
 				AnalyseCompletionBuffer(ScopeTyping);
 				if (Step("vh_complete_symbol in a function body",
-						CompleteSymbolFn(ExportsPathUtf8.c_str(), ScopeTyping.c_str(), ScopeRow, ScopeColumn,
+						Host.CompleteSymbol(ExportsPathUtf8.c_str(), ScopeTyping.c_str(), ScopeRow, ScopeColumn,
 										 VH_COMPLETE_SCOPE, &Items, &Count) == VH_OK))
 				{
 					CompleteOk = Step("it offers the local declared above", Offers(Items, Count, "Shifted") != nullptr) && CompleteOk;
@@ -1525,7 +1501,7 @@ int main(int argc, char** argv)
 				RowColumnOf(IfTyping, NameAt, IfRow, IfColumn);
 				AnalyseCompletionBuffer(IfTyping);
 				if (Step("vh_complete_symbol inside an `if` condition",
-						CompleteSymbolFn(ExportsPathUtf8.c_str(), IfTyping.c_str(), IfRow, IfColumn,
+						Host.CompleteSymbol(ExportsPathUtf8.c_str(), IfTyping.c_str(), IfRow, IfColumn,
 										 VH_COMPLETE_SCOPE, &Items, &Count) == VH_OK))
 				{
 					CompleteOk = Step("it offers the enclosing class' own method", Offers(Items, Count, "Probe") != nullptr) && CompleteOk;
@@ -1548,12 +1524,12 @@ int main(int argc, char** argv)
 				std::string Unrepaired = IfTyping;
 				Unrepaired.erase(Unrepaired.find("VhCompletionCursor") + strlen("VhCompletionCursor") + 1, 1);
 				CompleteOk = Step("without the `:` the whole file is lost to the parser",
-								 CompleteSymbolFn(ExportsPathUtf8.c_str(), Unrepaired.c_str(), IfRow, IfColumn,
+								 Host.CompleteSymbol(ExportsPathUtf8.c_str(), Unrepaired.c_str(), IfRow, IfColumn,
 												  VH_COMPLETE_SCOPE, &Items, &Count) == VH_ERR_STATE)
 						  && CompleteOk;
 				AnalyseCompletionBuffer(Unrepaired);
 				CompleteOk = Step("and analysing it does not bring the position back",
-								 CompleteSymbolFn(ExportsPathUtf8.c_str(), Unrepaired.c_str(), IfRow, IfColumn,
+								 Host.CompleteSymbol(ExportsPathUtf8.c_str(), Unrepaired.c_str(), IfRow, IfColumn,
 												  VH_COMPLETE_SCOPE, &Items, &Count) == VH_ERR_NOT_FOUND)
 						  && CompleteOk;
 
@@ -1579,7 +1555,7 @@ int main(int argc, char** argv)
 				RowColumnOf(DeclTyping, MemberDecl + strlen("    "), DeclRow, DeclColumn);
 				AnalyseCompletionBuffer(DeclTyping);
 				if (Step("vh_complete_symbol at a class member declaration",
-						CompleteSymbolFn(ExportsPathUtf8.c_str(), DeclTyping.c_str(), DeclRow, DeclColumn,
+						Host.CompleteSymbol(ExportsPathUtf8.c_str(), DeclTyping.c_str(), DeclRow, DeclColumn,
 										 VH_COMPLETE_SCOPE, &Items, &Count) == VH_OK))
 				{
 					if (const vh_complete_item* Ready = Offers(Items, Count, "_Ready"))
@@ -1675,7 +1651,7 @@ int main(int argc, char** argv)
 					const vh_complete_item* Candidates = nullptr;
 					int32_t CandidateCount = 0;
 					if (Step("vh_class_override_candidates on the class being declared in",
-							OverrideCandidatesFn("exports_probe", &Candidates, &CandidateCount) == VH_OK))
+							Host.ClassOverrideCandidates("exports_probe", &Candidates, &CandidateCount) == VH_OK))
 					{
 						std::vector<std::pair<std::string, std::string>> Offered;
 						bool AllOverridable = true;
@@ -1707,7 +1683,7 @@ int main(int argc, char** argv)
 					const vh_complete_item* Absent = nullptr;
 					int32_t AbsentCount = 0;
 					CompleteOk = Step("a class the program does not have has no candidates either",
-									 OverrideCandidatesFn("no_such_class", &Absent, &AbsentCount) == VH_ERR_NOT_FOUND)
+									 Host.ClassOverrideCandidates("no_such_class", &Absent, &AbsentCount) == VH_ERR_NOT_FOUND)
 							  && CompleteOk;
 				}
 				else
@@ -1729,7 +1705,7 @@ int main(int argc, char** argv)
 				RowColumnOf(AttributeTyping, AttributeUse + strlen("    @"), AttributeRow, AttributeColumn);
 				AnalyseCompletionBuffer(AttributeTyping);
 				if (Step("vh_complete_symbol at an attribute",
-						CompleteSymbolFn(ExportsPathUtf8.c_str(), AttributeTyping.c_str(), AttributeRow, AttributeColumn,
+						Host.CompleteSymbol(ExportsPathUtf8.c_str(), AttributeTyping.c_str(), AttributeRow, AttributeColumn,
 										 VH_COMPLETE_ATTRIBUTES, &Items, &Count) == VH_OK))
 				{
 					CompleteOk = Step("it offers export", Offers(Items, Count, "export") != nullptr) && CompleteOk;
@@ -1788,7 +1764,7 @@ int main(int argc, char** argv)
 				RowColumnOf(SpecifierTyping, NameAt, SpecifierRow, SpecifierColumn);
 				AnalyseCompletionBuffer(SpecifierTyping);
 				if (Step("vh_complete_symbol at a specifier",
-						CompleteSymbolFn(ExportsPathUtf8.c_str(), SpecifierTyping.c_str(), SpecifierRow, SpecifierColumn,
+						Host.CompleteSymbol(ExportsPathUtf8.c_str(), SpecifierTyping.c_str(), SpecifierRow, SpecifierColumn,
 										 VH_COMPLETE_SPECIFIERS, &Items, &Count) == VH_OK))
 				{
 					CompleteOk = Step("it offers public", Offers(Items, Count, "public") != nullptr) && CompleteOk;
@@ -1863,7 +1839,7 @@ int main(int argc, char** argv)
 				RowColumnOf(Typing, Ask, Row, Column);
 				AnalyseCompletionBuffer(Typing);
 				if (Step(N.Label,
-						CompleteSymbolFn(ExportsPathUtf8.c_str(), Typing.c_str(), Row, Column,
+						Host.CompleteSymbol(ExportsPathUtf8.c_str(), Typing.c_str(), Row, Column,
 										 N.Mode, &Items, &Count) == VH_OK))
 				{
 					CompleteOk = Step(std::string("  it offers what belongs at ") + N.Label, Offers(Items, Count, N.Offered) != nullptr) && CompleteOk;
@@ -1890,7 +1866,7 @@ int main(int argc, char** argv)
 					RowColumnOf(Typing, NameAt - 2, Row, Column);
 					AnalyseCompletionBuffer(Typing);
 					if (Step("an archetype body offers a field a set could not reach",
-							CompleteSymbolFn(ExportsPathUtf8.c_str(), Typing.c_str(), Row, Column,
+							Host.CompleteSymbol(ExportsPathUtf8.c_str(), Typing.c_str(), Row, Column,
 											 VH_COMPLETE_ARCHETYPE_FIELDS, &Items, &Count) == VH_OK))
 					{
 						CompleteOk = Step("  vector2's X carries no var and is still offered",
@@ -1921,7 +1897,7 @@ int main(int argc, char** argv)
 				RowColumnOf(TopLevelTyping, GlobalClassUse + 1, TopRow, TopColumn);
 				AnalyseCompletionBuffer(TopLevelTyping);
 				if (Step("vh_complete_symbol at a top-level attribute",
-						CompleteSymbolFn(ExportsPathUtf8.c_str(), TopLevelTyping.c_str(), TopRow, TopColumn,
+						Host.CompleteSymbol(ExportsPathUtf8.c_str(), TopLevelTyping.c_str(), TopRow, TopColumn,
 										 VH_COMPLETE_ATTRIBUTES, &Items, &Count) == VH_OK))
 				{
 					CompleteOk = Step("it offers global_class above a class declaration",
@@ -1936,7 +1912,7 @@ int main(int argc, char** argv)
 				// And the scope mode at the same position, which is the other half of the same
 				// fault: the file's `using` is what puts the mirrored API in view anywhere.
 				if (Step("vh_complete_symbol in a top-level scope",
-						CompleteSymbolFn(ExportsPathUtf8.c_str(), TopLevelTyping.c_str(), TopRow, TopColumn,
+						Host.CompleteSymbol(ExportsPathUtf8.c_str(), TopLevelTyping.c_str(), TopRow, TopColumn,
 										 VH_COMPLETE_SCOPE, &Items, &Count) == VH_OK))
 				{
 					CompleteOk = Step("the Godot package is in view there", Offers(Items, Count, "Print") != nullptr) && CompleteOk;
@@ -1951,7 +1927,7 @@ int main(int argc, char** argv)
 			// Back to the file as it is on disk, which is what the two groups below ask about --
 			// and, being the real text, is the one analysis here worth reporting.
 			CompleteOk = Step("the project analyses clean again",
-							 CheckProjectFn(ExportsPathUtf8.c_str(), ExportsSource.c_str()) == VH_OK)
+							 Host.CheckProject(ExportsPathUtf8.c_str(), ExportsSource.c_str()) == VH_OK)
 					  && CompleteOk;
 
 			// Whitespace has no members, and answering anyway would put the enclosing scope behind
@@ -1959,7 +1935,7 @@ int main(int argc, char** argv)
 			const vh_complete_item* NoItems = nullptr;
 			int32_t NoCount = 0;
 			CompleteOk = Step("a position with no expression on it completes to nothing",
-							 CompleteSymbolFn(ExportsPathUtf8.c_str(), ExportsSource.c_str(), 0, 0,
+							 Host.CompleteSymbol(ExportsPathUtf8.c_str(), ExportsSource.c_str(), 0, 0,
 											  VH_COMPLETE_MEMBERS, &NoItems, &NoCount) == VH_ERR_NOT_FOUND)
 					  && CompleteOk;
 
@@ -1973,7 +1949,7 @@ int main(int argc, char** argv)
 				RowColumnOf(ExportsSource, Call + strlen("PhysicsUpdat"), CalleeRow, CalleeColumn);
 				const vh_signature_desc* Signature = nullptr;
 				if (Step("vh_signature_at on a method",
-						SignatureAtFn(ExportsPathUtf8.c_str(), ExportsSource.c_str(), CalleeRow, CalleeColumn, &Signature) == VH_OK)
+						Host.SignatureAt(ExportsPathUtf8.c_str(), ExportsSource.c_str(), CalleeRow, CalleeColumn, &Signature) == VH_OK)
 					&& Signature)
 				{
 					CompleteOk = Step("it names the method", Text(Signature->NameUtf8, Signature->NameLen) == "_PhysicsProcess") && CompleteOk;
@@ -1997,7 +1973,7 @@ int main(int argc, char** argv)
 				int32_t DataColumn = 0;
 				RowColumnOf(ExportsSource, NotCallable + 2, DataRow, DataColumn);
 				CompleteOk = Step("a data member has no signature",
-								 SignatureAtFn(ExportsPathUtf8.c_str(), ExportsSource.c_str(), DataRow, DataColumn, &NoSignature) == VH_ERR_NOT_FOUND)
+								 Host.SignatureAt(ExportsPathUtf8.c_str(), ExportsSource.c_str(), DataRow, DataColumn, &NoSignature) == VH_ERR_NOT_FOUND)
 						  && CompleteOk;
 			}
 
@@ -2015,7 +1991,7 @@ int main(int argc, char** argv)
 				RowColumnOf(ExportsSource, Named + strlen("Shou"), NamedRow, NamedColumn);
 				const vh_signature_desc* Shout = nullptr;
 				if (Step("vh_signature_at on a method taking one",
-						SignatureAtFn(ExportsPathUtf8.c_str(), ExportsSource.c_str(), NamedRow, NamedColumn, &Shout) == VH_OK)
+						Host.SignatureAt(ExportsPathUtf8.c_str(), ExportsSource.c_str(), NamedRow, NamedColumn, &Shout) == VH_OK)
 					&& Shout
 					&& Step("it reports both parameters", Shout->ParamCount == 2))
 				{
@@ -2051,7 +2027,7 @@ int main(int argc, char** argv)
 					AnalyseCompletionBuffer(NamedTyping);
 					const vh_signature_desc* Typed = nullptr;
 					if (Step("vh_signature_at still resolves the call a half-typed `?` sits in",
-							SignatureAtFn(ExportsPathUtf8.c_str(), NamedTyping.c_str(), TypingRow, TypingColumn, &Typed) == VH_OK)
+							Host.SignatureAt(ExportsPathUtf8.c_str(), NamedTyping.c_str(), TypingRow, TypingColumn, &Typed) == VH_OK)
 						&& Typed)
 					{
 						CompleteOk = Step("and still says which parameter is named",
@@ -2067,7 +2043,7 @@ int main(int argc, char** argv)
 					// Back to the file on disk, so the class reads below describe it rather than
 					// the buffer.
 					CompleteOk = Step("the project analyses clean after the named-argument buffer",
-									 CheckProjectFn(ExportsPathUtf8.c_str(), ExportsSource.c_str()) == VH_OK)
+									 Host.CheckProject(ExportsPathUtf8.c_str(), ExportsSource.c_str()) == VH_OK)
 							  && CompleteOk;
 				}
 				else
@@ -2088,7 +2064,7 @@ int main(int argc, char** argv)
 			const vh_complete_item* Members = nullptr;
 			int32_t MemberCount = 0;
 			if (Step("vh_class_members on a script class",
-					ClassMembersFn("exports", &Members, &MemberCount) == VH_OK))
+					Host.ClassMembers("exports", &Members, &MemberCount) == VH_OK))
 			{
 				auto Find = [&Text](const vh_complete_item* Items, int32_t Count, const char* Name) -> const vh_complete_item* {
 					for (int32_t Index = 0; Index < Count; ++Index)
@@ -2117,7 +2093,7 @@ int main(int argc, char** argv)
 			const vh_complete_item* Absent = nullptr;
 			int32_t AbsentCount = 0;
 			CompleteOk = Step("a class the program does not have reports not found",
-							 ClassMembersFn("no_such_class", &Absent, &AbsentCount) == VH_ERR_NOT_FOUND)
+							 Host.ClassMembers("no_such_class", &Absent, &AbsentCount) == VH_ERR_NOT_FOUND)
 					  && CompleteOk;
 		}
 
@@ -2126,12 +2102,12 @@ int main(int argc, char** argv)
 
 	const char* RunArgs[1] = { VersePathUtf8.c_str() };
 	int64_t ExitCode = 0;
-	bool RunOk = RunMainFn(RunArgs, 1, &ExitCode) == VH_OK;
+	bool RunOk = Host.RunMain(RunArgs, 1, &ExitCode) == VH_OK;
 	Step("vh_run_main", RunOk);
 	printf("[smoke] exit code: %lld\n", static_cast<long long>(ExitCode));
 
 	bool CallsOk = true;
-	TickFn(0.0, nullptr);
+	Host.Tick(0.0, nullptr);
 
 	// --- Phase 3 / OQ-12: a second generation, at the same verse path -------------------------
 	//
@@ -2151,7 +2127,7 @@ int main(int argc, char** argv)
 		auto ReadGeneration = [&](vh_instance* Instance) -> int64_t {
 			vh_value Result{};
 			if (!Instance
-				|| InstanceCallFn(Instance, "(/user@localhost/reload_probe:)Generation", nullptr, 0, nullptr, &Result) != VH_OK
+				|| Host.InstanceCall(Instance, "(/user@localhost/reload_probe:)Generation", nullptr, 0, nullptr, &Result) != VH_OK
 				|| Result.Type != VH_TYPE_INT)
 			{
 				return -1;
@@ -2184,12 +2160,12 @@ int main(int argc, char** argv)
 				{ "RapierJoint2D", 13, nullptr, 0, "rapier_joint", 12 },
 			};
 			CallsOk = Step("vh_set_bindings again, with a different roster",
-						   SetBindingsFn(BindingsRosterTwo, (int32_t)strlen(BindingsRosterTwo), Roster, 2) == VH_OK)
+						   Host.SetBindings(BindingsRosterTwo, (int32_t)strlen(BindingsRosterTwo), Roster, 2) == VH_OK)
 				&& CallsOk;
 		}
 		int32_t SecondGeneration = 0;
 		DiagnosticErrorCount = 0;
-		const bool SecondBuilt = CompileProjectFn(SecondFiles, 8, &SecondGeneration) == VH_OK;
+		const bool SecondBuilt = Host.CompileProject(SecondFiles, 8, &SecondGeneration) == VH_OK;
 		CallsOk = Step("a second vh_compile_project in the same process builds", SecondBuilt) && CallsOk;
 		CallsOk = Step("and reports generation 2", SecondGeneration == 2) && CallsOk;
 
@@ -2199,17 +2175,17 @@ int main(int argc, char** argv)
 		// AsyncLoading2 and would have taken the process down instead of failing this step.
 		{
 			vh_instance* Rebound = nullptr;
-			const bool Remade = SecondBuilt && InstantiateFn("bindings", 78, &Rebound) == VH_OK && Rebound != nullptr;
+			const bool Remade = SecondBuilt && Host.Instantiate("bindings", 78, &Rebound) == VH_OK && Rebound != nullptr;
 			CallsOk = Step("the bindings package survives a second build", Remade) && CallsOk;
 			if (Remade)
 			{
 				MintedClass.clear();
 				vh_value Result{};
-				const bool Called = InstanceCallFn(Rebound, "(/user@localhost/bindings:)MakeBound", nullptr, 0, nullptr, &Result) == VH_OK
+				const bool Called = Host.InstanceCall(Rebound, "(/user@localhost/bindings:)MakeBound", nullptr, 0, nullptr, &Result) == VH_OK
 					&& Result.Type == VH_TYPE_INT;
 				CallsOk = Step("a replaced bindings source is the one that runs", Called && Result.Int == 63) && CallsOk;
 				CallsOk = Step("and a replaced table is the one that mints", MintedClass == "RapierBody3D") && CallsOk;
-				ReleaseInstanceFn(Rebound);
+				Host.ReleaseInstance(Rebound);
 			}
 		}
 		CallsOk = Step("a file in a module reaches a root definition with nothing imported",
@@ -2221,16 +2197,16 @@ int main(int argc, char** argv)
 		// because a result the host cannot type comes back as void.
 		vh_instance* InModule = nullptr;
 		CallsOk = Step("a class in a module instantiates under its qualified name",
-					   InstantiateFn("gameplay/module_probe", 5, &InModule) == VH_OK && InModule != nullptr)
+					   Host.Instantiate("gameplay/module_probe", 5, &InModule) == VH_OK && InModule != nullptr)
 			   && CallsOk;
 		vh_instance* Unqualified = nullptr;
 		CallsOk = Step("and an unqualified name does not reach it",
-					   InstantiateFn("module_probe", 6, &Unqualified) != VH_OK) && CallsOk;
+					   Host.Instantiate("module_probe", 6, &Unqualified) != VH_OK) && CallsOk;
 		{
 			vh_value Total{};
 			CallsOk = Step("and its method returns a typed value",
 						   InModule != nullptr
-							   && InstanceCallFn(InModule, "(/user@localhost/gameplay/module_probe:)Total",
+							   && Host.InstanceCall(InModule, "(/user@localhost/gameplay/module_probe:)Total",
 												 nullptr, 0, nullptr, &Total) == VH_OK
 							   && Total.Type == VH_TYPE_INT && Total.Int == 15)
 				   && CallsOk;
@@ -2238,7 +2214,7 @@ int main(int argc, char** argv)
 		const vh_method_desc* ModuleMethods = nullptr;
 		int32_t ModuleMethodCount = 0;
 		CallsOk = Step("a module's class has a method list of its own",
-					   ClassMethodListFn("gameplay/module_probe", &ModuleMethods, &ModuleMethodCount) == VH_OK
+					   Host.ClassMethodList("gameplay/module_probe", &ModuleMethods, &ModuleMethodCount) == VH_OK
 						   && ModuleMethodCount > 0) && CallsOk;
 		// R-TOOL-12's half of the ABI: which module would an import have to name for this to
 		// resolve. module_probe is in `gameplay` and nothing else is in any module at all.
@@ -2246,22 +2222,22 @@ int main(int argc, char** argv)
 			const vh_module_ref* Found = nullptr;
 			int32_t FoundCount = 0;
 			CallsOk = Step("vh_resolve_unknown_name finds the module declaring a name",
-						   ResolveUnknownNameFn("module_probe", &Found, &FoundCount) == VH_OK
+						   Host.ResolveUnknownName("module_probe", &Found, &FoundCount) == VH_OK
 							   && FoundCount == 1
 							   && std::string(Found[0].PathUtf8, Found[0].PathLen) == "gameplay") && CallsOk;
 			CallsOk = Step("a name in the root module needs no import and so is no answer",
-						   ResolveUnknownNameFn("reload_probe", &Found, &FoundCount) == VH_OK
+						   Host.ResolveUnknownName("reload_probe", &Found, &FoundCount) == VH_OK
 							   && FoundCount == 0) && CallsOk;
 			CallsOk = Step("and a name the project does not declare has none either",
-						   ResolveUnknownNameFn("no_such_name_anywhere", &Found, &FoundCount) == VH_OK
+						   Host.ResolveUnknownName("no_such_name_anywhere", &Found, &FoundCount) == VH_OK
 							   && FoundCount == 0) && CallsOk;
 		}
 
-		ReleaseInstanceFn(InModule);
+		Host.ReleaseInstance(InModule);
 
 		vh_instance* Fresh = nullptr;
 		CallsOk = Step("the new generation's class is what resolves now",
-					   InstantiateFn("reload_probe", 4, &Fresh) == VH_OK && Fresh != nullptr) && CallsOk;
+					   Host.Instantiate("reload_probe", 4, &Fresh) == VH_OK && Fresh != nullptr) && CallsOk;
 		CallsOk = Step("and a fresh instance runs the edited code", ReadGeneration(Fresh) == 2) && CallsOk;
 
 		// The whole no-adoption rule, in one line: nothing transferred state, so the instance made
@@ -2269,8 +2245,8 @@ int main(int argc, char** argv)
 		CallsOk = Step("while the instance from generation 1 keeps its own class",
 					   ReadGeneration(GenerationOne) == 1) && CallsOk;
 
-		ReleaseInstanceFn(Fresh);
-		ReleaseInstanceFn(GenerationOne);
+		Host.ReleaseInstance(Fresh);
+		Host.ReleaseInstance(GenerationOne);
 
 		// --- and a third generation, built from the analysis before it ------------------------
 		//
@@ -2284,32 +2260,32 @@ int main(int argc, char** argv)
 		// this produced. The fixture's text is untouched, so it still reports 2.
 		const std::string OnDisk = ReadFileUtf8(ReloadPath);
 		CallsOk = Step("an analysis of what is on disk, before the build",
-					   !OnDisk.empty() && CheckProjectFn(ReloadPathUtf8.c_str(), OnDisk.c_str()) == VH_OK)
+					   !OnDisk.empty() && Host.CheckProject(ReloadPathUtf8.c_str(), OnDisk.c_str()) == VH_OK)
 			   && CallsOk;
 
 		int32_t ThirdGeneration = 0;
 		DiagnosticErrorCount = 0;
 		CallsOk = Step("a build with nothing edited since the analysis publishes",
-					   CompileProjectFn(SecondFiles, 8, &ThirdGeneration) == VH_OK) && CallsOk;
+					   Host.CompileProject(SecondFiles, 8, &ThirdGeneration) == VH_OK) && CallsOk;
 		CallsOk = Step("and reports generation 3", ThirdGeneration == 3) && CallsOk;
 		CallsOk = Step("saying nothing of its own", DiagnosticErrorCount == 0) && CallsOk;
 
 		vh_instance* Reused = nullptr;
 		CallsOk = Step("its class instantiates",
-					   InstantiateFn("reload_probe", 7, &Reused) == VH_OK && Reused != nullptr) && CallsOk;
+					   Host.Instantiate("reload_probe", 7, &Reused) == VH_OK && Reused != nullptr) && CallsOk;
 		CallsOk = Step("and runs the code the long way had already built", ReadGeneration(Reused) == 2)
 			   && CallsOk;
-		ReleaseInstanceFn(Reused);
+		Host.ReleaseInstance(Reused);
 	}
 
 	// The check that the verse path the host builds for a script's class --
 	// /user@localhost/<file stem> -- is the one the semantic program actually files it under;
 	// everything about exports depends on that string being right.
-	Step("vh_has_class exports", HasClassFn("exports") != 0);
+	Step("vh_has_class exports", Host.HasClass("exports") != 0);
 
 	const vh_export_desc* Exports = nullptr;
 	int32_t ExportCount = 0;
-	bool ExportsOk = Step("vh_class_export_list", ClassExportListFn("exports", &Exports, &ExportCount) == VH_OK);
+	bool ExportsOk = Step("vh_class_export_list", Host.ClassExportList("exports", &Exports, &ExportCount) == VH_OK);
 	for (int32_t Index = 0; Index < ExportCount; ++Index)
 	{
 		// The hint and the rejection as well as the type: what an assertion below compares is
@@ -2515,41 +2491,41 @@ int main(int argc, char** argv)
 	// Defaults come off the CDO, whose Verse constructor has already run -- the semantic program
 	// can only say that an initializer exists, not what it evaluates to.
 	const vh_value* SpeedDefault = nullptr;
-	const bool SpeedRead = ClassDefaultFieldFn("exports", "Speed", &SpeedDefault) == VH_OK && SpeedDefault != nullptr;
+	const bool SpeedRead = Host.ClassDefaultField("exports", "Speed", &SpeedDefault) == VH_OK && SpeedDefault != nullptr;
 	Step("vh_class_default_field Speed", SpeedRead);
 	Step("Speed defaults to 60.0", SpeedRead && SpeedDefault->Type == VH_TYPE_FLOAT && SpeedDefault->Float == 60.0);
 
 	const vh_value* ScaleDefault = nullptr;
-	const bool ScaleRead = ClassDefaultFieldFn("exports", "Scale", &ScaleDefault) == VH_OK && ScaleDefault != nullptr;
+	const bool ScaleRead = Host.ClassDefaultField("exports", "Scale", &ScaleDefault) == VH_OK && ScaleDefault != nullptr;
 	Step("vh_class_default_field Scale (var float)", ScaleRead);
 	Step("Scale defaults to 1.5", ScaleRead && ScaleDefault->Type == VH_TYPE_FLOAT && ScaleDefault->Float == 1.5);
 
 	const vh_value* EnabledDefault = nullptr;
-	const bool EnabledRead = ClassDefaultFieldFn("exports", "Enabled", &EnabledDefault) == VH_OK && EnabledDefault != nullptr;
+	const bool EnabledRead = Host.ClassDefaultField("exports", "Enabled", &EnabledDefault) == VH_OK && EnabledDefault != nullptr;
 	Step("vh_class_default_field Enabled (var logic)", EnabledRead);
 
 	const vh_value* LabelDefault = nullptr;
-	const bool LabelRead = ClassDefaultFieldFn("exports", "Label", &LabelDefault) == VH_OK && LabelDefault != nullptr;
+	const bool LabelRead = Host.ClassDefaultField("exports", "Label", &LabelDefault) == VH_OK && LabelDefault != nullptr;
 	Step("vh_class_default_field Label", LabelRead);
 	Step("Label defaults to \"hello\"",
 		 LabelRead && LabelDefault->Type == VH_TYPE_STRING &&
 			 std::string(LabelDefault->String.Utf8, LabelDefault->String.Len) == "hello");
 
-	Step("absent field reports not found", ClassDefaultFieldFn("exports", "NoSuchMember", &SpeedDefault) == VH_ERR_NOT_FOUND);
+	Step("absent field reports not found", Host.ClassDefaultField("exports", "NoSuchMember", &SpeedDefault) == VH_ERR_NOT_FOUND);
 
 	// Write path, against a live instance. Handle 1 is never dereferenced here -- the smoke
 	// harness answers every Godot callback with a stub -- and reading a data member never
 	// consults it.
 	vh_instance* Instance = nullptr;
-	if (Step("vh_instantiate exports", InstantiateFn("exports", 1, &Instance) == VH_OK && Instance != nullptr))
+	if (Step("vh_instantiate exports", Host.Instantiate("exports", 1, &Instance) == VH_OK && Instance != nullptr))
 	{
 		auto RoundTrip = [&](const char* Name, const vh_value& In, auto Check) {
-			if (SetFieldFn(Instance, Name, &In) != VH_OK)
+			if (Host.InstanceSetField(Instance, Name, &In) != VH_OK)
 			{
 				return false;
 			}
 			const vh_value* Out = nullptr;
-			return GetFieldFn(Instance, Name, &Out) == VH_OK && Out != nullptr && Check(*Out);
+			return Host.InstanceGetField(Instance, Name, &Out) == VH_OK && Out != nullptr && Check(*Out);
 		};
 
 		vh_value NewFloat{};
@@ -2582,7 +2558,7 @@ int main(int argc, char** argv)
 				 return V.Type == VH_TYPE_STRING && std::string(V.String.Utf8, V.String.Len) == "changed";
 			 }));
 
-		Step("setting an absent member reports not found", SetFieldFn(Instance, "NoSuchMember", &NewFloat) == VH_ERR_NOT_FOUND);
+		Step("setting an absent member reports not found", Host.InstanceSetField(Instance, "NoSuchMember", &NewFloat) == VH_ERR_NOT_FOUND);
 
 		// A reference. The handle is never dereferenced -- every Godot callback here is a stub that
 		// reports a dead object -- and nothing below needs one to be alive: what is being checked is
@@ -2619,7 +2595,7 @@ int main(int argc, char** argv)
 		// A struct reads and writes as a tuple of its components, in Godot's order.
 		const vh_value* OffsetValue = nullptr;
 		Step("a struct reads as its components",
-			 GetFieldFn(Instance, "Offset", &OffsetValue) == VH_OK && OffsetValue != nullptr
+			 Host.InstanceGetField(Instance, "Offset", &OffsetValue) == VH_OK && OffsetValue != nullptr
 				 && OffsetValue->Type == VH_TYPE_TUPLE && OffsetValue->VariantTag == VH_VARIANT_VECTOR2
 				 && OffsetValue->Seq.Count == 2 && OffsetValue->Seq.Items[0].Float == 1.0
 				 && OffsetValue->Seq.Items[1].Float == 2.0);
@@ -2643,12 +2619,12 @@ int main(int argc, char** argv)
 			 [&] {
 				 vh_value Short = NewOffset;
 				 Short.Seq.Count = 1;
-				 return SetFieldFn(Instance, "Offset", &Short) == VH_ERR_NOT_FOUND;
+				 return Host.InstanceSetField(Instance, "Offset", &Short) == VH_ERR_NOT_FOUND;
 			 }());
 
 		const vh_value* TintValue = nullptr;
 		Step("a four-component struct reads in Godot's order",
-			 GetFieldFn(Instance, "Tint", &TintValue) == VH_OK && TintValue != nullptr
+			 Host.InstanceGetField(Instance, "Tint", &TintValue) == VH_OK && TintValue != nullptr
 				 && TintValue->Seq.Count == 4 && TintValue->Seq.Items[0].Float == 0.25
 				 && TintValue->Seq.Items[2].Float == 0.75);
 
@@ -2656,20 +2632,20 @@ int main(int argc, char** argv)
 		// again from Verse further down, which is the half that can fail.
 		const vh_value* SpeedsValue = nullptr;
 		Step("an array reads as its elements",
-			 GetFieldFn(Instance, "Speeds", &SpeedsValue) == VH_OK && SpeedsValue != nullptr
+			 Host.InstanceGetField(Instance, "Speeds", &SpeedsValue) == VH_OK && SpeedsValue != nullptr
 				 && SpeedsValue->Type == VH_TYPE_ARRAY
 				 && SpeedsValue->VariantTag == VH_VARIANT_PACKED_FLOAT64_ARRAY
 				 && SpeedsValue->Seq.Count == 2 && SpeedsValue->Seq.Items[1].Float == 2.0);
 
 		const vh_value* NamesValue = nullptr;
 		Step("a string array reads as strings",
-			 GetFieldFn(Instance, "Names", &NamesValue) == VH_OK && NamesValue != nullptr
+			 Host.InstanceGetField(Instance, "Names", &NamesValue) == VH_OK && NamesValue != nullptr
 				 && NamesValue->Seq.Count == 2
 				 && std::string(NamesValue->Seq.Items[1].String.Utf8, NamesValue->Seq.Items[1].String.Len) == "bc");
 
 		const vh_value* PathValue = nullptr;
 		Step("an array of structs reads as a tuple per element",
-			 GetFieldFn(Instance, "Path", &PathValue) == VH_OK && PathValue != nullptr
+			 Host.InstanceGetField(Instance, "Path", &PathValue) == VH_OK && PathValue != nullptr
 				 && PathValue->VariantTag == VH_VARIANT_PACKED_VECTOR2_ARRAY && PathValue->Seq.Count == 1
 				 && PathValue->Seq.Items[0].Type == VH_TYPE_TUPLE
 				 && PathValue->Seq.Items[0].Seq.Count == 2
@@ -2760,7 +2736,7 @@ int main(int argc, char** argv)
 		// An enum reads as the ordinal of the enumerator it holds, and is written with one.
 		const vh_value* ModeValue = nullptr;
 		Step("an enum reads as its ordinal",
-			 GetFieldFn(Instance, "Mode", &ModeValue) == VH_OK && ModeValue != nullptr
+			 Host.InstanceGetField(Instance, "Mode", &ModeValue) == VH_OK && ModeValue != nullptr
 				 && ModeValue->Type == VH_TYPE_INT && ModeValue->Int == 1);
 
 		vh_value NewMode{};
@@ -2775,34 +2751,34 @@ int main(int argc, char** argv)
 		PastTheEnd.Type = VH_TYPE_INT;
 		PastTheEnd.Int = 3;
 		Step("an ordinal past the last enumerator is refused, not clamped",
-			 SetFieldFn(Instance, "Mode", &PastTheEnd) == VH_ERR_NOT_FOUND);
+			 Host.InstanceSetField(Instance, "Mode", &PastTheEnd) == VH_ERR_NOT_FOUND);
 		Step("and the refused write left the enumerator alone",
-			 GetFieldFn(Instance, "Mode", &ModeValue) == VH_OK && ModeValue != nullptr && ModeValue->Int == 2);
+			 Host.InstanceGetField(Instance, "Mode", &ModeValue) == VH_OK && ModeValue != nullptr && ModeValue->Int == 2);
 
 		// A member typed as one of the project's own classes refuses a handle: the object it should
 		// hold already exists, and vh_instance_set_field_instance is how it is handed over.
 		Step("a script-class reference refuses a bare handle",
-			 SetFieldFn(Instance, "Friend", &NewTarget) == VH_ERR_NOT_FOUND);
+			 Host.InstanceSetField(Instance, "Friend", &NewTarget) == VH_ERR_NOT_FOUND);
 
 		vh_instance* Friend = nullptr;
-		if (Step("vh_instantiate exports_probe", InstantiateFn("exports_probe", 2, &Friend) == VH_OK && Friend != nullptr))
+		if (Step("vh_instantiate exports_probe", Host.Instantiate("exports_probe", 2, &Friend) == VH_OK && Friend != nullptr))
 		{
 			Step("a script-class reference takes another instance",
-				 SetFieldInstanceFn(Instance, "Friend", Friend) == VH_OK);
+				 Host.InstanceSetFieldInstance(Instance, "Friend", Friend) == VH_OK);
 			const vh_value* FriendValue = nullptr;
 			Step("and reads back as that node's handle",
-				 GetFieldFn(Instance, "Friend", &FriendValue) == VH_OK && FriendValue != nullptr
+				 Host.InstanceGetField(Instance, "Friend", &FriendValue) == VH_OK && FriendValue != nullptr
 					 && FriendValue->Type == VH_TYPE_INT && FriendValue->Int == 2);
-			Step("a null clears it", SetFieldInstanceFn(Instance, "Friend", nullptr) == VH_OK);
+			Step("a null clears it", Host.InstanceSetFieldInstance(Instance, "Friend", nullptr) == VH_OK);
 
 			// exports_probe is a node2d, so it is a value a `?node2d` may hold -- and holding the
 			// object that already exists beats building a second wrapper around its handle.
 			Step("a mirrored reference takes an instance too",
-				 SetFieldInstanceFn(Instance, "Target", Friend) == VH_OK);
+				 Host.InstanceSetFieldInstance(Instance, "Target", Friend) == VH_OK);
 			// Maybe is a ?float, which no object is.
 			Step("a member that is not a reference refuses one",
-				 SetFieldInstanceFn(Instance, "Maybe", Friend) == VH_ERR_NOT_FOUND);
-			ReleaseInstanceFn(Friend);
+				 Host.InstanceSetFieldInstance(Instance, "Maybe", Friend) == VH_ERR_NOT_FOUND);
+			Host.ReleaseInstance(Friend);
 		}
 
 
@@ -2812,10 +2788,10 @@ int main(int argc, char** argv)
 		// here rather than reporting a plausible number.
 		auto Read = [&](const char* Name) {
 			const vh_value* Out = nullptr;
-			return GetFieldFn(Instance, Name, &Out) == VH_OK && Out != nullptr ? Out : nullptr;
+			return Host.InstanceGetField(Instance, Name, &Out) == VH_OK && Out != nullptr ? Out : nullptr;
 		};
 
-		const bool BumpOk = CallVoid(InstanceCallFn, Instance, "(/user@localhost/exports:)Bump") == VH_OK;
+		const bool BumpOk = CallVoid(Host.InstanceCall, Instance, "(/user@localhost/exports:)Bump") == VH_OK;
 		Step("Verse can read and assign the members it was handed", BumpOk);
 		const vh_value* ScaleAfterBump = Read("Scale");
 		Step("Verse read both a var and a non-var it was handed",
@@ -2826,7 +2802,7 @@ int main(int argc, char** argv)
 
 		// Separate from Bump because a string var is stored as a mutable container rather than as
 		// a box around an immutable one, so it is the case a scalar var cannot stand in for.
-		const bool BumpLabelOk = CallVoid(InstanceCallFn, Instance, "(/user@localhost/exports:)BumpLabel") == VH_OK;
+		const bool BumpLabelOk = CallVoid(Host.InstanceCall, Instance, "(/user@localhost/exports:)BumpLabel") == VH_OK;
 		Step("Verse can read and assign a string var", BumpLabelOk);
 		const vh_value* LabelAfterBump = Read("Label");
 		Step("a Verse assignment to a string var is visible across the ABI",
@@ -2837,13 +2813,13 @@ int main(int argc, char** argv)
 		// counts for the same reason: a reference in the wrong representation round-trips through
 		// the ABI perfectly and dies inside the VM. Target is a var, so this still works sealed.
 		auto VerseSeesTarget = [&](const vh_value& Written) {
-			if (SetFieldFn(Instance, "Target", &Written) != VH_OK
-				|| CallVoid(InstanceCallFn, Instance, "(/user@localhost/exports:)ReadTarget") != VH_OK)
+			if (Host.InstanceSetField(Instance, "Target", &Written) != VH_OK
+				|| CallVoid(Host.InstanceCall, Instance, "(/user@localhost/exports:)ReadTarget") != VH_OK)
 			{
 				return -1;
 			}
 			const vh_value* Seen = nullptr;
-			if (GetFieldFn(Instance, "TargetSeen", &Seen) != VH_OK || Seen == nullptr || Seen->Type != VH_TYPE_LOGIC)
+			if (Host.InstanceGetField(Instance, "TargetSeen", &Seen) != VH_OK || Seen == nullptr || Seen->Type != VH_TYPE_LOGIC)
 			{
 				return -1;
 			}
@@ -2854,7 +2830,7 @@ int main(int argc, char** argv)
 
 		// And the same for a struct: reading a field goes through the object's own shape, so one
 		// built with the wrong emergent type fails here rather than reading back as what went in.
-		const bool ReadOffsetOk = CallVoid(InstanceCallFn, Instance, "(/user@localhost/exports:)ReadOffset") == VH_OK;
+		const bool ReadOffsetOk = CallVoid(Host.InstanceCall, Instance, "(/user@localhost/exports:)ReadOffset") == VH_OK;
 		const vh_value* OffsetSeen = Read("OffsetSeen");
 		Step("Verse reads a field off a struct it was handed",
 			 ReadOffsetOk && OffsetSeen && OffsetSeen->Type == VH_TYPE_FLOAT
@@ -2867,7 +2843,7 @@ int main(int argc, char** argv)
 		// Speeds[1] = 11.0, Counts[0] = 7 (never written), Names[1] = "bc" scores 100, Flags[0] true
 		// scores 1000, Path[0].Y = 2.0.
 		auto VerseReadsArray = [&](const char* Function) {
-			if (CallVoid(InstanceCallFn, Instance, Function) != VH_OK)
+			if (CallVoid(Host.InstanceCall, Instance, Function) != VH_OK)
 			{
 				return -2.0;
 			}
@@ -2891,7 +2867,7 @@ int main(int argc, char** argv)
 		// Bump sealed the instance. From here Verse has observed the members, so the author's
 		// `var` is the whole of what may still change.
 		Step("writing a non-var member is refused once the instance is sealed",
-			 SetFieldFn(Instance, "Speed", &NewFloat) == VH_ERR_NOT_FOUND);
+			 Host.InstanceSetField(Instance, "Speed", &NewFloat) == VH_ERR_NOT_FOUND);
 		const vh_value* SpeedAfter = Read("Speed");
 		Step("the refused write left the value alone",
 			 SpeedAfter && SpeedAfter->Type == VH_TYPE_FLOAT && SpeedAfter->Float == 3.0);
@@ -2904,7 +2880,7 @@ int main(int argc, char** argv)
 		// entry point, so a failure here is the dispatch core rather than a fixture.
 		{
 			auto Call = [&](const char* Decorated, const vh_value* Args, int32_t ArgCount, vh_value& Result) {
-				return InstanceCallFn(Instance, Decorated, Args, ArgCount, nullptr, &Result);
+				return Host.InstanceCall(Instance, Decorated, Args, ArgCount, nullptr, &Result);
 			};
 
 			vh_value IntArgs[2] = {};
@@ -2985,8 +2961,8 @@ int main(int argc, char** argv)
 		{
 			const int ErrorsBefore = RuntimeErrorCount;
 			// Target holds a handle the harness reports dead, so reaching through it raises.
-			SetFieldFn(Instance, "Target", &NewTarget);
-			const int32_t Status = CallVoid(InstanceCallFn, Instance, "(/user@localhost/exports:)TouchTarget");
+			Host.InstanceSetField(Instance, "Target", &NewTarget);
+			const int32_t Status = CallVoid(Host.InstanceCall, Instance, "(/user@localhost/exports:)TouchTarget");
 			Step("a method that raises answers VH_ERR_RUNTIME", Status == VH_ERR_RUNTIME);
 			Step("and the error reached the runtime error callback", RuntimeErrorCount > ErrorsBefore);
 			// The raise happens inside the mirrored QueueFree, so that is the innermost located
@@ -3026,7 +3002,7 @@ int main(int argc, char** argv)
 			IntArgs[1].Int = 25;
 			vh_value Result{};
 			Step("the very next call, in the same frame, runs and returns its value",
-				 InstanceCallFn(Instance, "(/user@localhost/exports:)AddInts(:int,:int)", IntArgs, 2, nullptr, &Result) == VH_OK
+				 Host.InstanceCall(Instance, "(/user@localhost/exports:)AddInts(:int,:int)", IntArgs, 2, nullptr, &Result) == VH_OK
 					 && Result.Type == VH_TYPE_INT && Result.Int == 42);
 
 			// The half that matters most, and the half nobody checked when the project-wide rule
@@ -3034,7 +3010,7 @@ int main(int argc, char** argv)
 			const vh_value* BeforeBump = Read("Scale");
 			const double ScaleBeforeBump = BeforeBump ? BeforeBump->Float : -1.0;
 			Step("and a void method has its effect",
-				 CallVoid(InstanceCallFn, Instance, "(/user@localhost/exports:)Bump") == VH_OK);
+				 CallVoid(Host.InstanceCall, Instance, "(/user@localhost/exports:)Bump") == VH_OK);
 			const vh_value* AfterBump = Read("Scale");
 			Step("which the member shows",
 				 AfterBump != nullptr && AfterBump->Float != ScaleBeforeBump);
@@ -3042,7 +3018,7 @@ int main(int argc, char** argv)
 			vh_value Ninety{};
 			Ninety.Type = VH_TYPE_FLOAT;
 			Ninety.Float = 90.0;
-			Step("a write lands rather than being refused", SetFieldFn(Instance, "Scale", &Ninety) == VH_OK);
+			Step("a write lands rather than being refused", Host.InstanceSetField(Instance, "Scale", &Ninety) == VH_OK);
 
 			// A read is a question rather than script code, and always was answered.
 			const vh_value* ScaleAfterRaise = Read("Scale");
@@ -3051,16 +3027,16 @@ int main(int argc, char** argv)
 
 			vh_instance* AfterRaise = nullptr;
 			Step("and another class instantiates in the same frame",
-				 InstantiateFn("exports_probe", 9, &AfterRaise) == VH_OK && AfterRaise != nullptr);
-			ReleaseInstanceFn(AfterRaise);
+				 Host.Instantiate("exports_probe", 9, &AfterRaise) == VH_OK && AfterRaise != nullptr);
+			Host.ReleaseInstance(AfterRaise);
 
-			TickFn(0.004, nullptr);
+			Host.Tick(0.004, nullptr);
 			Step("ticking after all that changes nothing, because nothing was waiting for it",
-				 InstanceCallFn(Instance, "(/user@localhost/exports:)AddInts(:int,:int)", IntArgs, 2, nullptr, &Result) == VH_OK
+				 Host.InstanceCall(Instance, "(/user@localhost/exports:)AddInts(:int,:int)", IntArgs, 2, nullptr, &Result) == VH_OK
 					 && Result.Int == 42);
 		}
 
-		ReleaseInstanceFn(Instance);
+		Host.ReleaseInstance(Instance);
 	}
 
 	// --- R-ASYNC-1/4: tasks, and what a raise costs ------------------------------------------
@@ -3071,11 +3047,11 @@ int main(int argc, char** argv)
 	{
 		auto TaskCall = [&](vh_instance* Target, const char* Decorated) {
 			vh_value Ignored{};
-			return InstanceCallFn(Target, Decorated, nullptr, 0, nullptr, &Ignored);
+			return Host.InstanceCall(Target, Decorated, nullptr, 0, nullptr, &Ignored);
 		};
 		auto TaskRead = [&](vh_instance* Target, const char* Decorated) {
 			vh_value Result{};
-			if (InstanceCallFn(Target, Decorated, nullptr, 0, nullptr, &Result) != VH_OK
+			if (Host.InstanceCall(Target, Decorated, nullptr, 0, nullptr, &Result) != VH_OK
 				|| Result.Type != VH_TYPE_INT)
 			{
 				return (int64_t)-1;
@@ -3085,8 +3061,8 @@ int main(int argc, char** argv)
 
 		vh_instance* One = nullptr;
 		vh_instance* Two = nullptr;
-		const bool Made = InstantiateFn("tasks", 101, &One) == VH_OK && One != nullptr
-			&& InstantiateFn("tasks", 102, &Two) == VH_OK && Two != nullptr;
+		const bool Made = Host.Instantiate("tasks", 101, &One) == VH_OK && One != nullptr
+			&& Host.Instantiate("tasks", 102, &Two) == VH_OK && Two != nullptr;
 		Step("two instances of the task fixture", Made);
 
 		if (Made)
@@ -3101,7 +3077,7 @@ int main(int argc, char** argv)
 				 TaskRead(One, "(/user@localhost/tasks:)ReadSeen") == 0);
 
 			// Across a tick, which is the half of R-ASYNC-1 that a single call cannot show.
-			TickFn(0.004, nullptr);
+			Host.Tick(0.004, nullptr);
 			Step("the task is still suspended after a tick",
 				 TaskRead(One, "(/user@localhost/tasks:)ReadSeen") == 0);
 
@@ -3110,7 +3086,7 @@ int main(int argc, char** argv)
 			FireArg.Int = 7;
 			vh_value Ignored{};
 			Step("and resumes inside the call that signals it",
-				 InstanceCallFn(One, "(/user@localhost/tasks:)Fire(:int)", &FireArg, 1, nullptr, &Ignored) == VH_OK
+				 Host.InstanceCall(One, "(/user@localhost/tasks:)Fire(:int)", &FireArg, 1, nullptr, &Ignored) == VH_OK
 					 && TaskRead(One, "(/user@localhost/tasks:)ReadSeen") == 7);
 
 			// D4: work with no event behind it is what `vh_tick` is for. `Sleep(0.0)` means
@@ -3118,7 +3094,7 @@ int main(int argc, char** argv)
 			Step("a sleeping task has not resumed before the tick",
 				 TaskCall(One, "(/user@localhost/tasks:)StartNap") == VH_OK
 					 && TaskRead(One, "(/user@localhost/tasks:)ReadNapped") == 0);
-			TickFn(0.004, nullptr);
+			Host.Tick(0.004, nullptr);
 			Step("and has after it",
 				 TaskRead(One, "(/user@localhost/tasks:)ReadNapped") == 1);
 
@@ -3132,19 +3108,19 @@ int main(int argc, char** argv)
 
 			FireArg.Int = 11;
 			Step("the other instance's suspended task is still there, and resumes",
-				 InstanceCallFn(Two, "(/user@localhost/tasks:)Fire(:int)", &FireArg, 1, nullptr, &Ignored) == VH_OK
+				 Host.InstanceCall(Two, "(/user@localhost/tasks:)Fire(:int)", &FireArg, 1, nullptr, &Ignored) == VH_OK
 					 && TaskRead(Two, "(/user@localhost/tasks:)ReadSeen") == 11);
 
 			// And the raising instance is usable again at its very next call, with a fresh scope
 			// rather than a revived one (D24) -- so the task it lost stays lost and a new one runs.
 			FireArg.Int = 13;
-			InstanceCallFn(One, "(/user@localhost/tasks:)Fire(:int)", &FireArg, 1, nullptr, &Ignored);
+			Host.InstanceCall(One, "(/user@localhost/tasks:)Fire(:int)", &FireArg, 1, nullptr, &Ignored);
 			Step("while the raising instance's own task was cancelled",
 				 TaskRead(One, "(/user@localhost/tasks:)ReadSeen") == 7);
 			Step("and it can start another immediately",
 				 TaskCall(One, "(/user@localhost/tasks:)StartWait") == VH_OK);
 			FireArg.Int = 19;
-			InstanceCallFn(One, "(/user@localhost/tasks:)Fire(:int)", &FireArg, 1, nullptr, &Ignored);
+			Host.InstanceCall(One, "(/user@localhost/tasks:)Fire(:int)", &FireArg, 1, nullptr, &Ignored);
 			Step("which runs", TaskRead(One, "(/user@localhost/tasks:)ReadSeen") == 19);
 
 			// A raise from inside a *task* rather than from a call. Nothing returns VH_ERR_RUNTIME
@@ -3152,7 +3128,7 @@ int main(int argc, char** argv)
 			// instance survives it.
 			const int ErrorsBeforeTaskRaise = RuntimeErrorCount;
 			TaskCall(Two, "(/user@localhost/tasks:)StartRaiser");
-			TickFn(0.004, nullptr);
+			Host.Tick(0.004, nullptr);
 			Step("a raise inside a task is reported", RuntimeErrorCount > ErrorsBeforeTaskRaise);
 			Step("and the instance is callable afterwards",
 				 TaskRead(Two, "(/user@localhost/tasks:)ReadSeen") == 11);
@@ -3161,10 +3137,10 @@ int main(int argc, char** argv)
 			// is asserted is that it is not an error -- a leak or a use-after-free would show as a
 			// crash on the next tick rather than as a failed step.
 			TaskCall(Two, "(/user@localhost/tasks:)StartWait");
-			ReleaseInstanceFn(Two);
-			TickFn(0.004, nullptr);
+			Host.ReleaseInstance(Two);
+			Host.Tick(0.004, nullptr);
 			Step("releasing an instance with a suspended task is not an error", true);
-			ReleaseInstanceFn(One);
+			Host.ReleaseInstance(One);
 		}
 	}
 
@@ -3176,7 +3152,7 @@ int main(int argc, char** argv)
 	{
 		auto ObjCall = [&](vh_instance* Target, const char* Decorated) {
 			vh_value Result{};
-			if (InstanceCallFn(Target, Decorated, nullptr, 0, nullptr, &Result) != VH_OK
+			if (Host.InstanceCall(Target, Decorated, nullptr, 0, nullptr, &Result) != VH_OK
 				|| Result.Type != VH_TYPE_INT)
 			{
 				return (int64_t)-1;
@@ -3186,7 +3162,7 @@ int main(int argc, char** argv)
 
 		const int MintedBeforeInstance = PeersMinted;
 		vh_instance* Objects = nullptr;
-		const bool Made = InstantiateFn("objects", 201, &Objects) == VH_OK && Objects != nullptr;
+		const bool Made = Host.Instantiate("objects", 201, &Objects) == VH_OK && Objects != nullptr;
 		Step("the R-NODE-3 fixture instantiates", Made);
 
 		// The failure docs/phase-4b-design.md 13 calls "the one that would not announce itself":
@@ -3229,7 +3205,7 @@ int main(int argc, char** argv)
 					// A call of its own, to give the registers that still name the dropped object
 					// something else to hold.
 					ObjCall(Objects, "(/user@localhost/objects:)Churn");
-					CollectGarbageFn();
+					Host.CollectGarbage();
 				}
 				return Reached();
 			};
@@ -3241,18 +3217,18 @@ int main(int argc, char** argv)
 
 			// The other half of the same rule, and the one a leak-hunting bug would break: a peer
 			// the script is still holding must survive every collection, not just the next one.
-			InstanceCallFn(Objects, "(/user@localhost/objects:)KeepOne", nullptr, 0, nullptr, nullptr);
+			Host.InstanceCall(Objects, "(/user@localhost/objects:)KeepOne", nullptr, 0, nullptr, nullptr);
 			const int LiveWithKept = PeersLive;
 			for (int Attempt = 0; Attempt < 4; ++Attempt)
 			{
 				ObjCall(Objects, "(/user@localhost/objects:)Churn");
-				CollectGarbageFn();
+				Host.CollectGarbage();
 			}
 			Step("a peer the script still holds survives a collection", PeersLive == LiveWithKept);
 			Step("and the value behind it is still readable",
 				 ObjCall(Objects, "(/user@localhost/objects:)ReadKept") == 7);
 
-			InstanceCallFn(Objects, "(/user@localhost/objects:)DropKept", nullptr, 0, nullptr, nullptr);
+			Host.InstanceCall(Objects, "(/user@localhost/objects:)DropKept", nullptr, 0, nullptr, nullptr);
 			Step("and is released once the script drops it",
 				 CollectUntil([&] { return PeersLive < LiveWithKept; }));
 
@@ -3262,13 +3238,13 @@ int main(int argc, char** argv)
 			const int DiscardedBefore = PeersDiscarded;
 			vh_value Ignored{};
 			Step("a computation that mints and then fails, fails",
-				 InstanceCallFn(Objects, "(/user@localhost/objects:)MintThenFail", nullptr, 0, nullptr, &Ignored)
+				 Host.InstanceCall(Objects, "(/user@localhost/objects:)MintThenFail", nullptr, 0, nullptr, &Ignored)
 					 == VH_ERR_FAILED);
 			Step("and the peer it made is given back as a discard, without waiting for a collection",
 				 PeersDiscarded == DiscardedBefore + 1);
 
-			ReleaseInstanceFn(Objects);
-			CollectGarbageFn();
+			Host.ReleaseInstance(Objects);
+			Host.CollectGarbage();
 			Step("releasing the instance releases no peer, because the node was never ours",
 				 PeersReleased <= PeersMinted);
 		}
@@ -3281,14 +3257,14 @@ int main(int argc, char** argv)
 	{
 		const char* Base = nullptr;
 		Step("vh_class_base_type on a class(object)",
-			 ClassBaseTypeFn("exports", &Base) == VH_OK && Base && std::string(Base) == "Object");
+			 Host.ClassBaseType("exports", &Base) == VH_OK && Base && std::string(Base) == "Object");
 		Base = nullptr;
 		Step("and on a class(node2d), which is two mirrored classes deeper",
-			 ClassBaseTypeFn("exports_unregistered", &Base) == VH_OK && Base
+			 Host.ClassBaseType("exports_unregistered", &Base) == VH_OK && Base
 				 && std::string(Base) == "Node2D");
 		Base = nullptr;
 		Step("a class the program does not carry answers not found",
-			 ClassBaseTypeFn("no_such_class", &Base) == VH_ERR_NOT_FOUND && Base == nullptr);
+			 Host.ClassBaseType("no_such_class", &Base) == VH_ERR_NOT_FOUND && Base == nullptr);
 	}
 
 	// --- ABI v2: the method list (R-NODE-9) --------------------------------------------------
@@ -3297,7 +3273,7 @@ int main(int argc, char** argv)
 
 		const vh_method_desc* Methods = nullptr;
 		int32_t MethodCount = 0;
-		const bool ListOk = ClassMethodListFn("exports", &Methods, &MethodCount) == VH_OK;
+		const bool ListOk = Host.ClassMethodList("exports", &Methods, &MethodCount) == VH_OK;
 		Step("vh_class_method_list", ListOk && MethodCount > 0);
 
 		auto Find = [&](const char* Name) -> const vh_method_desc* {
@@ -3383,7 +3359,7 @@ int main(int argc, char** argv)
 		// derived rather than tabulated, so this is the check that the derivation is right.
 		const vh_method_desc* ProbeMethods = nullptr;
 		int32_t ProbeCount = 0;
-		const bool ProbeOk = ClassMethodListFn("exports_probe", &ProbeMethods, &ProbeCount) == VH_OK;
+		const bool ProbeOk = Host.ClassMethodList("exports_probe", &ProbeMethods, &ProbeCount) == VH_OK;
 		const vh_method_desc* Physics = nullptr;
 		for (int32_t Index = 0; ProbeOk && Index < ProbeCount; ++Index)
 		{
@@ -3396,7 +3372,7 @@ int main(int argc, char** argv)
 			 Physics && Text(Physics->GodotVirtualUtf8, Physics->GodotVirtualLen) == "_physics_process");
 
 		Step("a class the project does not declare has no method list",
-			 ClassMethodListFn("no_such_class", &Methods, &MethodCount) == VH_ERR_NOT_FOUND);
+			 Host.ClassMethodList("no_such_class", &Methods, &MethodCount) == VH_ERR_NOT_FOUND);
 	}
 
 	Step("vh_tick", true);
@@ -3408,10 +3384,10 @@ int main(int argc, char** argv)
 	{
 		bool AsyncOk = true;
 		std::string CleanSource = ReadFileUtf8(ExportsPath);
-		AsyncOk = Step("vh_check_project_begin", CheckBeginFn(ExportsPathUtf8.c_str(), CleanSource.c_str()) == VH_OK) && AsyncOk;
-		AsyncOk = Step("vh_check_project_busy reports the analysis in flight", CheckBusyFn() != 0) && AsyncOk;
+		AsyncOk = Step("vh_check_project_begin", Host.CheckProjectBegin(ExportsPathUtf8.c_str(), CleanSource.c_str()) == VH_OK) && AsyncOk;
+		AsyncOk = Step("vh_check_project_busy reports the analysis in flight", Host.CheckProjectBusy() != 0) && AsyncOk;
 		AsyncOk = Step("a second begin while one is in flight is refused",
-					   CheckBeginFn(ExportsPathUtf8.c_str(), CleanSource.c_str()) != VH_OK) && AsyncOk;
+					   Host.CheckProjectBegin(ExportsPathUtf8.c_str(), CleanSource.c_str()) != VH_OK) && AsyncOk;
 
 		// The keystroke that opens completion lands here: an analysis is in flight and the editor
 		// asks, on the game thread, what the class could still override. It answers off the
@@ -3423,45 +3399,45 @@ int main(int argc, char** argv)
 			const vh_complete_item* Candidates = nullptr;
 			int32_t CandidateCount = 0;
 			const bool Answered =
-				OverrideCandidatesFn("exports_probe", &Candidates, &CandidateCount) == VH_OK && CandidateCount > 0;
+				Host.ClassOverrideCandidates("exports_probe", &Candidates, &CandidateCount) == VH_OK && CandidateCount > 0;
 			AsyncOk = Step("vh_class_override_candidates answers during an analysis", Answered) && AsyncOk;
-			AsyncOk = Step("and left it running rather than waiting it out", CheckBusyFn() != 0) && AsyncOk;
+			AsyncOk = Step("and left it running rather than waiting it out", Host.CheckProjectBusy() != 0) && AsyncOk;
 		}
 
 		vh_bool Finished = 0;
 		const uint64_t Deadline = GetTickCount64() + 30000;
 		while (!Finished && GetTickCount64() < Deadline)
 		{
-			CheckProjectPollFn(&Finished);
-			TickFn(0.004, nullptr);
+			Host.CheckProjectPoll(&Finished);
+			Host.Tick(0.004, nullptr);
 			Sleep(1); // a frame, roughly; the analysis takes ~750 ms of them
 		}
 		AsyncOk = Step("the analysis finished while the frame loop kept ticking", Finished != 0) && AsyncOk;
-		AsyncOk = Step("ticking throughout did not block execution", CheckBusyFn() == 0) && AsyncOk;
+		AsyncOk = Step("ticking throughout did not block execution", Host.CheckProjectBusy() == 0) && AsyncOk;
 
 		// A poll with nothing in flight must be a harmless no-op, since that is every other frame.
 		vh_bool Spurious = 1;
-		CheckProjectPollFn(&Spurious);
+		Host.CheckProjectPoll(&Spurious);
 		AsyncOk = Step("polling with nothing in flight reports nothing", Spurious == 0) && AsyncOk;
 
 		// Diagnostics still have to come back, and only through the poll.
 		std::string BrokenSource = CleanSource + "\nthis is not verse <<<\n";
 		DiagnosticCount = 0;
-		if (CheckBeginFn(ExportsPathUtf8.c_str(), BrokenSource.c_str()) == VH_OK)
+		if (Host.CheckProjectBegin(ExportsPathUtf8.c_str(), BrokenSource.c_str()) == VH_OK)
 		{
 			Finished = 0;
 			const uint64_t BrokenDeadline = GetTickCount64() + 30000;
 			while (!Finished && GetTickCount64() < BrokenDeadline)
 			{
-				CheckProjectPollFn(&Finished);
-				TickFn(0.004, nullptr);
+				Host.CheckProjectPoll(&Finished);
+				Host.Tick(0.004, nullptr);
 				Sleep(1);
 			}
 		}
 		AsyncOk = Step("a broken buffer's diagnostics arrive from the poll", DiagnosticCount > 0) && AsyncOk;
 
 		// Put the good text back, so nothing after this sees the broken parse.
-		CheckProjectFn(ExportsPathUtf8.c_str(), CleanSource.c_str());
+		Host.CheckProject(ExportsPathUtf8.c_str(), CleanSource.c_str());
 
 		// The demo's own script, analysed by standing in for this fixture's buffer: every type it
 		// names is in this package too, and its own top-level names do not collide with the ones it
@@ -3470,9 +3446,9 @@ int main(int argc, char** argv)
 		const std::string DemoSource = ReadFileUtf8(VerseBase / "demo" / "scripts" / "mover.verse");
 		AsyncOk = Step("the demo's mover.verse analyses",
 					   !DemoSource.empty()
-						   && CheckProjectFn(ExportsPathUtf8.c_str(), DemoSource.c_str()) == VH_OK)
+						   && Host.CheckProject(ExportsPathUtf8.c_str(), DemoSource.c_str()) == VH_OK)
 			   && AsyncOk;
-		CheckProjectFn(ExportsPathUtf8.c_str(), CleanSource.c_str());
+		Host.CheckProject(ExportsPathUtf8.c_str(), CleanSource.c_str());
 
 		CallsOk = AsyncOk && CallsOk;
 	}
@@ -3488,20 +3464,20 @@ int main(int argc, char** argv)
 		vh_instance* Probe = nullptr;
 		vh_instance* Other = nullptr;
 		DebugOk = Step("vh_instantiate debug_probe",
-					   InstantiateFn("debug_probe", 91, &Probe) == VH_OK && Probe != nullptr) && DebugOk;
+					   Host.Instantiate("debug_probe", 91, &Probe) == VH_OK && Probe != nullptr) && DebugOk;
 		DebugOk = Step("vh_instantiate a second debug_probe",
-					   InstantiateFn("debug_probe", 92, &Other) == VH_OK && Other != nullptr) && DebugOk;
+					   Host.Instantiate("debug_probe", 92, &Other) == VH_OK && Other != nullptr) && DebugOk;
 
 		int32_t NotStoppedCount = 0;
 		DebugOk = Step("the reads answer VH_ERR_STATE with nothing stopped",
-					   DebugStackCountFn(&NotStoppedCount) == VH_ERR_STATE) && DebugOk;
+					   Host.DebugStackCount(&NotStoppedCount) == VH_ERR_STATE) && DebugOk;
 
 		Debugger = SmokeDebugger{};
-		DebugOk = Step("vh_debug_set_enabled(true)", DebugSetEnabledFn(1) == VH_OK) && DebugOk;
+		DebugOk = Step("vh_debug_set_enabled(true)", Host.DebugSetEnabled(1) == VH_OK) && DebugOk;
 
 		// S-1 and S-4: run one method with nothing armed, and look at what the host asked about.
 		{
-			CallVoid(InstanceCallFn, Probe, "(/user@localhost/debug_probe:)Count");
+			CallVoid(Host.InstanceCall, Probe, "(/user@localhost/debug_probe:)Count");
 
 			DebugOk = Step("Notify reached the consumer while attached", Debugger.Asks > 0) && DebugOk;
 
@@ -3560,28 +3536,28 @@ int main(int argc, char** argv)
 			Debugger.BreakLine = 21;
 			Debugger.OnStop = [&] {
 				// Everything a stop can be asked, read once. Godot asks the same three questions.
-				DebugStackCountFn(&StackDepth);
+				Host.DebugStackCount(&StackDepth);
 
 				const vh_debug_frame* Frame = nullptr;
-				if (DebugStackFrameFn(0, &Frame) == VH_OK && Frame)
+				if (Host.DebugStackFrame(0, &Frame) == VH_OK && Frame)
 				{
 					InnerName.assign(Frame->NameUtf8, static_cast<size_t>(Frame->NameLen));
 					InnerPath.assign(Frame->PathUtf8, static_cast<size_t>(Frame->PathLen));
 					InnerLine = Frame->Line;
 				}
 
-				CollectDebugValues(DebugStackValuesFn, 0, VH_DEBUG_LOCALS, Locals);
-				CollectDebugValues(DebugStackValuesFn, 0, VH_DEBUG_MEMBERS, Members);
+				CollectDebugValues(Host.DebugStackValues, 0, VH_DEBUG_LOCALS, Locals);
+				CollectDebugValues(Host.DebugStackValues, 0, VH_DEBUG_MEMBERS, Members);
 
 				// S-3: re-entering the VM from inside a stop. A different instance's method and a
 				// field read on the stopped one, which is what Godot's remote scene tree does while
 				// the debug loop runs.
-				NestedCallStatus = CallVoid(InstanceCallFn, Other, "(/user@localhost/debug_probe:)Tick");
+				NestedCallStatus = CallVoid(Host.InstanceCall, Other, "(/user@localhost/debug_probe:)Tick");
 				const vh_value* FieldValue = nullptr;
-				NestedFieldStatus = GetFieldFn(Probe, "Health", &FieldValue);
+				NestedFieldStatus = Host.InstanceGetField(Probe, "Health", &FieldValue);
 			};
 
-			const int32_t Status = CallVoid(InstanceCallFn, Probe, "(/user@localhost/debug_probe:)Count");
+			const int32_t Status = CallVoid(Host.InstanceCall, Probe, "(/user@localhost/debug_probe:)Count");
 			DebugOk = Step("a breakpoint stops the script", Debugger.Stops > 0) && DebugOk;
 			DebugOk = Step("and stops there once, not once per op", Debugger.Stops == 1) && DebugOk;
 			DebugOk = Step("the call ran to completion after continuing", Status == VH_OK) && DebugOk;
@@ -3643,25 +3619,25 @@ int main(int argc, char** argv)
 					return;
 				}
 				const vh_debug_frame* Frame = nullptr;
-				if (DebugStackFrameFn(0, &Frame) == VH_OK && Frame)
+				if (Host.DebugStackFrame(0, &Frame) == VH_OK && Frame)
 				{
 					StepFunction.assign(Frame->NameUtf8, static_cast<size_t>(Frame->NameLen));
 					StepLine = Frame->Line;
 				}
 				Debugger.LinesLeft = -1;
 			};
-			CallVoid(InstanceCallFn, Probe, "(/user@localhost/debug_probe:)Count");
+			CallVoid(Host.InstanceCall, Probe, "(/user@localhost/debug_probe:)Count");
 			printf("[smoke] step-over from Count:13 landed in %s:%d\n", StepFunction.c_str(), StepLine);
 			DebugOk = Step("step-over stays in the frame it stepped from", StepFunction == "Count") && DebugOk;
 			DebugOk = Step("and lands on the next line", StepLine == 14) && DebugOk;
 		}
 
-		DebugOk = Step("vh_debug_set_enabled(false)", DebugSetEnabledFn(0) == VH_OK) && DebugOk;
+		DebugOk = Step("vh_debug_set_enabled(false)", Host.DebugSetEnabled(0) == VH_OK) && DebugOk;
 		{
 			Debugger = SmokeDebugger{};
 			Debugger.BreakPathSuffix = "debug_probe.verse";
 			Debugger.BreakLine = 21;
-			CallVoid(InstanceCallFn, Probe, "(/user@localhost/debug_probe:)Count");
+			CallVoid(Host.InstanceCall, Probe, "(/user@localhost/debug_probe:)Count");
 			DebugOk = Step("Notify stops firing once detached", Debugger.Asks == 0) && DebugOk;
 		}
 
@@ -3670,21 +3646,21 @@ int main(int argc, char** argv)
 			const vh_profile_row* Rows = nullptr;
 			int32_t RowCount = -1;
 			DebugOk = Step("with the profiler off, vh_profiling_read answers no rows",
-						   ProfilingReadFn(0, &Rows, &RowCount) == VH_OK && RowCount == 0) && DebugOk;
+						   Host.ProfilingRead(0, &Rows, &RowCount) == VH_OK && RowCount == 0) && DebugOk;
 
-			DebugOk = Step("vh_profiling_set_enabled(true)", ProfilingSetEnabledFn(1) == VH_OK) && DebugOk;
+			DebugOk = Step("vh_profiling_set_enabled(true)", Host.ProfilingSetEnabled(1) == VH_OK) && DebugOk;
 			for (int Index = 0; Index < 5; ++Index)
 			{
-				CallVoid(InstanceCallFn, Probe, "(/user@localhost/debug_probe:)Tick");
+				CallVoid(Host.InstanceCall, Probe, "(/user@localhost/debug_probe:)Tick");
 			}
-			CallVoid(InstanceCallFn, Probe, "(/user@localhost/debug_probe:)Count");
-			CallVoid(InstanceCallFn, Probe, "(/user@localhost/debug_probe:)Tagged");
+			CallVoid(Host.InstanceCall, Probe, "(/user@localhost/debug_probe:)Count");
+			CallVoid(Host.InstanceCall, Probe, "(/user@localhost/debug_probe:)Tagged");
 
 			bool FoundTick = false;
 			bool CountSelfIsLess = false;
 			bool ShapedRight = false;
 			bool FoundTagged = false;
-			if (ProfilingReadFn(0, &Rows, &RowCount) == VH_OK)
+			if (Host.ProfilingRead(0, &Rows, &RowCount) == VH_OK)
 			{
 				for (int32_t Index = 0; Index < RowCount; ++Index)
 				{
@@ -3718,20 +3694,20 @@ int main(int argc, char** argv)
 
 			// The frame accumulator resets as it is read, which is what makes the next frame's
 			// numbers that frame's.
-			ProfilingReadFn(1, &Rows, &RowCount);
+			Host.ProfilingRead(1, &Rows, &RowCount);
 			int32_t AfterReset = -1;
-			ProfilingReadFn(1, &Rows, &AfterReset);
+			Host.ProfilingRead(1, &Rows, &AfterReset);
 			DebugOk = Step("reading the frame's rows resets them", AfterReset == 0) && DebugOk;
 
-			DebugOk = Step("vh_profiling_set_enabled(false)", ProfilingSetEnabledFn(0) == VH_OK) && DebugOk;
+			DebugOk = Step("vh_profiling_set_enabled(false)", Host.ProfilingSetEnabled(0) == VH_OK) && DebugOk;
 		}
 
-		ReleaseInstanceFn(Probe);
-		ReleaseInstanceFn(Other);
+		Host.ReleaseInstance(Probe);
+		Host.ReleaseInstance(Other);
 		CallsOk = DebugOk && CallsOk;
 	}
 
-	ShutdownFn();
+	Host.Shutdown();
 	Step("vh_shutdown", true);
 
 	const bool Ok = RunOk && CallsOk && LookupOk && GFailedSteps == 0;

@@ -11,12 +11,21 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "vm_marshal.h"
 #include "vm_objects.h"
 #include "vm_runtime.h"
 #include "vm_values.h"
+
+// Each prototype in the header against its typedef, which is the type a consumer resolves the symbol
+// as: a definition below that differs from its prototype is already a conflicting C declaration, so
+// between them nothing a consumer calls through can disagree with what is defined here.
+#define VM_CHECK_ENTRY_TYPE(m_member, m_symbol, m_fn, m_presence, m_role) \
+	static_assert(std::is_same_v<decltype(&m_symbol), m_fn>, #m_symbol " is not declared with the type " #m_fn);
+VH_ENTRY_POINTS(VM_CHECK_ENTRY_TYPE)
+#undef VM_CHECK_ENTRY_TYPE
 
 namespace {
 

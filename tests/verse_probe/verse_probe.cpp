@@ -134,6 +134,9 @@ static Fn Resolve(HMODULE Module, const char* Name)
 	return reinterpret_cast<Fn>(Proc);
 }
 
+// One token names both the export and its typedef, so the two cannot be paired wrongly.
+#define VERSE_PROBE_RESOLVE(Symbol) Resolve<Symbol##_fn>(Module_, #Symbol)
+
 static void PrintValue(const vh_value& Value)
 {
 	switch (Value.Type)
@@ -205,16 +208,16 @@ int main(int argc, char** argv)
 		return 2;
 	}
 
-	auto InitFn = Resolve<vh_init_fn>(Module_, "vh_init");
-	auto ShutdownFn = Resolve<vh_shutdown_fn>(Module_, "vh_shutdown");
-	auto CompileFn = Resolve<vh_compile_project_fn>(Module_, "vh_compile_project");
-	auto HasClassFn = Resolve<vh_has_class_fn>(Module_, "vh_has_class");
-	auto MethodListFn = Resolve<vh_class_method_list_fn>(Module_, "vh_class_method_list");
-	auto SignalListFn = Resolve<vh_class_signal_list_fn>(Module_, "vh_class_signal_list");
-	auto InstantiateFn = Resolve<vh_instantiate_fn>(Module_, "vh_instantiate");
-	auto ReleaseFn = Resolve<vh_release_instance_fn>(Module_, "vh_release_instance");
-	auto CallFn = Resolve<vh_instance_call_fn>(Module_, "vh_instance_call");
-	auto TickFn = Resolve<vh_tick_fn>(Module_, "vh_tick");
+	auto InitFn = VERSE_PROBE_RESOLVE(vh_init);
+	auto ShutdownFn = VERSE_PROBE_RESOLVE(vh_shutdown);
+	auto CompileFn = VERSE_PROBE_RESOLVE(vh_compile_project);
+	auto HasClassFn = VERSE_PROBE_RESOLVE(vh_has_class);
+	auto MethodListFn = VERSE_PROBE_RESOLVE(vh_class_method_list);
+	auto SignalListFn = VERSE_PROBE_RESOLVE(vh_class_signal_list);
+	auto InstantiateFn = VERSE_PROBE_RESOLVE(vh_instantiate);
+	auto ReleaseFn = VERSE_PROBE_RESOLVE(vh_release_instance);
+	auto CallFn = VERSE_PROBE_RESOLVE(vh_instance_call);
+	auto TickFn = VERSE_PROBE_RESOLVE(vh_tick);
 
 	vh_init_desc Desc{};
 	Desc.StructSize = sizeof(Desc);
