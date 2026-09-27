@@ -40,10 +40,27 @@ String verse_formatted_diagnostic(const Dictionary &p_error) {
 }
 
 Error VerseProjectState::ensure_project_built() {
-	if (project_built) {
-		return project_build_status;
+	if (is_built()) {
+		return build_status;
 	}
 	return build_project();
+}
+
+bool VerseProjectState::take_corrective_build() {
+	if (build_state != BuildState::CORRECTION_PENDING) {
+		return false;
+	}
+	build_state = BuildState::CORRECTION_SPENT;
+	return true;
+}
+
+void VerseProjectState::finish_build(Error p_status, bool p_withheld) {
+	build_status = p_status;
+	if (p_withheld) {
+		build_state = BuildState::CORRECTION_PENDING;
+	} else if (build_state == BuildState::UNBUILT) {
+		build_state = BuildState::BUILT;
+	}
 }
 
 Error VerseProjectState::build_project() {
@@ -80,8 +97,7 @@ Error VerseProjectState::build_project() {
 	// above are the part that still has to happen, because which module a script is in and which
 	// class names are declared are read off res:// rather than out of the host.
 	if (!runtime->host_has_compiler()) {
-		project_built = true;
-		project_build_status = OK;
+		finish_build(OK, false);
 		return OK;
 	}
 
@@ -89,8 +105,7 @@ Error VerseProjectState::build_project() {
 	// A project with the addon installed and no Verse yet has nothing to publish, and the host
 	// refuses an empty list as VH_ERR_ABI -- which failed every Play with no diagnostic to say why.
 	if (sources.is_empty()) {
-		project_built = true;
-		project_build_status = OK;
+		finish_build(OK, false);
 		return OK;
 	}
 	PackedStringArray globalized;
@@ -116,10 +131,11 @@ Error VerseProjectState::build_project() {
 	// false by the time anyone reads it, and the log has no way to retract a line (which is the
 	// same reason check_buffer keeps analysis diagnostics out of it). The script editor's own list
 	// is replaced wholesale on the next validate, so record_diagnostics below still runs.
-	const bool withhold = status != OK && bindings_incomplete && provisional_build_allowed;
+	//
+	// Decided here and entered at finish_build below, and nothing between the two reads the state.
+	const bool provisional_allowed = build_state == BuildState::UNBUILT || build_state == BuildState::BUILT;
+	const bool withhold = status != OK && binding_roster_incomplete() && provisional_allowed;
 	if (withhold) {
-		provisional_build_allowed = false;
-		corrective_build_pending = true;
 		// Withholding the diagnostics is not withholding the fact. The corrective build repairs
 		// the *project*, and it cannot repair a node the scene already tried and failed to give a
 		// script to -- so on a cold run this is the only sentence anyone gets, and without it the
@@ -157,11 +173,7 @@ Error VerseProjectState::build_project() {
 		}
 	}
 
-	// Marked built even when the verdict is withheld, so ensure_project_built answers the failure
-	// rather than rebuilding: refresh_from_analysis asks it again from inside compile(), and a
-	// build that re-entered itself there would report the very diagnostics being withheld.
-	project_built = true;
-	project_build_status = status;
+	finish_build(status, withhold);
 
 	if (status != OK) {
 		if (withhold) {
@@ -217,7 +229,7 @@ Error VerseProjectState::build_project() {
 
 TypedArray<Dictionary> VerseProjectState::check_buffer(const String &p_path, const String &p_source) {
 	VerseRuntime *runtime = get_runtime();
-	if (!project_built || runtime == nullptr || !runtime->is_host_loaded()) {
+	if (!is_built() || runtime == nullptr || !runtime->is_host_loaded()) {
 		return diagnostics_for(p_path);
 	}
 
@@ -244,7 +256,7 @@ TypedArray<Dictionary> VerseProjectState::check_buffer(const String &p_path, con
 
 bool VerseProjectState::analysis_is_current(const String &p_path, const String &p_source) const {
 	VerseRuntime *runtime = get_runtime();
-	if (!project_built || runtime == nullptr || !runtime->is_host_loaded()) {
+	if (!is_built() || runtime == nullptr || !runtime->is_host_loaded()) {
 		return true;
 	}
 

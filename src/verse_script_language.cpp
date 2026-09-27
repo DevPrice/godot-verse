@@ -2290,7 +2290,7 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 	HashSet<String> host_offered_names;
 
 	VerseRuntime *runtime = get_runtime();
-	const bool host_can_answer = project_state.project_built && runtime != nullptr && runtime->is_host_loaded();
+	const bool host_can_answer = project_state.is_built() && runtime != nullptr && runtime->is_host_loaded();
 
 	// The buffer as the compiler should see it: marker gone, and the identifier being typed
 	// standing in for whatever it will become. The same text for every prefix of one identifier,
@@ -2648,7 +2648,7 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	};
 
 	VerseRuntime *runtime = get_runtime();
-	if (!project_state.project_built || runtime == nullptr || !runtime->is_host_loaded()) {
+	if (!project_state.is_built() || runtime == nullptr || !runtime->is_host_loaded()) {
 		return refuse_or_mirrored_class();
 	}
 
@@ -3821,10 +3821,10 @@ void VerseScriptLanguage::_frame() {
 		// Regenerated on the frame after the roster moved rather than inside the signal, because
 		// the generator loads every `class_name` script and the signal is emitted from the middle
 		// of the editor's own scan.
-		// `bindings_incomplete` re-arms this once: a class whose script could not be described is
+		// An incomplete roster re-arms this once: a class whose script could not be described is
 		// asked about again on the next frame, by which time the build has usually made it
 		// loadable. It clears itself when a generation describes everything.
-		if ((bindings_refresh_pending || project_state.bindings_incomplete) && refresh_bindings()) {
+		if ((bindings_refresh_pending || project_state.binding_roster_incomplete()) && refresh_bindings()) {
 			bindings_refresh_pending = false;
 		}
 
@@ -3834,15 +3834,14 @@ void VerseScriptLanguage::_frame() {
 		// (B30); its verdict was withheld rather than logged, and this is the build that produces a
 		// real one. Fired whether or not the roster actually completed: a script that can never be
 		// described would otherwise leave the withheld verdict unreported for the session.
-		if (project_state.corrective_build_pending) {
-			project_state.corrective_build_pending = false;
+		if (project_state.take_corrective_build()) {
 			build_project();
 		}
 
 		// The first ask, and every one a change to the program has re-armed. The poll above is
 		// what clears docs_refresh_attempted, so this costs one republish per analysis rather
 		// than one per frame for a class that still cannot be described.
-		if (project_state.project_built && !docs_refresh_attempted && script_docs_deferred.exchange(false)) {
+		if (project_state.is_built() && !docs_refresh_attempted && script_docs_deferred.exchange(false)) {
 			docs_refresh_attempted = true;
 			docs_refresh_pending = true;
 		}
@@ -4115,7 +4114,7 @@ bool VerseScriptLanguage::is_script_binding(const String &p_verse_class) const {
 
 void VerseScriptLanguage::warn_incomplete_roster() const {
 	String named;
-	for (const std::string &verse_class : bindings_incomplete_classes) {
+	for (const std::string &verse_class : project_state.incomplete_binding_classes()) {
 		const String name = String(verse_class.c_str());
 		const BindingInfo *info = binding_for(name);
 		named += named.is_empty() ? String("`") : String(", `");
@@ -4150,7 +4149,7 @@ bool VerseScriptLanguage::refresh_bindings() {
 	// refuses one silently, so the only thing said is the asking side's `Error loading resource` --
 	// about the wrong script (B30). On that stack the generator holds back the scripts that can
 	// close the loop and no others: each is still declared from the class list, and
-	// `bindings_incomplete` asks again on the next frame for its members.
+	// an incomplete roster asks again on the next frame for its members.
 	const VerseBindings bindings = verse_generate_bindings(
 			VerseResourceFormatLoader::is_loading(), &last_binding_classes);
 	runtime->set_bindings(bindings);
@@ -4160,8 +4159,7 @@ bool VerseScriptLanguage::refresh_bindings() {
 	// of a GDScript naming a Verse class *before the first build*, so it is not worth a warning --
 	// what it is worth is asking again, because the build this generation feeds is exactly what
 	// makes the script loadable. The next ask fills the members in.
-	project_state.bindings_incomplete = !bindings.incomplete.empty();
-	bindings_incomplete_classes = bindings.incomplete;
+	project_state.set_incomplete_binding_classes(bindings.incomplete);
 
 	bindings_by_verse_class.clear();
 	for (const VerseBindingClass &binding : bindings.classes) {

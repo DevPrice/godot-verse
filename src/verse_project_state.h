@@ -7,6 +7,8 @@
 
 #include <atomic>
 #include <cstdint>
+#include <string>
+#include <vector>
 
 class VerseScriptLanguage;
 
@@ -43,6 +45,37 @@ godot::String verse_formatted_diagnostic(const godot::Dictionary &p_error);
 // map, the script warnings, the per-script notifications -- none of which is the pump's own state.
 class VerseProjectState {
 public:
+	// Where the session is in publishing generations.
+	//
+	// A build against a held-back binding roster is *provisional*: those bindings carry types and
+	// no members, so a Verse file calling one of their methods fails against members the next
+	// frame's generation will have. Such a build's verdict is withheld rather than logged, and one
+	// corrective build on the next frame produces the real one. Once per session -- a roster that
+	// never completes would otherwise withhold every verdict it ever produced, which is a silent
+	// session rather than a noisy one (B30, B36).
+	//
+	//   from                trigger                                                   to
+	//   UNBUILT             build_project: no runtime, or the host will not load      UNBUILT
+	//   UNBUILT, BUILT      build_project fails with the roster incomplete: withheld  CORRECTION_PENDING
+	//   UNBUILT             build_project finishes any other way, including the       BUILT
+	//                       two that compile nothing (no compiler, no sources)
+	//   BUILT               build_project finishes, not withheld                      BUILT
+	//   CORRECTION_PENDING  build_project finishes (Play before _frame took it)       CORRECTION_PENDING
+	//   CORRECTION_PENDING  take_corrective_build, from _frame, which then builds     CORRECTION_SPENT
+	//   CORRECTION_SPENT    build_project finishes                                    CORRECTION_SPENT
+	//
+	// Every "finishes" records the build's status, which ensure_project_built answers from then on.
+	// Nothing leaves a built state for UNBUILT: a failed build still counts as built, so
+	// ensure_project_built answers the failure rather than rebuilding -- refresh_from_analysis asks
+	// it from inside compile(), and a build re-entered there would report the diagnostics being
+	// withheld.
+	enum class BuildState {
+		UNBUILT,
+		BUILT,
+		CORRECTION_PENDING,
+		CORRECTION_SPENT,
+	};
+
 	explicit VerseProjectState(VerseScriptLanguage &p_language) :
 			language(p_language) {}
 
@@ -114,24 +147,24 @@ public:
 	uint64_t description_epoch_value() const { return description_epoch.current(); }
 	uint64_t analysis_epoch_value() const { return analysis_epoch.current(); }
 
-	bool project_built = false;
-	// What the last build came back with, so ensure_project_built can answer without publishing
-	// a generation of its own.
-	godot::Error project_build_status = godot::OK;
+	// Whether any build has finished, which is what every reader that needs a program asks first.
+	bool is_built() const { return build_state != BuildState::UNBUILT; }
 
-	// True when the last generation emitted a class as a bare type -- because its script would not
-	// load, or because it was held back to avoid a cyclic one (B30) -- which re-arms the refresh
-	// until one describes everything.
-	bool bindings_incomplete = false;
-	// A build against such a roster cannot describe every binding, so a Verse file *calling* one of
-	// their methods fails against members that land on the next frame's generation. That build's
-	// verdict is withheld rather than logged and these two carry the correction: one build, on the
-	// next frame, with the roster as complete as it is going to get.
+	// CORRECTION_PENDING -> CORRECTION_SPENT, answering whether that transition happened. _frame's
+	// one caller builds when it did.
+	bool take_corrective_build();
+
+	// The classes the last binding generation emitted as bare types -- because a script would not
+	// load, or because it was held back to avoid a cyclic one (B30). Non-empty re-arms the refresh
+	// until one describes everything, and is what makes a failed build's verdict provisional.
 	//
-	// Once per session. A roster that never completes would otherwise withhold every verdict it
-	// ever produced, which is a silent session rather than a noisy one.
-	bool provisional_build_allowed = true;
-	bool corrective_build_pending = false;
+	// Kept by name rather than as a flag beside the list, because the withheld build has to say
+	// which: a verdict nobody prints is the right answer to a diagnostic that is already false,
+	// and it was the *whole* answer -- so a node whose script failed to attach reached GDScript as
+	// "on a base object of type 'Nil'" and named neither the script nor the reason (B36).
+	void set_incomplete_binding_classes(const std::vector<std::string> &p_classes) { incomplete_bindings = p_classes; }
+	bool binding_roster_incomplete() const { return !incomplete_bindings.empty(); }
+	const std::vector<std::string> &incomplete_binding_classes() const { return incomplete_bindings; }
 
 	godot::Dictionary diagnostics_by_path;
 	// The compiler's warnings, keyed and shaped the same way and recorded by the same analysis.
@@ -183,6 +216,14 @@ public:
 
 private:
 	VerseScriptLanguage &language;
+
+	BuildState build_state = BuildState::UNBUILT;
+	// What the last finished build came back with. Unread in UNBUILT.
+	godot::Error build_status = godot::OK;
+	std::vector<std::string> incomplete_bindings;
+
+	// The table's every "finishes" row.
+	void finish_build(godot::Error p_status, bool p_withheld);
 
 	// Two counters that answer "has the analyzed program changed since this cache was filled".
 	// They are not one counter because they answer different questions. analysis_epoch tracks

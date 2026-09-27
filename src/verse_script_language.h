@@ -201,11 +201,6 @@ public:
 	void warn_incomplete_roster() const;
 	bool bindings_hook_connected = false;
 	bool bindings_refresh_pending = true;
-	// The classes the last generation emitted as bare types, so the withheld build can say so. A
-	// verdict nobody prints is the right answer to a diagnostic that is already false, and it was
-	// the *whole* answer -- so a node whose script failed to attach reached GDScript as "on a base
-	// object of type 'Nil'" and named neither the script nor the reason (B36).
-	std::vector<std::string> bindings_incomplete_classes;
 	// What a generated binding stands for, which is the only thing the editor can say about
 	// one. The Verse declaration says nothing: the package is a synthetic snippet the host
 	// reads back from a digest in the engine tree, so a binding's `path` is a file no editor
