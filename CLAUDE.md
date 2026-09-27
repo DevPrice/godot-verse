@@ -267,7 +267,8 @@ compiler-side entry points answer `VH_ERR_UNSUPPORTED` in a runtime host.
 | `verse_callable.{h,cpp}` | the mirror image: a Godot `Callable` that calls a Verse function. Only a function **bound to a script instance** is accepted, which is the half of Godot's own design that does not leak (GH-102327) |
 | `verse_script.{h,cpp}` | a `.verse` file as a Godot `Resource`; valid only if it defines its own class |
 | `verse_script_instance.{h,cpp}` | one script bound to one node; raw `GDExtensionScriptInstanceInfo3` vtable, not a `godot::Object` |
-| `verse_script_language.{h,cpp}` | the `ScriptLanguage`: `_validate`, the analysis cache, `_complete_code`/`_lookup_code`, `_frame` (which pumps `vh_tick`, reaps `vh_check_project_poll` and attaches the debugger), and the `_debug_*`/`_profiling_*` surface |
+| `verse_script_language.{h,cpp}` | the `ScriptLanguage`: `_validate`, `_complete_code`/`_lookup_code`, `_frame` (which pumps `vh_tick`, drives `VerseProjectState` and attaches the debugger), and the `_debug_*`/`_profiling_*` surface |
+| `verse_project_state.{h,cpp}` | the build-and-analysis pump: `build_project`, the two analysis slots and the in-flight check, `poll_check`, the diagnostics tables and the two generation epochs. The build lifecycle is one `BuildState` enum and its transition table is at the top of the header — read it before changing when a build or an analysis runs (`by-hand-findings.md` B13, B20, B26, B27, B36, B38, B39 all live in this sequencing) |
 | `verse_resource_format.{h,cpp}` | load/save, without which a `.verse` cannot be attached to a node |
 | `verse_lexer.{h,cpp}` | resumable per-line lexer, and `verse_repair_completion_buffer` — which finishes off the caret's line so a half-written `if` does not cost the whole file its AST. No godot-cpp dependency, so both are unit-testable standalone |
 | `verse_class_decl.{h,cpp}` | scans the top-level class **named after the file** and its `@global_class` attribute out of the text; defers comments and strings to the lexer, and shares its lack of godot-cpp |
@@ -820,7 +821,7 @@ layer, and is skipped there when `../godot` is absent.
   *position* can be resolved against: IR generation hangs an IR package off every module. A build
   used to end with a whole analysis-only pass to put one back, which was ~770 ms of the ~1.6 s
   between Play and the game; the consumer queues one from `_frame` instead
-  (`VerseScriptLanguage::build_project`), and `probe_hover`, which has no frames, flushes it itself.
+  (`VerseProjectState::build_project`), and `probe_hover`, which has no frames, flushes it itself.
   **A hook of uLang's own is the only place a code-generating build is still describable** — add
   anything that needs the build's AST there, not after `BuildAll`.
 - **Ask a definition's *prototype* where it was written, what it says and what it is called.**
