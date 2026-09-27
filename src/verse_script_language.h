@@ -6,6 +6,7 @@
 #include "verse_bindings.h"
 #include "verse_completion.h"
 #include "verse_debugger.h"
+#include "verse_hover.h"
 #include "verse_profiler.h"
 #include "verse_project_state.h"
 #include "verse_script.h"
@@ -272,6 +273,16 @@ public:
 	void flush_pending_check() const { project_state.flush_pending_check(); }
 	bool completion_check_pending() const { return project_state.completion_check_pending(); }
 	const VerseProjectState::CheckRequest &completion_refresh_request() const { return project_state.completion_refresh_request(); }
+	const godot::Dictionary &analyzed_sources() const { return project_state.analyzed_sources(); }
+	const godot::Dictionary &res_path_by_globalized() const { return project_state.res_path_by_globalized(); }
+
+	// Registers one script class's documentation, if what Godot holds for it is not what the
+	// current analysis would say. Called from a lookup that is about to name the class, because
+	// the tooltip for a member of a script class is drawn from the registered doc and from
+	// nothing else -- so a hover is the moment the doc has to exist, and the one place that
+	// knows it is wanted (B38). Public because VerseHover (verse_hover.cpp) calls it through the
+	// language reference it holds, the way VerseCompletion reaches VerseProjectState's public face.
+	void ensure_script_doc_published(const godot::String &p_class_name) const;
 
 	// Every hover the editor could produce over one script, as one row per word and run of
 	// columns that answer alike. The editor's own hover path is unreachable from a test --
@@ -387,28 +398,13 @@ private:
 	// project_state and debugger are.
 	mutable VerseCompletion completion{ *this };
 
+	// Hover's whole state and behaviour: see verse_hover.h.
+	mutable VerseHover hover{ *this };
+
 	// Re-registers every loaded script's documentation, which is the only way a class described
 	// too early gets described again: Godot builds its script docs once per session, on a loader
 	// thread of its own, and otherwise republishes a script's only when it is saved.
 	void republish_script_docs() const;
-
-	// Registers one script class's documentation, if what Godot holds for it is not what the
-	// current analysis would say. Called from a lookup that is about to name the class, because
-	// the tooltip for a member of a script class is drawn from the registered doc and from
-	// nothing else -- so a hover is the moment the doc has to exist, and the one place that
-	// knows it is wanted (B38).
-	void ensure_script_doc_published(const godot::String &p_class_name) const;
-
-	// Registers a documentation page for a Godot-package function that no Godot class documents --
-	// an extension method on a Verse type like `event(t)`, or a free function of GodotApi -- so a
-	// hover draws a method tooltip rather than a constant whose type is the whole function type. No
-	// Godot page exists for one, and `EditorHelp` is not exposed to a GDExtension, so the page is
-	// carried by `api_doc_carrier`: a script with no file whose only job is to feed
-	// `ScriptEditor::update_docs_from_script`, the one door onto the doc store. Returns the class
-	// name to put in the lookup result, or empty when there is no script editor to register with
-	// (a headless run), so the caller falls back to the local result (B40).
-	godot::String publish_api_method(const godot::String &p_receiver_type, const godot::String &p_member,
-			const godot::String &p_function_type, const godot::String &p_description) const;
 
 	// Rebuilds script_warnings_by_path for one file, out of the export and signal lists the
 	// analysis just landed for.
@@ -416,13 +412,6 @@ private:
 
 	std::vector<VerseScript *> live_scripts;
 	std::unordered_map<int64_t, VerseScriptInstance *> live_instances;
-
-	// The doc carrier and the pages it holds, for publish_api_method. The carrier is a VerseScript
-	// with no file, kept out of live_scripts so the build and analysis walks never reach it; its
-	// documentation is whatever api_doc_pages currently holds, one ClassDoc per Godot-package
-	// receiver a hover has asked about. Mutable because a hover is const and is where they fill.
-	mutable godot::Ref<VerseScript> api_doc_carrier;
-	mutable godot::HashMap<godot::String, godot::Dictionary> api_doc_pages;
 
 	// Adds "Godot has Node.foo, but ..." to any diagnostic that named a member the mirror
 	// deliberately does not carry. R-SCN-2: the reason has to reach the author, not a report file.
