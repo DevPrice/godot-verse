@@ -24,6 +24,7 @@
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/core/error_macros.hpp>
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
@@ -1090,6 +1091,7 @@ TypedArray<Dictionary> VerseScriptLanguage::_get_public_annotations() const {
 }
 
 void VerseScriptLanguage::_frame() {
+	DEV_ASSERT(verse_on_main_thread());
 	VerseRuntime *runtime = get_runtime();
 	if (runtime != nullptr && runtime->is_host_loaded()) {
 		// First, so a breakpoint set before anything else happens this frame is already armed.

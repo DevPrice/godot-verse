@@ -7,7 +7,9 @@
 
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/file_access.hpp>
+#include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
+#include <godot_cpp/core/error_macros.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
 #include <optional>
@@ -15,6 +17,11 @@
 #include <vector>
 
 using namespace godot;
+
+bool verse_on_main_thread() {
+	OS *os = OS::get_singleton();
+	return os != nullptr && os->get_thread_caller_id() == os->get_main_thread_id();
+}
 
 namespace {
 
@@ -49,6 +56,7 @@ void VerseProjectState::finish_build(Error p_status, bool p_withheld) {
 }
 
 Error VerseProjectState::build_project() {
+	DEV_ASSERT(verse_on_main_thread());
 	VerseRuntime *runtime = get_runtime();
 	if (runtime == nullptr) {
 		return ERR_UNAVAILABLE;
@@ -263,6 +271,7 @@ void VerseProjectState::queue_check(const String &p_path, const String &p_source
 }
 
 void VerseProjectState::request_check(const String &p_path, const String &p_normalized_source, CheckKind p_kind) {
+	DEV_ASSERT(verse_on_main_thread());
 	// Recorded ahead of the in-flight test below, because the analysis already running may be the
 	// very one this is asking for -- the editor asks for the options and the argument hint about
 	// one keystroke, and the second ask must not lose the first's claim on the result.
@@ -315,6 +324,7 @@ std::optional<VerseProjectState::CheckRequest> *VerseProjectState::next_slot(Che
 }
 
 void VerseProjectState::start_pending_check() {
+	DEV_ASSERT(verse_on_main_thread());
 	if (!pending_ordinary && !pending_completion) {
 		return;
 	}
@@ -339,6 +349,7 @@ void VerseProjectState::start_pending_check() {
 }
 
 void VerseProjectState::flush_pending_check() {
+	DEV_ASSERT(verse_on_main_thread());
 	if (!pending_ordinary && !pending_completion) {
 		return;
 	}
@@ -398,6 +409,7 @@ void VerseProjectState::note_landed(CheckKind p_kind, const CheckRequest &p_requ
 }
 
 void VerseProjectState::poll_check() {
+	DEV_ASSERT(verse_on_main_thread());
 	VerseRuntime *runtime = get_runtime();
 	if (runtime == nullptr || !runtime->is_host_loaded()) {
 		return;

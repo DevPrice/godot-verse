@@ -15,6 +15,12 @@
 
 class VerseScriptLanguage;
 
+// True on Godot's main/game thread, the one the host pins every Verse call to and the one every
+// mutation of VerseProjectState's pump and of VerseScriptLanguage's _frame-owned state must come
+// from. A caller with a legitimate reason to run elsewhere -- VerseScript::_get_documentation
+// (B20) -- checks this itself and declines before touching either, rather than asserting.
+bool verse_on_main_thread();
+
 // A monotonically increasing counter, advanced whenever something a cache might describe changes.
 // A cache stores the value this returned when it was filled, and a read compares against current()
 // instead of being cleared by hand at every place that could invalidate it.

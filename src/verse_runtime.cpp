@@ -658,6 +658,10 @@ Error VerseRuntime::compile_project(const PackedStringArray &p_globalized_paths,
 		files.push_back({ utf8_paths.back().get_data(), utf8_modules.back().get_data() });
 	}
 
+	// diagnostic_sink is a raw pointer standing in for the call in flight, not a stack: the host
+	// call below is synchronous and on_diagnostic only ever fires from inside it, so a non-null
+	// sink here means a second entry point is being called from inside the first one's callback.
+	DEV_ASSERT(diagnostic_sink == nullptr);
 	diagnostic_sink = r_diagnostics_by_path;
 	int32_t built_generation = 0;
 	const int32_t status = host.CompileProject(files.data(), (int32_t)files.size(), &built_generation);
@@ -678,6 +682,7 @@ Error VerseRuntime::check_project(const String &p_globalized_path, const String 
 	const CharString path_utf8 = p_globalized_path.utf8();
 	const CharString source_utf8 = p_source.utf8();
 
+	DEV_ASSERT(diagnostic_sink == nullptr);
 	diagnostic_sink = r_diagnostics_by_path;
 	const int32_t status = host.CheckProject(path_utf8.get_data(), source_utf8.get_data());
 	diagnostic_sink = nullptr;
@@ -703,6 +708,7 @@ bool VerseRuntime::poll_check_project(Dictionary *r_diagnostics_by_path) {
 	}
 
 	vh_bool finished = 0;
+	DEV_ASSERT(diagnostic_sink == nullptr);
 	diagnostic_sink = r_diagnostics_by_path;
 	host.CheckProjectPoll(&finished);
 	diagnostic_sink = nullptr;
