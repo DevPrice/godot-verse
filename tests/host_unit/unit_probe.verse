@@ -21,6 +21,7 @@ unit_plain := class:
 	Value:int = 0
 
 unit_probe := class(node2d):
+	# How many there are.
 	AnInt:int
 	ABounded:type{_X:int where 0 <= _X, _X <= 10}
 	ALogic:logic

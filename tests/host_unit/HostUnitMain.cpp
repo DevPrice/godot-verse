@@ -948,6 +948,15 @@ AUTORTFM_DISABLE void TestAdapters(const uLang::CClass& Probe, const uLang::CSem
 
 	Case(TEXT("prototype_of an ordinary definition is itself"), &PrototypeOf(Probe) == &Probe);
 
+	if (const uLang::CDataDefinition* const Documented = FindMember(Probe, "AnInt"))
+	{
+		Expect(TEXT("doc_of a member's comment"), Str(DocOf(*Documented, Program)), TEXT("How many there are."));
+	}
+	if (const uLang::CDataDefinition* const Bare = FindMember(Probe, "ABounded"))
+	{
+		Expect(TEXT("doc_of an undocumented member"), Str(DocOf(*Bare, Program)), TEXT(""));
+	}
+
 	// An instantiated parametric class mints a definition per member that was written nowhere; the
 	// generic declaration's is the one with a file and a line.
 	const FDeclaredType NodeArray = ClassifyDeclaredType(FindMember(Probe, "ANodeArray") ? FindMember(Probe, "ANodeArray")->GetType() : nullptr, Program);
@@ -995,6 +1004,58 @@ AUTORTFM_DISABLE void TestAdapters(const uLang::CClass& Probe, const uLang::CSem
 		     Decorated.StartsWith(TEXT("(/user@localhost:)(/user@localhost:)operator'.ToString'(")) && Decorated.Contains(TEXT("unit_probe")),
 		     FString::Printf(TEXT("got %s"), *Decorated));
 	}
+}
+
+/// A case of `--tripwires` mode, under the tag tools/run_tripwires.py reads. A tripwire asserts a
+/// limitation of Epic's *still holds*, so the day it fails is the day its adapter can retire.
+void Tripwire(const FString& Name, bool bHolds, const FString& Detail)
+{
+	if (bHolds)
+	{
+		++GPassed;
+		Say(FString::Printf(TEXT("[tripwire] %s: ok"), *Name));
+		return;
+	}
+	++GFailed;
+	Say(FString::Printf(TEXT("[tripwire] %s: FAIL (%s)"), *Name, *Detail));
+}
+
+const uLang::CFunction* FindMethod(const uLang::CClass& Class, const char* Name)
+{
+	for (const uLang::TSRef<uLang::CFunction>& Function : Class.GetDefinitionsOfKind<uLang::CFunction>())
+	{
+		if (FUtf8StringView(Function->AsNameCString()).Equals(FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Name))))
+		{
+			return &*Function;
+		}
+	}
+	return nullptr;
+}
+
+AUTORTFM_DISABLE void TestTripwires(const uLang::CSemanticProgram& Program)
+{
+	const uLang::CClass* const Class = FindScriptClass(Program, UTF8TEXTVIEW("unit_tripwires"));
+	const uLang::CClass* const Rpc = Program.FindDefinitionByVersePath<uLang::CClass>("/Godot.org/Godot/rpc_attribute");
+	const uLang::CFunction* const One = Class ? FindMethod(*Class, "OneString") : nullptr;
+	const uLang::CFunction* const Two = Class ? FindMethod(*Class, "TwoStrings") : nullptr;
+	if (!Rpc || !One || !Two)
+	{
+		Tripwire(TEXT("attribute_takes_one_argument/fixture"), false,
+		         FString::Printf(TEXT("rpc_attribute %d, OneString %d, TwoStrings %d"), Rpc != nullptr, One != nullptr, Two != nullptr));
+		return;
+	}
+
+	// The control: without it, a tripwire that stopped reading anything at all would still hold.
+	const TOptional<FUtf8String> Read = AttributeArgument(One->GetAttributes(), Rpc, Program);
+	Tripwire(TEXT("attribute_takes_one_argument/one_string_reads"), Read.IsSet() && Read.GetValue() == UTF8TEXT("any_peer"),
+	         FString::Printf(TEXT("AttributeArgument answered %s for @rpc(\"any_peer\")"), Read.IsSet() ? *Str(Read.GetValue()) : TEXT("nothing")));
+
+	const bool bCarried = Two->GetAttributes().HasAttributeClass(Rpc, Program);
+	const TOptional<FUtf8String> Tuple = AttributeArgument(Two->GetAttributes(), Rpc, Program);
+	Tripwire(TEXT("attribute_takes_one_argument/tuple_unreadable"), bCarried && !Tuple.IsSet(),
+	         !bCarried ? FString(TEXT("TwoStrings no longer carries rpc_attribute at all"))
+	         : Tuple.IsSet() ? FString::Printf(TEXT("GetAttributeTextValue read an attribute of two arguments as \"%s\""), *Str(Tuple.GetValue()))
+	                         : FString());
 }
 
 void OnDiagnostic(void*, const vh_diagnostic* Diagnostic)
@@ -1053,12 +1114,14 @@ const char* const BindingsSource =
 	Leave(GFailed == 0 ? 0 : 1);
 }
 
-[[noreturn]] AUTORTFM_DISABLE void Run(const FString& RepoRoot)
+/// bTripwires runs the contract layer's tripwire cases instead of the abi layer's unit cases.
+[[noreturn]] AUTORTFM_DISABLE void Run(const FString& RepoRoot, bool bTripwires)
 {
 	const double Started = FPlatformTime::Seconds();
 	const FString Fixtures = FPaths::Combine(RepoRoot, TEXT("tests"), TEXT("host_unit"));
 	const FString ProbePath = FPaths::ConvertRelativePathToFull(FPaths::Combine(Fixtures, TEXT("unit_probe.verse")));
 	const FString InnerPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(Fixtures, TEXT("unit_mod"), TEXT("unit_inner.verse")));
+	const FString TripwiresPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(Fixtures, TEXT("unit_tripwires.verse")));
 
 	vh_init_desc Desc{};
 	Desc.StructSize = sizeof(vh_init_desc);
@@ -1077,19 +1140,24 @@ const char* const BindingsSource =
 		Finish(Started);
 	}
 
-	TestStatusFor();
+	if (!bTripwires)
+	{
+		TestStatusFor();
+	}
 
 	const vh_binding_class Roster[] = {{"UnitBinding", 11, nullptr, 0, "unit_binding", 12}};
 	ExpectInt(TEXT("vh_set_bindings"), vh_set_bindings(BindingsSource, (int32_t)strlen(BindingsSource), Roster, 1), VH_OK);
 
 	const FTCHARToUTF8 ProbeUtf8(*ProbePath);
 	const FTCHARToUTF8 InnerUtf8(*InnerPath);
+	const FTCHARToUTF8 TripwiresUtf8(*TripwiresPath);
 	const vh_source_file Files[] = {
 		{ProbeUtf8.Get(), nullptr},
 		{InnerUtf8.Get(), "unit_mod"},
+		{TripwiresUtf8.Get(), nullptr},
 	};
 	int32_t Generation = 0;
-	const int32_t CompileStatus = vh_compile_project(Files, 2, &Generation);
+	const int32_t CompileStatus = vh_compile_project(Files, bTripwires ? 3 : 2, &Generation);
 	ExpectInt(TEXT("vh_compile_project"), CompileStatus, VH_OK);
 	if (CompileStatus != VH_OK)
 	{
@@ -1108,7 +1176,14 @@ const char* const BindingsSource =
 	const uLang::CSemanticProgram* const Program = CurrentSemanticProgram();
 	const uLang::CClass* const Probe = FindScriptClassLive(UTF8TEXTVIEW("unit_probe"));
 	Case(TEXT("the analysis holds unit_probe"), Program != nullptr && Probe != nullptr);
-	if (Program && Probe)
+	if (bTripwires)
+	{
+		if (Program)
+		{
+			TestTripwires(*Program);
+		}
+	}
+	else if (Program && Probe)
 	{
 		TestClassifier(*Probe, *Program);
 		TestDescribers(*Probe, *Program);
@@ -1130,10 +1205,10 @@ AUTORTFM_DISABLE INT32_MAIN_INT32_ARGC_TCHAR_ARGV()
 	FTaskTagScope Scope(ETaskTag::EGameThread);
 	if (ArgC < 2)
 	{
-		GodotVerseUnit::Say(TEXT("usage: verse_host_unit <repo root>"));
+		GodotVerseUnit::Say(TEXT("usage: verse_host_unit <repo root> [--tripwires]"));
 		return 2;
 	}
-	GodotVerseUnit::Run(FString(ArgV[1]));
+	GodotVerseUnit::Run(FString(ArgV[1]), ArgC >= 3 && FCString::Strcmp(ArgV[2], TEXT("--tripwires")) == 0);
 }
 
 #endif // defined(VH_HOST_UNIT)
