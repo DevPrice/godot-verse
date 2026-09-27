@@ -5,6 +5,7 @@
 #include "AutoRTFM.h"
 #include "Containers/Array.h"
 #include "HostScript.h"
+#include "HostSnapshot.h"
 #include "Templates/SharedPointer.h"
 #include "Containers/UnrealString.h"
 
@@ -59,9 +60,19 @@ AUTORTFM_DISABLE bool ReadCookedManifest(const FString& Path, TArray<FString>& O
 
 /// One `@export` description as JSON, and back.
 ///
-/// Exposed because a declared type carries an FExportDesc of its own (HostScript.cpp), and two
-/// writers for one struct is two chances to drop a field from one of them.
+/// Exposed because a declared type carries an FExportDesc of its own (FMemberType::Described), and
+/// two writers for one struct is two chances to drop a field from one of them.
 AUTORTFM_DISABLE TSharedPtr<FJsonObject> WriteExportDesc(const FExportDesc& Export);
 AUTORTFM_DISABLE FExportDesc ReadExportDesc(const TSharedPtr<FJsonObject>& Object);
+
+/// The declared-type table of one class, as JSON, and back. Null in, null out: a class the analysis
+/// could not describe carries no table rather than an empty one, and the two mean different things
+/// -- an empty table says "this class declares nothing", which would be a lie.
+AUTORTFM_DISABLE TSharedPtr<FJsonObject> WriteDeclaredTypes(const FDeclaredTypes& Types);
+AUTORTFM_DISABLE TSharedPtr<FDeclaredTypes> ReadDeclaredTypes(const TSharedPtr<FJsonObject>& Object);
+
+/// The table CollectEngineSignalTypes answers, as JSON, and back.
+AUTORTFM_DISABLE TSharedPtr<FJsonObject> WriteEngineSignalTypes(const FEngineSignalTypes& Types);
+AUTORTFM_DISABLE TSharedPtr<FEngineSignalTypes> ReadEngineSignalTypes(const TSharedPtr<FJsonObject>& Object);
 
 } // namespace GodotVerse

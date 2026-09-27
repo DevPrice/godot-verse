@@ -7,10 +7,21 @@
 #include "host_build_id.gen.h"
 #include "Dom/JsonValue.h"
 #include "HostScript.h"
+#include "HostSnapshot.h"
+#include "HostTypeModel.h"
 #include "Misc/FileHelper.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+
+using GodotVerse::EClassOrigin;
+using GodotVerse::EDeclaredKind;
+using GodotVerse::EPayloadShape;
+using GodotVerse::FindStructLayout;
+using GodotVerse::FMemberType;
+using GodotVerse::FPayloadArg;
+using GodotVerse::FPayloadShape;
+using GodotVerse::FUserStructLayout;
 
 namespace {
 
@@ -484,9 +495,9 @@ TSharedRef<GodotVerse::FClassStatics> ReadStatics(const TSharedPtr<FJsonObject>&
 
 } // namespace
 
-// An `@export`'s description is also what every *declared type* carries (HostScript.cpp's
-// FMemberType::Described), and the two have to agree field for field -- so there is one writer and
-// one reader, here, where the rest of the sidecar's JSON lives.
+// An `@export`'s description is also what every *declared type* carries (FMemberType::Described),
+// and the two have to agree field for field -- so there is one writer and one reader, here, where
+// the rest of the sidecar's JSON lives.
 AUTORTFM_DISABLE TSharedPtr<FJsonObject> GodotVerse::WriteExportDesc(const FExportDesc& Export)
 {
     return WriteExportImpl(Export);
@@ -495,6 +506,461 @@ AUTORTFM_DISABLE TSharedPtr<FJsonObject> GodotVerse::WriteExportDesc(const FExpo
 AUTORTFM_DISABLE GodotVerse::FExportDesc GodotVerse::ReadExportDesc(const TSharedPtr<FJsonObject>& Object)
 {
     return ReadExportImpl(Object);
+}
+
+namespace {
+
+// --- the JSON round trip ----------------------------------------------------------------------
+//
+// One shape, written and read by two functions that have to be changed together. Every field that
+// survives is one a *runtime* lookup reads: the uLang pointers (FMemberType::ReferenceClass and
+// ::Member, FPayloadShape::StructClass) are the analysis's own and are deliberately dropped --
+// nothing outside an analysis reads them, which is what made carrying the rest possible at all.
+
+AUTORTFM_DISABLE TSharedPtr<FJsonObject> WriteMemberType(const FMemberType& Type);
+AUTORTFM_DISABLE FMemberType ReadMemberType(const TSharedPtr<FJsonObject>& Object);
+
+/// The kind a description read back out of a sidecar is, recovered from the fields it carries.
+///
+/// The sidecar has no field for the kind -- its format is shared with the interpreter -- and does
+/// not need one: DescribeType fills a different combination of fields for every kind but one, and
+/// the order of the tests is the order those combinations overlap in. The one is TypedContainer,
+/// which describes exactly as Other does and reads back as Other (RecordsAs).
+AUTORTFM_DISABLE EDeclaredKind RecordedKind(const FMemberType& Type)
+{
+    const GodotVerse::FExportDesc& Described = Type.Described;
+    if (Described.Reject == VH_EXPORT_OPTION_NOT_OBJECT)
+    {
+        return EDeclaredKind::Option;
+    }
+    if (Described.VariantTag == VH_VARIANT_OBJECT)
+    {
+        return EDeclaredKind::Reference;
+    }
+    if (!Type.ReferenceName.IsEmpty())
+    {
+        return EDeclaredKind::OtherClass;
+    }
+    if (Type.UserStruct.IsValid())
+    {
+        return EDeclaredKind::UserStruct;
+    }
+    if (!Type.StructName.IsEmpty())
+    {
+        return EDeclaredKind::MathStruct;
+    }
+    if (Described.Hint == VH_EXPORT_HINT_ENUM)
+    {
+        return EDeclaredKind::Enum;
+    }
+
+    VH_EXHAUSTIVE_SWITCH_BEGIN
+    switch (Described.Type)
+    {
+    case VH_TYPE_VARIANT:
+        return EDeclaredKind::Variant;
+    case VH_TYPE_REF:
+        return EDeclaredKind::Container;
+    case VH_TYPE_INT:
+        return Described.VariantTag == VH_VARIANT_RID ? EDeclaredKind::Rid : EDeclaredKind::Int;
+    case VH_TYPE_LOGIC:
+        return EDeclaredKind::Logic;
+    case VH_TYPE_FLOAT:
+        return EDeclaredKind::Float;
+    case VH_TYPE_CHAR:
+        return EDeclaredKind::Char;
+    case VH_TYPE_STRING:
+        return EDeclaredKind::String;
+    case VH_TYPE_ARRAY:
+        return EDeclaredKind::Array;
+    case VH_TYPE_MAP:
+        return EDeclaredKind::Map;
+    case VH_TYPE_TUPLE:
+        return EDeclaredKind::Tuple;
+    case VH_TYPE_VOID:
+    case VH_TYPE_OPTION:
+        return EDeclaredKind::Other;
+    }
+    VH_EXHAUSTIVE_SWITCH_END
+    return EDeclaredKind::Other;
+}
+
+/// `refOrigin` as the sidecar spells it, which the interpreter reads too and which has no Binding:
+/// one is recorded as Other, which is what it was before it had a name, and DeclaredReferenceClass
+/// resolves the two alike.
+AUTORTFM_DISABLE int32 SidecarOriginCode(EClassOrigin Origin)
+{
+    VH_EXHAUSTIVE_SWITCH_BEGIN
+    switch (Origin)
+    {
+    case EClassOrigin::Other:
+    case EClassOrigin::Binding:
+        return (int32)EClassOrigin::Other;
+    case EClassOrigin::Mirrored:
+    case EClassOrigin::Script:
+        return (int32)Origin;
+    }
+    VH_EXHAUSTIVE_SWITCH_END
+    return (int32)EClassOrigin::Other;
+}
+
+/// What RecordedKind answers for a description of Kind, so the cook can check the round trip.
+AUTORTFM_DISABLE EDeclaredKind RecordsAs(EDeclaredKind Kind)
+{
+    VH_EXHAUSTIVE_SWITCH_BEGIN
+    switch (Kind)
+    {
+    // Every converter treats the two alike, so nothing is lost.
+    case EDeclaredKind::TypedContainer:
+        return EDeclaredKind::Other;
+    case EDeclaredKind::Other:
+    case EDeclaredKind::Logic:
+    case EDeclaredKind::Int:
+    case EDeclaredKind::Float:
+    case EDeclaredKind::Char:
+    case EDeclaredKind::String:
+    case EDeclaredKind::Enum:
+    case EDeclaredKind::Array:
+    case EDeclaredKind::Map:
+    case EDeclaredKind::Tuple:
+    case EDeclaredKind::Option:
+    case EDeclaredKind::Variant:
+    case EDeclaredKind::Rid:
+    case EDeclaredKind::MathStruct:
+    case EDeclaredKind::UserStruct:
+    case EDeclaredKind::Container:
+    case EDeclaredKind::Reference:
+    case EDeclaredKind::OtherClass:
+        return Kind;
+    }
+    VH_EXHAUSTIVE_SWITCH_END
+    return Kind;
+}
+
+AUTORTFM_DISABLE TSharedPtr<FJsonObject> WriteMemberType(const FMemberType& Type)
+{
+    ensureMsgf(RecordedKind(Type) == RecordsAs(Type.Kind),
+               TEXT("A declared type of kind %d reads back out of the sidecar as kind %d."),
+               (int32)Type.Kind, (int32)RecordedKind(Type));
+
+    TSharedPtr<FJsonObject> Object = MakeShared<FJsonObject>();
+    Object->SetObjectField(TEXT("described"), GodotVerse::WriteExportDesc(Type.Described));
+    if (Type.bIsVar)
+    {
+        Object->SetBoolField(TEXT("var"), true);
+    }
+    if (!Type.ReferenceName.IsEmpty())
+    {
+        Object->SetStringField(TEXT("ref"), FString(Type.ReferenceName));
+        Object->SetStringField(TEXT("refPath"), FString(Type.ReferenceQualifiedName));
+        Object->SetNumberField(TEXT("refOrigin"), SidecarOriginCode(Type.ReferenceOrigin));
+        Object->SetBoolField(TEXT("refOption"), Type.bReferenceIsOption);
+    }
+    if (!Type.StructName.IsEmpty())
+    {
+        Object->SetStringField(TEXT("struct"), FString(Type.StructName));
+    }
+    if (Type.EnumeratorCount > 0)
+    {
+        Object->SetNumberField(TEXT("enumerators"), Type.EnumeratorCount);
+        Object->SetStringField(TEXT("enum"), FString(Type.EnumerationName));
+    }
+    if (Type.UserStruct.IsValid())
+    {
+        TSharedPtr<FJsonObject> Layout = MakeShared<FJsonObject>();
+        Layout->SetStringField(TEXT("name"), FString(Type.UserStruct->DecoratedName));
+        TArray<TSharedPtr<FJsonValue>> Names;
+        TArray<TSharedPtr<FJsonValue>> Keys;
+        TArray<TSharedPtr<FJsonValue>> Types;
+        for (const FUtf8String& Name : Type.UserStruct->FieldNames)
+        {
+            Names.Add(MakeShared<FJsonValueString>(FString(Name)));
+        }
+        for (const FUtf8String& Key : Type.UserStruct->FieldKeys)
+        {
+            Keys.Add(MakeShared<FJsonValueString>(FString(Key)));
+        }
+        for (const FMemberType& Field : Type.UserStruct->FieldTypes)
+        {
+            Types.Add(MakeShared<FJsonValueObject>(WriteMemberType(Field)));
+        }
+        Layout->SetArrayField(TEXT("fieldNames"), Names);
+        Layout->SetArrayField(TEXT("fieldKeys"), Keys);
+        Layout->SetArrayField(TEXT("fieldTypes"), Types);
+        Object->SetObjectField(TEXT("userStruct"), Layout);
+    }
+    return Object;
+}
+
+AUTORTFM_DISABLE FMemberType ReadMemberType(const TSharedPtr<FJsonObject>& Object)
+{
+    FMemberType Type;
+    if (!Object.IsValid())
+    {
+        return Type;
+    }
+
+    const TSharedPtr<FJsonObject>* Described = nullptr;
+    if (Object->TryGetObjectField(TEXT("described"), Described))
+    {
+        Type.Described = GodotVerse::ReadExportDesc(*Described);
+    }
+    Object->TryGetBoolField(TEXT("var"), Type.bIsVar);
+
+    FString Text;
+    if (Object->TryGetStringField(TEXT("ref"), Text))
+    {
+        Type.ReferenceName = FUtf8String(Text);
+        Type.ReferenceQualifiedName = FUtf8String(Object->GetStringField(TEXT("refPath")));
+        Type.ReferenceOrigin = (EClassOrigin)(int32)Object->GetNumberField(TEXT("refOrigin"));
+        Type.bReferenceIsOption = Object->GetBoolField(TEXT("refOption"));
+    }
+    if (Object->TryGetStringField(TEXT("struct"), Text))
+    {
+        Type.StructName = FUtf8String(Text);
+        // The layout itself is a generated table every host links, so it is found again rather
+        // than carried: what the sidecar has to remember is only which one.
+        Type.Struct = FindStructLayout(FUtf8StringView(Type.StructName));
+    }
+    if (Object->TryGetStringField(TEXT("enum"), Text))
+    {
+        Type.EnumerationName = FUtf8String(Text);
+        Type.EnumeratorCount = (int32)Object->GetNumberField(TEXT("enumerators"));
+    }
+
+    const TSharedPtr<FJsonObject>* Layout = nullptr;
+    if (Object->TryGetObjectField(TEXT("userStruct"), Layout))
+    {
+        Type.UserStruct = MakeShared<FUserStructLayout>();
+        Type.UserStruct->DecoratedName = FUtf8String((*Layout)->GetStringField(TEXT("name")));
+        const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+        if ((*Layout)->TryGetArrayField(TEXT("fieldNames"), Items))
+        {
+            for (const TSharedPtr<FJsonValue>& Item : *Items)
+            {
+                Type.UserStruct->FieldNames.Add(FUtf8String(Item->AsString()));
+            }
+        }
+        if ((*Layout)->TryGetArrayField(TEXT("fieldKeys"), Items))
+        {
+            for (const TSharedPtr<FJsonValue>& Item : *Items)
+            {
+                Type.UserStruct->FieldKeys.Add(FUtf8String(Item->AsString()));
+            }
+        }
+        if ((*Layout)->TryGetArrayField(TEXT("fieldTypes"), Items))
+        {
+            for (const TSharedPtr<FJsonValue>& Item : *Items)
+            {
+                Type.UserStruct->FieldTypes.Add(ReadMemberType(Item->AsObject()));
+            }
+        }
+    }
+    Type.Kind = RecordedKind(Type);
+    return Type;
+}
+
+AUTORTFM_DISABLE TSharedPtr<FJsonObject> WritePayloadShape(const FPayloadShape& Shape)
+{
+    TSharedPtr<FJsonObject> Object = MakeShared<FJsonObject>();
+    Object->SetNumberField(TEXT("kind"), (int32)Shape.Kind);
+    Object->SetNumberField(TEXT("reject"), Shape.Reject);
+    Object->SetStringField(TEXT("rejectDetail"), FString(Shape.RejectDetail));
+    Object->SetObjectField(TEXT("whole"), WriteMemberType(Shape.Whole));
+    TArray<TSharedPtr<FJsonValue>> Args;
+    for (const FPayloadArg& Arg : Shape.Args)
+    {
+        TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+        Entry->SetStringField(TEXT("name"), FString(Arg.Name));
+        Entry->SetStringField(TEXT("key"), FString(Arg.FieldKey));
+        Entry->SetObjectField(TEXT("type"), WriteMemberType(Arg.Type));
+        Args.Add(MakeShared<FJsonValueObject>(Entry));
+    }
+    Object->SetArrayField(TEXT("args"), Args);
+    return Object;
+}
+
+AUTORTFM_DISABLE FPayloadShape ReadPayloadShape(const TSharedPtr<FJsonObject>& Object)
+{
+    FPayloadShape Shape;
+    if (!Object.IsValid())
+    {
+        return Shape;
+    }
+    Shape.Kind = (EPayloadShape)(uint8)(int32)Object->GetNumberField(TEXT("kind"));
+    Shape.Reject = (int32)Object->GetNumberField(TEXT("reject"));
+    Shape.RejectDetail = FUtf8String(Object->GetStringField(TEXT("rejectDetail")));
+    const TSharedPtr<FJsonObject>* Whole = nullptr;
+    if (Object->TryGetObjectField(TEXT("whole"), Whole))
+    {
+        Shape.Whole = ReadMemberType(*Whole);
+    }
+    const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+    if (Object->TryGetArrayField(TEXT("args"), Items))
+    {
+        for (const TSharedPtr<FJsonValue>& Item : *Items)
+        {
+            const TSharedPtr<FJsonObject> Entry = Item->AsObject();
+            FPayloadArg& Arg = Shape.Args.AddDefaulted_GetRef();
+            Arg.Name = FUtf8String(Entry->GetStringField(TEXT("name")));
+            Arg.FieldKey = FUtf8String(Entry->GetStringField(TEXT("key")));
+            const TSharedPtr<FJsonObject>* Type = nullptr;
+            if (Entry->TryGetObjectField(TEXT("type"), Type))
+            {
+                Arg.Type = ReadMemberType(*Type);
+            }
+        }
+    }
+    return Shape;
+}
+
+} // namespace
+
+AUTORTFM_DISABLE TSharedPtr<FJsonObject> GodotVerse::WriteDeclaredTypes(const FDeclaredTypes& Types)
+{
+    TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+
+    TSharedRef<FJsonObject> Members = MakeShared<FJsonObject>();
+    for (const TPair<FUtf8String, FMemberType>& Pair : Types.Members)
+    {
+        Members->SetObjectField(FString(Pair.Key), WriteMemberType(Pair.Value));
+    }
+    Root->SetObjectField(TEXT("members"), Members);
+
+    TSharedRef<FJsonObject> Methods = MakeShared<FJsonObject>();
+    for (const TPair<FUtf8String, FMethodSignatureTypes>& Pair : Types.Methods)
+    {
+        TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+        TArray<TSharedPtr<FJsonValue>> Params;
+        for (const FMemberType& Param : Pair.Value.Params)
+        {
+            Params.Add(MakeShared<FJsonValueObject>(WriteMemberType(Param)));
+        }
+        Entry->SetArrayField(TEXT("params"), Params);
+        Entry->SetObjectField(TEXT("result"), WriteMemberType(Pair.Value.Result));
+        Methods->SetObjectField(FString(Pair.Key), Entry);
+    }
+    Root->SetObjectField(TEXT("methods"), Methods);
+
+    TSharedRef<FJsonObject> Signals = MakeShared<FJsonObject>();
+    for (const TPair<FUtf8String, FPayloadShape>& Pair : Types.Signals)
+    {
+        Signals->SetObjectField(FString(Pair.Key), WritePayloadShape(Pair.Value));
+    }
+    Root->SetObjectField(TEXT("signals"), Signals);
+
+    return Root;
+}
+
+AUTORTFM_DISABLE TSharedPtr<FJsonObject> GodotVerse::WriteEngineSignalTypes(const FEngineSignalTypes& Types)
+{
+    // Deduplicated, because 503 accessors carry about eighty distinct payloads between them --
+    // half of Godot's signals are `signal(tuple())` -- and the identity that separates them is the
+    // JSON itself. Writing one entry per accessor instead costs a third of a megabyte of sidecar
+    // for the same information.
+    TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+    TArray<TSharedPtr<FJsonValue>> Shapes;
+    TMap<FString, int32> IndexByText;
+    TSharedRef<FJsonObject> Keys = MakeShared<FJsonObject>();
+
+    for (const TPair<FUtf8String, FPayloadShape>& Pair : Types.Shapes)
+    {
+        const TSharedPtr<FJsonObject> Shape = WritePayloadShape(Pair.Value);
+        FString Text;
+        const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Text);
+        FJsonSerializer::Serialize(Shape.ToSharedRef(), Writer);
+
+        int32* Existing = IndexByText.Find(Text);
+        if (!Existing)
+        {
+            Existing = &IndexByText.Add(Text, Shapes.Num());
+            Shapes.Add(MakeShared<FJsonValueObject>(Shape));
+        }
+        Keys->SetNumberField(FString(Pair.Key), *Existing);
+    }
+
+    Root->SetArrayField(TEXT("shapes"), Shapes);
+    Root->SetObjectField(TEXT("keys"), Keys);
+    return Root;
+}
+
+AUTORTFM_DISABLE TSharedPtr<GodotVerse::FEngineSignalTypes> GodotVerse::ReadEngineSignalTypes(
+    const TSharedPtr<FJsonObject>& Object)
+{
+    const TArray<TSharedPtr<FJsonValue>>* ShapeArray = nullptr;
+    const TSharedPtr<FJsonObject>* Keys = nullptr;
+    if (!Object.IsValid() || !Object->TryGetArrayField(TEXT("shapes"), ShapeArray)
+        || !Object->TryGetObjectField(TEXT("keys"), Keys))
+    {
+        return nullptr;
+    }
+
+    TArray<FPayloadShape> Shapes;
+    Shapes.Reserve(ShapeArray->Num());
+    for (const TSharedPtr<FJsonValue>& Item : *ShapeArray)
+    {
+        Shapes.Add(ReadPayloadShape(Item->AsObject()));
+    }
+
+    TSharedPtr<FEngineSignalTypes> Types = MakeShared<FEngineSignalTypes>();
+    for (const auto& Pair : (*Keys)->Values)
+    {
+        const int32 Index = (int32)Pair.Value->AsNumber();
+        if (Shapes.IsValidIndex(Index))
+        {
+            Types->Shapes.Add(FUtf8String(Pair.Key), Shapes[Index]);
+        }
+    }
+    return Types;
+}
+
+AUTORTFM_DISABLE TSharedPtr<GodotVerse::FDeclaredTypes> GodotVerse::ReadDeclaredTypes(
+    const TSharedPtr<FJsonObject>& Object)
+{
+    if (!Object.IsValid())
+    {
+        return nullptr;
+    }
+    TSharedPtr<FDeclaredTypes> Types = MakeShared<FDeclaredTypes>();
+
+    const TSharedPtr<FJsonObject>* Section = nullptr;
+    if (Object->TryGetObjectField(TEXT("members"), Section))
+    {
+        for (const auto& Pair : (*Section)->Values)
+        {
+            Types->Members.Add(FUtf8String(Pair.Key), ReadMemberType(Pair.Value->AsObject()));
+        }
+    }
+    if (Object->TryGetObjectField(TEXT("methods"), Section))
+    {
+        for (const auto& Pair : (*Section)->Values)
+        {
+            const TSharedPtr<FJsonObject> Entry = Pair.Value->AsObject();
+            FMethodSignatureTypes Signature;
+            const TArray<TSharedPtr<FJsonValue>>* Params = nullptr;
+            if (Entry->TryGetArrayField(TEXT("params"), Params))
+            {
+                for (const TSharedPtr<FJsonValue>& Param : *Params)
+                {
+                    Signature.Params.Add(ReadMemberType(Param->AsObject()));
+                }
+            }
+            const TSharedPtr<FJsonObject>* Result = nullptr;
+            if (Entry->TryGetObjectField(TEXT("result"), Result))
+            {
+                Signature.Result = ReadMemberType(*Result);
+            }
+            Types->Methods.Add(FUtf8String(Pair.Key), MoveTemp(Signature));
+        }
+    }
+    if (Object->TryGetObjectField(TEXT("signals"), Section))
+    {
+        for (const auto& Pair : (*Section)->Values)
+        {
+            Types->Signals.Add(FUtf8String(Pair.Key), ReadPayloadShape(Pair.Value->AsObject()));
+        }
+    }
+    return Types;
 }
 
 AUTORTFM_DISABLE bool GodotVerse::WriteClassSidecar(const FString& Path,

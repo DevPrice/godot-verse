@@ -13,6 +13,7 @@
 #include "HostResult.h"
 #include "HostRuntime.h"
 #include "HostScript.h"
+#include "HostSnapshot.h"
 #include "HostScriptState.h"
 #include "HostSignals.h"
 #include "HostTypeModel.h"

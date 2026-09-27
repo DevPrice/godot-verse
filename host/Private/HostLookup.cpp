@@ -6,6 +6,7 @@
 #include "HAL/PlatformTime.h"
 #include "HostEngineAdapters.h"
 #include "HostScript.h"
+#include "HostSnapshot.h"
 #include "HostScriptState.h"
 #include "HostTypeModel.h"
 #include "ULangUEUtils.h"

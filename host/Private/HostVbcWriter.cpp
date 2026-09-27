@@ -8,6 +8,7 @@
 #include "Algo/StableSort.h"
 #include "HAL/FileManager.h"
 #include "HostScript.h"
+#include "HostSnapshot.h"
 #include "HostVbcOps.gen.h"
 #include "host_build_id.gen.h"
 #include "Misc/FileHelper.h"

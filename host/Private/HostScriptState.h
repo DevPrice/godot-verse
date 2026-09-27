@@ -17,10 +17,11 @@ class CClass;
 class CSemanticProgram;
 }
 
-/// What HostScript.cpp owns and the units split out of it read: the IDE's semantic program, the
-/// project's source snippets, the trace switch, the published generation's classes, the recorded
-/// declared types, the content scopes' outer and the binding roster. Each is a function rather than
-/// an extern global, so a unit cannot write what it only has reason to read.
+/// What the build lifecycle (HostBuild.cpp), the snapshot (HostSnapshot.cpp) and the content scope
+/// (HostScript.cpp) own and every other unit reads: the IDE's semantic program, the project's source
+/// snippets, the trace switch, the published generation's classes, the recorded declared types, the
+/// content scopes' outer and the binding roster. Each is a function rather than an extern global,
+/// so a unit cannot write what it only has reason to read.
 namespace GodotVerse {
 
 /// The semantic program the IDE currently holds, or null before the IDE exists or once it is
