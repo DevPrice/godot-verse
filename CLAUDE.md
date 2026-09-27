@@ -1105,7 +1105,7 @@ layer, and is skipped there when `../godot` is absent.
   `VFunction::Invoke` inside an `AutoRTFM::Open` nested in its transaction, which is what
   `TVerseFunction::operator()` does for the same reason: a Verse runtime error raised from closed
   code trips `AutoRTFM::UnreachableIfClosed` in `FContext::RaiseVerseRuntimeError` and takes the
-  process down instead of unwinding.
+  process down instead of unwinding. `FVerseEntry` `check`s it on every entry.
 - **`Verse::Stm::OnRollback` does nothing here.** It is the Solaris *interpreter's* STM and
   `VerseStm.h` says "Noop if StmActive() returns false". The mechanism that works from this bridge is
   `AutoRTFM::OnAbort<AutoRTFM::EOpenBehavior::SameAsClosed>` — `SameAsClosed` is load-bearing,

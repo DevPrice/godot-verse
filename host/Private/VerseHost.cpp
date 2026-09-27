@@ -107,9 +107,23 @@ int32 GodotVerse::StatusFor(GodotVerse::EHostFailure Failure)
     case EHostFailure::NoSuchClass:
     case EHostFailure::UnknownId:
     case EHostFailure::NotASignal:
+    case EHostFailure::NoSuchMember:
+    case EHostFailure::Unset:
+    case EHostFailure::NotAssignable:
+    case EHostFailure::NoSuchMethod:
+    case EHostFailure::SignatureNotRecorded:
         return VH_ERR_NOT_FOUND;
+    case EHostFailure::InstanceReleased:
+    case EHostFailure::GodotUnavailable:
+        return VH_ERR_STATE;
     case EHostFailure::Aborted:
         return VH_ERR_RUNTIME;
+    case EHostFailure::Halted:
+        return VH_ERR_HALTED;
+    case EHostFailure::Declined:
+        return VH_ERR_FAILED;
+    case EHostFailure::WrongArgumentCount:
+        return VH_ERR_ARGUMENT;
     // A value the declaration cannot take, or cannot be built as: the call was shaped wrong, which
     // is what InstanceCall already answers for a conversion that declines.
     case EHostFailure::NotPublished:
@@ -1286,6 +1300,10 @@ namespace {
 /// Backing store for the instance field reader. The ABI promises the value -- and any string it
 /// points at -- stays valid until the next read, so neither can live on the stack. The class
 /// default reader keeps its own, because what it hands out is a share of the analysis snapshot.
+///
+/// The field entry points answer every reason a read or write fails for as VH_ERR_NOT_FOUND rather
+/// than through StatusFor, which would say VH_ERR_ARGUMENT for a value the member cannot take: one
+/// code is what verse_host_abi.h promises for all four, and what host_smoke holds them to.
 vh_value GFieldValue{};
 GodotVerse::FFieldStorage GFieldStorage;
 } // namespace

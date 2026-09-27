@@ -61,6 +61,27 @@ enum class EHostFailure : uint8
     NotASignal,
     /// The Verse code run for the answer failed or raised, and its transaction was aborted.
     Aborted,
+    /// The VM declined to run the body at all -- the scope it would run under was terminated.
+    Halted,
+    /// A <decides> method ran and declined, which leaves no value and is not a missing method.
+    Declined,
+    /// The script instance, or the object it held, has been released.
+    InstanceReleased,
+    /// The object's shape carries no data member of that name.
+    NoSuchMember,
+    /// The member exists and holds no value yet.
+    Unset,
+    /// The member cannot be written now: a non-var on a sealed instance, or a shape constant.
+    NotAssignable,
+    /// The class declares no method of that name, or has no ToString extension method.
+    NoSuchMethod,
+    /// The analysis recorded no declared types for the method, or recorded a different arity.
+    SignatureNotRecorded,
+    /// More or fewer arguments than the method takes.
+    WrongArgumentCount,
+    /// Godot's own half of an answer is missing: no callback to make a container with, or one that
+    /// made nothing.
+    GodotUnavailable,
 };
 
 /// A value, or the reason there is none.

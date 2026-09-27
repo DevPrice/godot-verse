@@ -8,6 +8,7 @@
 #include "GodotClasses.h"
 #include "GodotClassNames.gen.h"
 #include "HostInstances.h"
+#include "HostResult.h"
 #include "HostRuntime.h"
 #include "HostScript.h"
 #include "HostScriptState.h"
@@ -539,6 +540,11 @@ AUTORTFM_DISABLE int64 GodotVerse::AdoptOrMintPeer(verse::vh_object* Self, const
         return 0;
     }
 
+    // Godot makes its objects on the game thread and the minted table is the game thread's. The one
+    // construction that runs anywhere else, the reading device an analysis builds its defaults off,
+    // is suppressed above and never gets here.
+    checkf(IsInGameThread(), TEXT("A vh_object asked for a Godot peer off the game thread"));
+
     FHostState& Host = GetHost();
     const FUtf8StringView ClassView(reinterpret_cast<const UTF8CHAR*>(GodotClass));
     const int64 Handle = Host.Godot.InstantiateClass
@@ -571,6 +577,7 @@ AUTORTFM_DISABLE FUtf8String GodotVerse::ClassBaseType(FUtf8StringView ClassName
     // but the rule is the file's and not the caller's, so it is checked here.
     if (IsBackgroundCheckRunning())
     {
+        VH_UNREPORTED("ClassBaseType: asked while an analysis runs, answered empty");
         return FUtf8String();
     }
     const char* const GodotClass = GodotPeerClassFor(FindGodotClass(ClassName));

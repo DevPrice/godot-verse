@@ -6,6 +6,7 @@
 #include "Containers/Array.h"
 #include "Containers/UnrealString.h"
 #include "HostLookup.h"
+#include "HostResult.h"
 #include "Templates/SharedPointer.h"
 #include "VerseString.h"
 #include "verse_host_abi.h"
@@ -707,8 +708,12 @@ AUTORTFM_DISABLE TSharedPtr<FEngineSignalTypes> ReadEngineSignalTypes(const TSha
 /// Makes a table read back from a sidecar the one BindEngineSignal consults. Game thread only.
 AUTORTFM_DISABLE void SetRecordedEngineSignalTypes(TSharedPtr<FEngineSignalTypes> Types);
 
-/// Reads one data member off a live instance into the ABI's value shape.
-AUTORTFM_DISABLE bool ReadInstanceField(const FInstance* Instance, FUtf8StringView FieldName, vh_value& OutValue, FFieldStorage& OutStorage);
+/// Reads one data member off a live instance into the ABI's value shape, or says why not: the
+/// member is absent, holds no value yet, or holds one with no wire representation.
+AUTORTFM_DISABLE TResult<void> ReadInstanceField(const FInstance* Instance,
+                                                 FUtf8StringView FieldName,
+                                                 vh_value& OutValue,
+                                                 FFieldStorage& OutStorage);
 
 /// The same read against the class default object, whose Verse constructor has already run.
 /// That is where a member's declared default has to come from: the semantic program can say only
@@ -728,7 +733,10 @@ AUTORTFM_DISABLE bool ReadClassDefaultField(FUtf8StringView ClassName,
 /// to apply the values a scene stored. That keeps Verse's immutability honest: a non-var still
 /// never changes once the script can observe it, so the inspector value reads as an initializer
 /// rather than a mutation. Sealing is one-way and happens on the first InstanceCall*.
-AUTORTFM_DISABLE bool WriteInstanceField(FInstance* Instance, FUtf8StringView FieldName, const vh_value& Value);
+///
+/// NotAssignable is a non-var on a sealed instance or a shape constant; the converters' reasons are
+/// a value the declared type cannot take.
+AUTORTFM_DISABLE TResult<void> WriteInstanceField(FInstance* Instance, FUtf8StringView FieldName, const vh_value& Value);
 
 /// Writes a reference member with another instance rather than with a handle.
 ///
@@ -738,9 +746,12 @@ AUTORTFM_DISABLE bool WriteInstanceField(FInstance* Instance, FUtf8StringView Fi
 /// them they are looking at. A mirrored member takes one too, for the same reason read the other
 /// way round: where the object exists, holding it beats copying its handle.
 ///
-/// Value may be null, which clears the member. False for a member that is not a reference, one that
-/// cannot be written, or one whose declared class Value is not an instance of.
-AUTORTFM_DISABLE bool WriteInstanceFieldInstance(FInstance* Instance, FUtf8StringView FieldName, const FInstance* Value);
+/// Value may be null, which clears the member. TypeMismatch for a member that is not a reference or
+/// one whose declared class Value is not an instance of, and WriteInstanceField's reasons for one
+/// that cannot be written.
+AUTORTFM_DISABLE TResult<void> WriteInstanceFieldInstance(FInstance* Instance,
+                                                          FUtf8StringView FieldName,
+                                                          const FInstance* Value);
 
 AUTORTFM_DISABLE int32 RunMain(const TArray<verse::string>& Args, int64& OutExitCode);
 

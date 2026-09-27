@@ -53,6 +53,7 @@ using GodotVerse::ContentScopeOuter;
 using GodotVerse::DescribeMemberType;
 using GodotVerse::EClassOrigin;
 using GodotVerse::EDeclaredKind;
+using GodotVerse::EHostFailure;
 using GodotVerse::EnterVerse;
 using GodotVerse::FindGodotClass;
 using GodotVerse::FindMirroredClass;
@@ -202,13 +203,16 @@ AUTORTFM_DISABLE const Verse::VShape::VEntry* FindShapeField(Verse::FRunningCont
     return nullptr;
 }
 
-/// Reads FieldName off Object. Returns false for a field the shape does not carry, and for any
-/// Verse type with no vh_value counterpart.
-AUTORTFM_DISABLE bool ReadFieldOf(UObject* Object, FUtf8StringView FieldName, vh_value& OutValue, GodotVerse::FFieldStorage& OutStorage)
+/// Reads FieldName off Object: NoSuchMember for a field the shape does not carry, Unset for one
+/// holding no value yet, and the converter's reason for a Verse type with no vh_value counterpart.
+AUTORTFM_DISABLE GodotVerse::TResult<void> ReadFieldOf(UObject* Object,
+                                                      FUtf8StringView FieldName,
+                                                      vh_value& OutValue,
+                                                      GodotVerse::FFieldStorage& OutStorage)
 {
     if (!Object)
     {
-        return false;
+        return EHostFailure::InstanceReleased;
     }
 
     OutValue = vh_value{};
@@ -217,7 +221,7 @@ AUTORTFM_DISABLE bool ReadFieldOf(UObject* Object, FUtf8StringView FieldName, vh
     OutStorage.Blocks.Reset();
     OutStorage.Strings.Reset();
 
-    bool bRead = false;
+    GodotVerse::TResult<void> Read = EHostFailure::Halted;
     Verse::FRunningContext Context = Verse::FRunningContextPromise{};
     EnterVerse(Context, [&] {
         // The shape lookup is done here rather than through LoadField's by-name overload, which
@@ -234,6 +238,7 @@ AUTORTFM_DISABLE bool ReadFieldOf(UObject* Object, FUtf8StringView FieldName, vh
         const Verse::VShape::VEntry* Field = FindShapeField(Context, Object, FieldName, DeclaringClass);
         if (Field == nullptr)
         {
+            Read = EHostFailure::NoSuchMember;
             return;
         }
 
@@ -254,16 +259,14 @@ AUTORTFM_DISABLE bool ReadFieldOf(UObject* Object, FUtf8StringView FieldName, vh
         }
         if (Value.IsUninitialized())
         {
+            Read = EHostFailure::Unset;
             return;
         }
 
-        bRead = ValueToWire(Context, Value, DescribeMemberType(DeclaringClass, FieldName),
-                            OutStorage, OutValue).IsOk();
+        Read = ValueToWire(Context, Value, DescribeMemberType(DeclaringClass, FieldName), OutStorage, OutValue);
     });
-    return bRead;
+    return Read;
 }
-
-
 
 } // namespace
 
@@ -322,30 +325,40 @@ TMap<int64, GodotVerse::FInstance*> GInstancesByHandle;
 
 namespace {
 
-using FFieldValueBuilder = TFunctionRef<Verse::VValue(Verse::FRunningContext Context, Verse::VValue Current)>;
+using FFieldValueBuilder =
+    TFunctionRef<GodotVerse::TResult<Verse::VValue>(Verse::FRunningContext Context, Verse::VValue Current)>;
 
-AUTORTFM_DISABLE bool WriteFieldWith(UObject* Object, FUtf8StringView FieldName, EFieldWrite Mode, FFieldValueBuilder MakeValue)
+AUTORTFM_DISABLE GodotVerse::TResult<void> WriteFieldWith(UObject* Object,
+                                                          FUtf8StringView FieldName,
+                                                          EFieldWrite Mode,
+                                                          FFieldValueBuilder MakeValue)
 {
     if (!Object)
     {
-        return false;
+        return EHostFailure::InstanceReleased;
     }
 
     if (Mode == EFieldWrite::Assign && !IsVarMember(QualifiedClassName(Object->GetClass()), FieldName))
     {
-        return false;
+        return EHostFailure::NotAssignable;
     }
 
-    bool bWrote = false;
+    GodotVerse::TResult<void> Wrote = EHostFailure::Halted;
     Verse::FRunningContext Context = Verse::FRunningContextPromise{};
     EnterVerse(Context, [&] {
         FUtf8String DeclaringClass;
         const Verse::VShape::VEntry* Field = FindShapeField(Context, Object, FieldName, DeclaringClass);
+        if (Field == nullptr)
+        {
+            Wrote = EHostFailure::NoSuchMember;
+            return;
+        }
 
         // A Constant entry lives in the shape itself rather than in the object, so it is shared by
         // every instance and cannot be assigned to.
-        if (Field == nullptr || !Field->IsProperty())
+        if (!Field->IsProperty())
         {
+            Wrote = EHostFailure::NotAssignable;
             return;
         }
 
@@ -359,9 +372,16 @@ AUTORTFM_DISABLE bool WriteFieldWith(UObject* Object, FUtf8StringView FieldName,
         const Verse::VValue Current = Slot ? Slot->Get(Context)
                                            : Verse::VNativeRef::Peek(Context, Object, Field->UProperty);
 
-        const Verse::VValue NewValue = MakeValue(Context, Current);
+        const GodotVerse::TResult<Verse::VValue> Built = MakeValue(Context, Current);
+        if (!Built)
+        {
+            Wrote = Built.GetFailure();
+            return;
+        }
+        const Verse::VValue NewValue = Built.GetValue();
         if (NewValue.IsUninitialized())
         {
+            Wrote = EHostFailure::ConstructionFailed;
             return;
         }
 
@@ -378,7 +398,7 @@ AUTORTFM_DISABLE bool WriteFieldWith(UObject* Object, FUtf8StringView FieldName,
             {
                 Slot->Set(Context, NewValue);
             }
-            bWrote = true;
+            Wrote = GodotVerse::TResult<void>::Ok();
         }
         else
         {
@@ -386,10 +406,11 @@ AUTORTFM_DISABLE bool WriteFieldWith(UObject* Object, FUtf8StringView FieldName,
             // VNativeRef::Set is the write for either -- for a var it is the assignment, and for a
             // non-var it is what the interpreter itself uses to initialize one.
             const Verse::FOpResult Result = Verse::VNativeRef::New(Context, Object, Field->UProperty).Set(Context, NewValue);
-            bWrote = Result.IsReturn();
+            Wrote = Result.IsReturn() ? GodotVerse::TResult<void>::Ok()
+                                      : GodotVerse::TResult<void>(EHostFailure::ConstructionFailed);
         }
     });
-    return bWrote;
+    return Wrote;
 }
 
 /// Writes the object an optional reference member should hold, or nothing for null.
@@ -397,18 +418,25 @@ AUTORTFM_DISABLE bool WriteFieldWith(UObject* Object, FUtf8StringView FieldName,
 /// The caller is the one that has checked Referenced against the member's declared class. Neither
 /// the shape nor the slot will: a slot told it holds a `?sprite2d` takes whatever object is put in
 /// it, and the mistake surfaces the first time compiled code calls a method that is not there.
-AUTORTFM_DISABLE bool WriteReferenceField(UObject* Object, FUtf8StringView FieldName, EFieldWrite Mode, UObject* Referenced)
+AUTORTFM_DISABLE GodotVerse::TResult<void> WriteReferenceField(UObject* Object,
+                                                               FUtf8StringView FieldName,
+                                                               EFieldWrite Mode,
+                                                               UObject* Referenced)
 {
-    return WriteFieldWith(Object, FieldName, Mode, [Referenced](Verse::FRunningContext Context, Verse::VValue) {
-        return ReferenceOption(Context, Referenced);
-    });
+    return WriteFieldWith(Object, FieldName, Mode,
+        [Referenced](Verse::FRunningContext Context, Verse::VValue) -> GodotVerse::TResult<Verse::VValue> {
+            return ReferenceOption(Context, Referenced);
+        });
 }
 
-AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, const vh_value& Value, EFieldWrite Mode)
+AUTORTFM_DISABLE GodotVerse::TResult<void> WriteFieldOf(UObject* Object,
+                                                        FUtf8StringView FieldName,
+                                                        const vh_value& Value,
+                                                        EFieldWrite Mode)
 {
     if (!Object)
     {
-        return false;
+        return EHostFailure::InstanceReleased;
     }
 
     // A reference arrives as a handle, which names a Godot object and not a Verse one -- so the
@@ -420,7 +448,7 @@ AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, c
         const FMemberType Declared = DescribeMemberType(QualifiedClassName(Object->GetClass()), FieldName);
         if (Declared.ReferenceOrigin != EClassOrigin::Mirrored || !Declared.bReferenceIsOption)
         {
-            return false;
+            return EHostFailure::TypeMismatch;
         }
         // Built before the VM scope is entered, because constructing it runs the class's Verse
         // constructor through UVerseClass::PostInitInstance, which takes a context of its own.
@@ -429,7 +457,7 @@ AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, c
         UObject* Referenced = Handle != 0 ? GodotVerse::ObjectForHandle(Handle, DeclaredClass) : nullptr;
         if (Handle != 0 && (!Referenced || !Referenced->IsA(DeclaredClass)))
         {
-            return false;
+            return EHostFailure::TypeMismatch;
         }
         return WriteReferenceField(Object, FieldName, Mode, Referenced);
     }
@@ -443,7 +471,7 @@ AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, c
         const int32 EnumeratorCount = DescribeMemberType(QualifiedClassName(Object->GetClass()), FieldName).EnumeratorCount;
         if (EnumeratorCount > 0 && (Value.Int < 0 || Value.Int >= EnumeratorCount))
         {
-            return false;
+            return EHostFailure::EnumOrdinalOutOfRange;
         }
     }
 
@@ -455,7 +483,7 @@ AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, c
         const FMemberType Declared = DescribeMemberType(QualifiedClassName(Object->GetClass()), FieldName);
         if (Declared.Described.Type != Value.Type)
         {
-            return false;
+            return EHostFailure::TypeMismatch;
         }
 
         if (Value.Type == VH_TYPE_TUPLE)
@@ -463,113 +491,108 @@ AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, c
             const FStructLayout* const Layout = Declared.Struct;
             if (!Layout)
             {
-                return false;
+                return EHostFailure::Unconvertible;
             }
-            return WriteFieldWith(Object, FieldName, Mode, [&Value, Layout](Verse::FRunningContext Context, Verse::VValue Current) {
-                // The class is taken from the struct already in the slot, which is the discipline
-                // every write here follows: the new value cannot be of a class the compiled code was
-                // not already expecting.
-                Verse::VRef* const Box = Current.DynamicCast<Verse::VRef>();
-                const Verse::VValue Inner = Box ? Box->Get(Context) : Current;
-                Verse::VValueObject* const Struct = Inner.DynamicCast<Verse::VValueObject>();
-                if (!Struct)
-                {
-                    return Verse::VValue();
-                }
-                const GodotVerse::TResult<Verse::VValue> Built =
-                    NewStructValue(Context, Struct->GetClass(), *Layout, Value.Seq.Items, Value.Seq.Count);
-                if (!Built)
-                {
-                    VH_UNREPORTED("a struct member write built no value; WriteFieldOf answers bool");
-                    return Verse::VValue();
-                }
-                return Built.GetValue();
-            });
+            return WriteFieldWith(Object, FieldName, Mode,
+                [&Value, Layout](Verse::FRunningContext Context, Verse::VValue Current) -> GodotVerse::TResult<Verse::VValue> {
+                    // The class is taken from the struct already in the slot, which is the
+                    // discipline every write here follows: the new value cannot be of a class the
+                    // compiled code was not already expecting.
+                    Verse::VRef* const Box = Current.DynamicCast<Verse::VRef>();
+                    const Verse::VValue Inner = Box ? Box->Get(Context) : Current;
+                    Verse::VValueObject* const Struct = Inner.DynamicCast<Verse::VValueObject>();
+                    if (!Struct)
+                    {
+                        return EHostFailure::TypeMismatch;
+                    }
+                    return NewStructValue(Context, Struct->GetClass(), *Layout, Value.Seq.Items, Value.Seq.Count);
+                });
         }
 
         const int32 Tag = Declared.Described.VariantTag;
         const int32 ElementTag = Declared.Described.ElementVariantTag;
-        return WriteFieldWith(Object, FieldName, Mode, [&Value, Tag, ElementTag](Verse::FRunningContext Context, Verse::VValue Current) {
-            Verse::VRef* const Box = Current.DynamicCast<Verse::VRef>();
-            const Verse::VValue Inner = Box ? Box->Get(Context) : Current;
-            const GodotVerse::TResult<Verse::VValue> Built = NewArrayValue(
-                Context, Inner.IsCellOfType<Verse::VMutableArray>(), Tag, ElementTag, Value.Seq.Items, Value.Seq.Count);
-            if (!Built)
-            {
-                VH_UNREPORTED("an array member write built no value; WriteFieldOf answers bool");
-                return Verse::VValue();
-            }
-            return Built.GetValue();
-        });
+        return WriteFieldWith(Object, FieldName, Mode,
+            [&Value, Tag, ElementTag](Verse::FRunningContext Context, Verse::VValue Current) -> GodotVerse::TResult<Verse::VValue> {
+                Verse::VRef* const Box = Current.DynamicCast<Verse::VRef>();
+                const Verse::VValue Inner = Box ? Box->Get(Context) : Current;
+                return NewArrayValue(
+                    Context, Inner.IsCellOfType<Verse::VMutableArray>(), Tag, ElementTag, Value.Seq.Items, Value.Seq.Count);
+            });
     }
 
-    return WriteFieldWith(Object, FieldName, Mode, [&Value](Verse::FRunningContext Context, Verse::VValue Current) {
-        switch (Value.Type)
-        {
-        case VH_TYPE_LOGIC:
-            return Verse::VValue::FromBool(Value.Logic != 0);
-        case VH_TYPE_INT:
-        {
-            // An enum member holds an enumerator rather than a number, and the enumeration it belongs
-            // to is reachable only from the enumerator already in the slot -- the usual rule here,
-            // that the new value's kind comes from the one it replaces. WriteFieldOf has already
-            // bounded the ordinal against the enum the author declared.
-            Verse::VRef* const Box = Current.DynamicCast<Verse::VRef>();
-            const Verse::VValue Inner = Box ? Box->Get(Context) : Current;
-            if (Verse::VEnumerator* Enumerator = Inner.DynamicCast<Verse::VEnumerator>())
+    return WriteFieldWith(Object, FieldName, Mode,
+        [&Value](Verse::FRunningContext Context, Verse::VValue Current) -> GodotVerse::TResult<Verse::VValue> {
+            switch (Value.Type)
             {
-                Verse::VEnumeration* const Enumeration = Enumerator->GetEnumeration();
-                if (!Enumeration || Value.Int < 0 || Value.Int >= Enumeration->NumEnumerators)
+            case VH_TYPE_LOGIC:
+                return Verse::VValue::FromBool(Value.Logic != 0);
+            case VH_TYPE_INT:
+            {
+                // An enum member holds an enumerator rather than a number, and the enumeration it
+                // belongs to is reachable only from the enumerator already in the slot -- the usual
+                // rule here, that the new value's kind comes from the one it replaces. WriteFieldOf
+                // has already bounded the ordinal against the enum the author declared.
+                Verse::VRef* const Box = Current.DynamicCast<Verse::VRef>();
+                const Verse::VValue Inner = Box ? Box->Get(Context) : Current;
+                if (Verse::VEnumerator* Enumerator = Inner.DynamicCast<Verse::VEnumerator>())
                 {
-                    return Verse::VValue();
+                    Verse::VEnumeration* const Enumeration = Enumerator->GetEnumeration();
+                    if (!Enumeration || Value.Int < 0 || Value.Int >= Enumeration->NumEnumerators)
+                    {
+                        return EHostFailure::EnumOrdinalOutOfRange;
+                    }
+                    return Verse::VValue(Enumeration->GetEnumeratorChecked((int32)Value.Int));
                 }
-                return Verse::VValue(Enumeration->GetEnumeratorChecked((int32)Value.Int));
+                return Verse::VValue(Verse::VInt(Context, Value.Int));
             }
-            return Verse::VValue(Verse::VInt(Context, Value.Int));
-        }
-        case VH_TYPE_FLOAT:
-            return Verse::VValue(Verse::VFloat(Value.Float));
-        case VH_TYPE_STRING:
-        {
-            // Verse hangs the mutability of a container off the container, not off a reference
-            // around it: `var Label:string` holds a VMutableArray where a plain one holds a VArray.
-            const FUtf8StringView Utf8(reinterpret_cast<const UTF8CHAR*>(Value.String.Utf8), Value.String.Len);
-            Verse::VRef* const Box = Current.DynamicCast<Verse::VRef>();
-            const Verse::VValue Inner = Box ? Box->Get(Context) : Current;
-            return Inner.IsCellOfType<Verse::VMutableArray>()
-                ? Verse::VValue(Verse::VMutableArray::New(Context, Utf8))
-                : Verse::VValue(Verse::VArray::New(Context, Utf8));
-        }
-        default:
-            return Verse::VValue();
-        }
-    });
+            case VH_TYPE_FLOAT:
+                return Verse::VValue(Verse::VFloat(Value.Float));
+            case VH_TYPE_STRING:
+            {
+                // Verse hangs the mutability of a container off the container, not off a reference
+                // around it: `var Label:string` holds a VMutableArray where a plain one holds a
+                // VArray.
+                const FUtf8StringView Utf8(reinterpret_cast<const UTF8CHAR*>(Value.String.Utf8), Value.String.Len);
+                Verse::VRef* const Box = Current.DynamicCast<Verse::VRef>();
+                const Verse::VValue Inner = Box ? Box->Get(Context) : Current;
+                return Inner.IsCellOfType<Verse::VMutableArray>()
+                    ? Verse::VValue(Verse::VMutableArray::New(Context, Utf8))
+                    : Verse::VValue(Verse::VArray::New(Context, Utf8));
+            }
+            default:
+                return EHostFailure::Unconvertible;
+            }
+        });
 }
 
 } // namespace
 
-AUTORTFM_DISABLE bool GodotVerse::WriteInstanceField(FInstance* Instance, FUtf8StringView FieldName, const vh_value& Value)
+AUTORTFM_DISABLE GodotVerse::TResult<void> GodotVerse::WriteInstanceField(FInstance* Instance,
+                                                                          FUtf8StringView FieldName,
+                                                                          const vh_value& Value)
 {
     if (!Instance || !Instance->Object.IsValid())
     {
-        return false;
+        return EHostFailure::InstanceReleased;
     }
     return WriteFieldOf(Instance->Object.Get(), FieldName, Value,
                         Instance->bSealed ? EFieldWrite::Assign : EFieldWrite::Initialize);
 }
 
-AUTORTFM_DISABLE bool GodotVerse::WriteInstanceFieldInstance(FInstance* Instance, FUtf8StringView FieldName, const FInstance* Value)
+AUTORTFM_DISABLE GodotVerse::TResult<void> GodotVerse::WriteInstanceFieldInstance(FInstance* Instance,
+                                                                                  FUtf8StringView FieldName,
+                                                                                  const FInstance* Value)
 {
     if (!Instance || !Instance->Object.IsValid())
     {
-        return false;
+        return EHostFailure::InstanceReleased;
     }
 
     UObject* Referenced = Value && Value->Object.IsValid() ? Value->Object.Get() : nullptr;
     const FMemberType Declared = DescribeMemberType(QualifiedClassName(Instance->Object->GetClass()), FieldName);
     if (Declared.ReferenceName.IsEmpty())
     {
-        return false;
+        return EHostFailure::TypeMismatch;
     }
 
     // The class check the slot will not do. A mirrored member accepts an instance too, and should:
@@ -580,9 +603,13 @@ AUTORTFM_DISABLE bool GodotVerse::WriteInstanceFieldInstance(FInstance* Instance
         UClass* MemberClass = Declared.ReferenceOrigin == EClassOrigin::Script
             ? FindGodotClass(FUtf8StringView(Declared.ReferenceQualifiedName))
             : FindMirroredClass(FUtf8StringView(Declared.ReferenceName));
-        if (!MemberClass || !Referenced->GetClass()->IsChildOf(MemberClass))
+        if (!MemberClass)
         {
-            return false;
+            return EHostFailure::NotPublished;
+        }
+        if (!Referenced->GetClass()->IsChildOf(MemberClass))
+        {
+            return EHostFailure::TypeMismatch;
         }
     }
 
@@ -590,11 +617,14 @@ AUTORTFM_DISABLE bool GodotVerse::WriteInstanceFieldInstance(FInstance* Instance
                                Instance->bSealed ? EFieldWrite::Assign : EFieldWrite::Initialize, Referenced);
 }
 
-AUTORTFM_DISABLE bool GodotVerse::ReadInstanceField(const FInstance* Instance, FUtf8StringView FieldName, vh_value& OutValue, FFieldStorage& OutStorage)
+AUTORTFM_DISABLE GodotVerse::TResult<void> GodotVerse::ReadInstanceField(const FInstance* Instance,
+                                                                         FUtf8StringView FieldName,
+                                                                         vh_value& OutValue,
+                                                                         FFieldStorage& OutStorage)
 {
     if (!Instance || !Instance->Object.IsValid())
     {
-        return false;
+        return EHostFailure::InstanceReleased;
     }
     return ReadFieldOf(Instance->Object.Get(), FieldName, OutValue, OutStorage);
 }
@@ -822,7 +852,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
 
     if (!Instance || !Instance->Object.IsValid())
     {
-        return VH_ERR_STATE;
+        return StatusFor(EHostFailure::InstanceReleased);
     }
 
     // The first entry into this instance is the earliest point at which Godot will accept a connect
@@ -838,13 +868,13 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
     TArray<FMethodDesc> Methods;
     if (!GetClassMethods(FUtf8StringView(ClassName), Methods))
     {
-        return VH_ERR_NOT_FOUND;
+        return StatusFor(EHostFailure::NoSuchClass);
     }
     const FMethodDesc* Method = Methods.FindByPredicate(
         [DecoratedName](const FMethodDesc& Candidate) { return FUtf8StringView(Candidate.DecoratedName).Equals(DecoratedName); });
     if (!Method)
     {
-        return VH_ERR_NOT_FOUND;
+        return StatusFor(EHostFailure::NoSuchMethod);
     }
 
     // One shape cannot be settled yet: a single *struct* parameter is satisfied by one Godot
@@ -853,13 +883,13 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
     const bool bArityMayBeStructPack = Method->Params.Num() == 1 && ArgCount != 1;
     if (!bArityMayBeStructPack && (ArgCount < Method->RequiredParamCount || ArgCount > Method->Params.Num()))
     {
-        return VH_ERR_ARGUMENT;
+        return StatusFor(EHostFailure::WrongArgumentCount);
     }
 
     FVerseFunction Resolved = LookupMethod(Instance, DecoratedName);
     if (!Resolved.IsValid())
     {
-        return VH_ERR_NOT_FOUND;
+        return StatusFor(EHostFailure::NoSuchMethod);
     }
 
     // Parameter descriptions are not carried on FMethodDesc, which holds only what crosses the ABI,
@@ -881,7 +911,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
     RecordedMethodTypes(ClassName, DecoratedName, ParamTypes, ResultTypeDesc);
     if (ParamTypes.Num() != Method->Params.Num())
     {
-        return VH_ERR_NOT_FOUND;
+        return StatusFor(EHostFailure::SignatureNotRecorded);
     }
 
     // **N Godot arguments satisfy one struct parameter, one per field.**
@@ -916,7 +946,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
     {
         // The deferred half of the check above. Reached only for a one-parameter method that turned
         // out not to be a struct taking this many fields.
-        return VH_ERR_ARGUMENT;
+        return StatusFor(EHostFailure::WrongArgumentCount);
     }
 
     // After the arity is settled, so a call that was never going to run does not seal the instance
@@ -951,9 +981,10 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
             for (int32 Index = 0; Index < ArgCount; ++Index)
             {
                 Verse::VValue Value;
-                if (!WireToValue(Context, Args[Index], ParamTypes[Index], Value))
+                const TResult<void> Crossed = WireToValue(Context, Args[Index], ParamTypes[Index], Value);
+                if (!Crossed)
                 {
-                    Status = VH_ERR_ARGUMENT;
+                    Status = StatusFor(Crossed.GetFailure());
                     return;
                 }
                 Converted.Add(Value);
@@ -966,17 +997,20 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
                 // A void method still returns -- of false, which is Verse's empty tuple -- so the
                 // declared result type is what decides whether there is a value to read, not the
                 // presence of one.
-                if (ResultTypeDesc.Described.Type != VH_TYPE_VOID
-                    && !ValueToWire(Context, OpResult.Value, ResultTypeDesc, OutStorage, OutResult))
+                if (ResultTypeDesc.Described.Type != VH_TYPE_VOID)
                 {
-                    Status = VH_ERR_ARGUMENT;
+                    const TResult<void> Answered = ValueToWire(Context, OpResult.Value, ResultTypeDesc, OutStorage, OutResult);
+                    if (!Answered)
+                    {
+                        Status = StatusFor(Answered.GetFailure());
+                    }
                 }
                 break;
 
             case Verse::FOpResult::Fail:
                 // A <decides> method that ran and declined. Distinct from VH_ERR_NOT_FOUND, which
                 // would say there had been nothing to call.
-                Status = VH_ERR_FAILED;
+                Status = StatusFor(EHostFailure::Declined);
                 break;
 
             case Verse::FOpResult::Yield:
@@ -985,7 +1019,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
                 break;
 
             default:
-                Status = VH_ERR_RUNTIME;
+                Status = StatusFor(EHostFailure::Aborted);
                 break;
             }
         });
@@ -997,9 +1031,9 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
     // visible from here: the raise itself does not return through us.
     if (TransactionResult != AutoRTFM::ETransactionResult::Committed)
     {
-        return VH_ERR_RUNTIME;
+        return StatusFor(EHostFailure::Aborted);
     }
-    return bBodyRan ? Status : VH_ERR_HALTED;
+    return bBodyRan ? Status : StatusFor(EHostFailure::Halted);
 }
 
 AUTORTFM_DISABLE int32 GodotVerse::InstanceToString(FInstance* Instance,
@@ -1013,7 +1047,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceToString(FInstance* Instance,
 
     if (!Instance || !Instance->Object.IsValid())
     {
-        return VH_ERR_STATE;
+        return StatusFor(EHostFailure::InstanceReleased);
     }
 
     // From the snapshot, so this costs no analysis and never waits -- Godot asks for an object's
@@ -1023,13 +1057,13 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceToString(FInstance* Instance,
         GetAnalysisSnapshot() ? GetAnalysisSnapshot()->Classes.Find(ClassName) : nullptr;
     if (!Found || Found->ToStringDecorated.IsEmpty())
     {
-        return VH_ERR_NOT_FOUND;
+        return StatusFor(EHostFailure::NoSuchMethod);
     }
 
     Verse::VFunction* const Function = FindVFunctionByDecoratedName(FUtf8StringView(Found->ToStringDecorated));
     if (!Function)
     {
-        return VH_ERR_NOT_FOUND;
+        return StatusFor(EHostFailure::NoSuchMethod);
     }
 
     // The result is read as a `string`, which is the only thing Godot has anywhere to put it. The
@@ -1063,18 +1097,19 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceToString(FInstance* Instance,
             switch (OpResult.Kind)
             {
             case Verse::FOpResult::Return:
-                if (!ValueToWire(Context, OpResult.Value, StringType, OutStorage, OutResult))
+                if (const TResult<void> Answered = ValueToWire(Context, OpResult.Value, StringType, OutStorage, OutResult);
+                    !Answered)
                 {
-                    Status = VH_ERR_ARGUMENT;
+                    Status = StatusFor(Answered.GetFailure());
                 }
                 break;
 
             case Verse::FOpResult::Fail:
-                Status = VH_ERR_FAILED;
+                Status = StatusFor(EHostFailure::Declined);
                 break;
 
             default:
-                Status = VH_ERR_RUNTIME;
+                Status = StatusFor(EHostFailure::Aborted);
                 break;
             }
         });
@@ -1083,11 +1118,11 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceToString(FInstance* Instance,
 
     if (TransactionResult != AutoRTFM::ETransactionResult::Committed)
     {
-        return VH_ERR_RUNTIME;
+        return StatusFor(EHostFailure::Aborted);
     }
     if (!bBodyRan)
     {
-        return VH_ERR_HALTED;
+        return StatusFor(EHostFailure::Halted);
     }
     return Status;
 }
@@ -1162,6 +1197,7 @@ AUTORTFM_DISABLE int64 GodotVerse::MakeCallableFor(const FVerseValue& Callback)
     if (Ref == 0)
     {
         RemoveCallback(Id);
+        VH_UNREPORTED("MakeCallableFor: Godot minted no Callable for a bound method");
     }
     return Ref;
 }
@@ -1206,7 +1242,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InvokeCallback(int64 CallbackId,
     {
         // The node was freed. Godot's own is_valid() should have caught this first; answering
         // rather than raising is what keeps a late emission from taking the frame down.
-        return VH_ERR_NOT_FOUND;
+        return StatusFor(EHostFailure::UnknownId);
     }
 
     // A foreign signal's subscriber: nothing declares that signal's payload, so the arguments cross
@@ -1216,12 +1252,12 @@ AUTORTFM_DISABLE int32 GodotVerse::InvokeCallback(int64 CallbackId,
         FHostState& Host = GetHost();
         if (!Host.Godot.NewRef || !Host.Godot.RefSet)
         {
-            return VH_ERR_STATE;
+            return StatusFor(EHostFailure::GodotUnavailable);
         }
         const int64 Ref = Host.Godot.NewRef(Host.Godot.Ctx, VH_VARIANT_ARRAY);
         if (Ref == 0)
         {
-            return VH_ERR_STATE;
+            return StatusFor(EHostFailure::GodotUnavailable);
         }
         for (int32 Index = 0; Index < ArgCount; ++Index)
         {

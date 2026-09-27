@@ -1010,6 +1010,10 @@ AUTORTFM_DISABLE void RefreshProjectScope()
 
 AUTORTFM_DISABLE GodotVerse::FVerseEntry::FVerseEntry()
 {
+    // A Verse runtime error raised from closed code trips AutoRTFM::UnreachableIfClosed in
+    // FContext::RaiseVerseRuntimeError and takes the process down rather than unwinding, so every
+    // entry is made open, inside whatever transaction the caller holds (InstanceCall's Open).
+    check(!AutoRTFM::IsClosed());
     if (GVerseEntryDepth++ == 0)
     {
         RefreshProjectScope();
