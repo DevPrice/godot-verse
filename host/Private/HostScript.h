@@ -107,12 +107,14 @@ AUTORTFM_DISABLE bool CheckProject(const FUtf8String& Path, const FUtf8String& S
 /// declares never needs an import. Answers out of the program the last analysis left behind.
 AUTORTFM_DISABLE bool ResolveUnknownName(FUtf8StringView Name, TArray<FUtf8String>& OutModules);
 
-/// Starts CheckProject on a thread we own. False when one is already in flight -- only one runs
-/// at a time, because they share the IDE and the semantic program it rebuilds.
+/// Starts CheckProject on a thread we own. AnalysisInFlight when one is already running -- only
+/// one runs at a time, because they share the IDE and the semantic program it rebuilds --
+/// AnalysisNotReaped when the last one has finished and PollBackgroundCheck has not delivered it,
+/// and NotBuilt before the first build.
 ///
 /// Diagnostics are buffered rather than forwarded, so the Godot callback still only runs on the
 /// game thread, out of PollBackgroundCheck.
-AUTORTFM_DISABLE bool BeginBackgroundCheck(const FUtf8String& Path, const FUtf8String& SourceText);
+AUTORTFM_DISABLE TResult<void> BeginBackgroundCheck(const FUtf8String& Path, const FUtf8String& SourceText);
 
 /// Reaps a finished BeginBackgroundCheck and forwards its diagnostics. OutFinished is true only
 /// on the call that reaps one; the return value is that analysis' result.

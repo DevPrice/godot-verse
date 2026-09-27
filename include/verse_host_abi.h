@@ -866,7 +866,8 @@ VH_ATTR VH_API int32_t vh_check_project(const char* PathUtf8, const char* Source
  * while one runs rather than waiting for it.
  *
  * An analysis begun here must be polled to completion: nothing else reaps one, and until it is
- * reaped the next vh_check_project_begin is refused and vh_tick stays a no-op. */
+ * reaped the next vh_check_project_begin is refused with VH_ERR_STATE -- as it is while one runs,
+ * and before the first build. vh_tick is a no-op only while the analysis runs. */
 VH_ATTR VH_API int32_t vh_check_project_begin(const char* PathUtf8, const char* SourceUtf8);
 
 /* Reaps a vh_check_project_begin. Call from the vh_init thread, e.g. once per frame.

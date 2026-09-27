@@ -82,6 +82,13 @@ enum class EHostFailure : uint8
     /// Godot's own half of an answer is missing: no callback to make a container with, or one that
     /// made nothing.
     GodotUnavailable,
+    /// No generation has been built, so there is no project to analyse yet.
+    NotBuilt,
+    /// Only one analysis runs at a time, because they share the IDE, and one is running.
+    AnalysisInFlight,
+    /// The last background analysis has finished and vh_check_project_poll has not reaped it.
+    /// Nothing else reaps one, so none may begin until the consumer polls.
+    AnalysisNotReaped,
 };
 
 /// A value, or the reason there is none.

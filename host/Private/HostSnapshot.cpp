@@ -424,6 +424,7 @@ AUTORTFM_DISABLE bool GetClassMethodsLive(FUtf8StringView ClassName, TArray<Godo
         FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
     if (!Class)
     {
+        VH_UNREPORTED("GetClassMethodsLive: the class the snapshot walk named is not in the program");
         return false;
     }
 
@@ -522,6 +523,7 @@ AUTORTFM_DISABLE bool GetClassExportsLive(FUtf8StringView ClassName, TArray<Godo
         FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
     if (!Class)
     {
+        VH_UNREPORTED("GetClassExportsLive: the class the snapshot walk named is not in the program");
         return false;
     }
 
@@ -957,6 +959,7 @@ AUTORTFM_DISABLE bool GetClassSignalsLive(FUtf8StringView ClassName, TArray<Godo
         FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
     if (!Class)
     {
+        VH_UNREPORTED("GetClassSignalsLive: the class the snapshot walk named is not in the program");
         return false;
     }
 
@@ -1243,6 +1246,7 @@ AUTORTFM_DISABLE bool GetClassRpcsLive(FUtf8StringView ClassName, TArray<GodotVe
         FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
     if (!Class)
     {
+        VH_UNREPORTED("GetClassRpcsLive: the class the snapshot walk named is not in the program");
         return false;
     }
 
@@ -1463,6 +1467,7 @@ AUTORTFM_DISABLE void CollectDeclaredTypes(FUtf8StringView ClassName, GodotVerse
         FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
     if (!Class)
     {
+        VH_UNREPORTED("CollectDeclaredTypes: the class the snapshot walk named is not in the program");
         return;
     }
 
@@ -1568,6 +1573,7 @@ AUTORTFM_DISABLE void GodotVerse::TakeAnalysisSnapshot()
     {
         // No program to describe. The empty snapshot still replaces whatever was current, because
         // the alternative is answering about a program that no longer exists.
+        VH_UNREPORTED("TakeAnalysisSnapshot: the IDE has no build manager, so the snapshot is empty");
         GPendingSnapshot = Snapshot;
         return;
     }

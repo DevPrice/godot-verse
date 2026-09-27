@@ -115,6 +115,9 @@ int32 GodotVerse::StatusFor(GodotVerse::EHostFailure Failure)
         return VH_ERR_NOT_FOUND;
     case EHostFailure::InstanceReleased:
     case EHostFailure::GodotUnavailable:
+    case EHostFailure::NotBuilt:
+    case EHostFailure::AnalysisInFlight:
+    case EHostFailure::AnalysisNotReaped:
         return VH_ERR_STATE;
     case EHostFailure::Aborted:
         return VH_ERR_RUNTIME;
@@ -726,9 +729,9 @@ extern "C" int32_t vh_check_project_begin(const char* PathUtf8, const char* Sour
     {
         return VH_ERR_STATE;
     }
-    return GodotVerse::BeginBackgroundCheck(FUtf8String(Cstr(PathUtf8)), FUtf8String(Cstr(SourceUtf8)))
-        ? VH_OK
-        : VH_ERR_STATE;
+    const GodotVerse::TResult<void> Begun =
+        GodotVerse::BeginBackgroundCheck(FUtf8String(Cstr(PathUtf8)), FUtf8String(Cstr(SourceUtf8)));
+    return Begun ? VH_OK : StatusFor(Begun.GetFailure());
 }
 
 extern "C" int32_t vh_check_project_poll(vh_bool* OutFinished)

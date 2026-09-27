@@ -1463,6 +1463,10 @@ AUTORTFM_DISABLE bool GodotVerse::AnalysisTraceEnabled()
 
 AUTORTFM_DISABLE void GodotVerse::ResetScriptState()
 {
+    // The caller joins the worker first (vh_shutdown's WaitForBackgroundCheck): this releases the
+    // IDE the worker builds with, and a std::thread still joinable at static destruction is
+    // std::terminate.
+    check(!GBackgroundCheck.Thread.joinable());
     LeaveContentScope();
     // Before the IDE goes: a pending snapshot describes a program that is about to stop existing,
     // and a worker joined at shutdown leaves one nothing will ever publish.
@@ -1769,6 +1773,7 @@ AUTORTFM_DISABLE bool RunCheck(const FUtf8String& Path, const FUtf8String& Sourc
 {
     if (!GProjectBuilt || !GIde.IsValid())
     {
+        VH_UNREPORTED("RunCheck: no generation has been built, so there is no project to analyse");
         return false;
     }
 
@@ -1911,16 +1916,22 @@ AUTORTFM_DISABLE bool GodotVerse::ProgramIsAnalysisOnly()
     return GProgramIsAnalysisOnly;
 }
 
-AUTORTFM_DISABLE bool GodotVerse::BeginBackgroundCheck(const FUtf8String& Path, const FUtf8String& SourceText)
+AUTORTFM_DISABLE GodotVerse::TResult<void> GodotVerse::BeginBackgroundCheck(const FUtf8String& Path,
+                                                                          const FUtf8String& SourceText)
 {
-    if (GBackgroundCheck.Thread.joinable() || GBackgroundCheck.bRunning.load(std::memory_order_acquire)
-        || GBackgroundCheck.bResultPending)
+    if (GBackgroundCheck.bRunning.load(std::memory_order_acquire))
     {
-        return false;
+        return EHostFailure::AnalysisInFlight;
+    }
+    // A finished worker still joinable, or one a wait joined: either way its diagnostics and its
+    // snapshot are waiting for vh_check_project_poll, and starting another would overwrite both.
+    if (GBackgroundCheck.Thread.joinable() || GBackgroundCheck.bResultPending)
+    {
+        return EHostFailure::AnalysisNotReaped;
     }
     if (!GProjectBuilt || !GIde.IsValid())
     {
-        return false;
+        return EHostFailure::NotBuilt;
     }
 
     GBackgroundCheck.Path = Path;
@@ -1929,7 +1940,7 @@ AUTORTFM_DISABLE bool GodotVerse::BeginBackgroundCheck(const FUtf8String& Path, 
     GBackgroundCheck.bResult = false;
     GBackgroundCheck.bRunning.store(true, std::memory_order_release);
     GBackgroundCheck.Thread = std::thread(&BackgroundCheckMain);
-    return true;
+    return TResult<void>::Ok();
 }
 
 AUTORTFM_DISABLE bool GodotVerse::IsBackgroundCheckRunning()
