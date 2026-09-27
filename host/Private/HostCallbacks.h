@@ -4,6 +4,7 @@
 
 #include "AutoRTFM.h"
 #include "Containers/UnrealString.h"
+#include "Containers/Utf8String.h"
 #include "HostResult.h"
 
 /// The callback registry: every Callable the host has handed Godot, by the id Godot calls it back

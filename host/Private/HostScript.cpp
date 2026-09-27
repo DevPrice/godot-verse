@@ -112,6 +112,7 @@ using GodotVerse::ClassOriginOf;
 using GodotVerse::CollectStructFields;
 using GodotVerse::DescribeClassOf;
 using GodotVerse::DescribeExportType;
+using GodotVerse::DescribeMemberType;
 using GodotVerse::DescribePayload;
 using GodotVerse::DescribeType;
 using GodotVerse::EClassOrigin;
