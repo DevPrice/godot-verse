@@ -23,6 +23,12 @@ using GodotVerse::FCallArena;
 using GodotVerse::FHostState;
 using GodotVerse::GetHost;
 
+/// Turns one VH_VARIANT_TAGS row into a bare case label, so a switch that only cares which family a
+/// tag belongs to can expand a family macro (VH_VARIANT_STRING_TAGS and the rest, generated into
+/// verse_host_variant_tags.gen.h from the same VARIANT_LANES the mirror is emitted from) instead of
+/// listing every member by hand.
+#define VH_CASE_TAG(Tag, GodotType, Family, Components) case Tag:
+
 FUtf8StringView ToView(const verse::string& String)
 {
     return FUtf8StringView(String);
@@ -245,29 +251,16 @@ FLaneCount LanesFor(int64 Tag)
     case VH_VARIANT_RECT2I:
         return {4, 0};
 
-    // Strings ride in Text, references in Ref, and nil occupies nothing. Listed rather than left
-    // to a default so a new tag has to be sorted into a lane count here before it can be added
-    // anywhere else.
-    case VH_VARIANT_NIL:
-    case VH_VARIANT_STRING:
-    case VH_VARIANT_STRING_NAME:
-    case VH_VARIANT_NODE_PATH:
+    // Strings ride in Text, references in Ref, and nil occupies nothing. Generated from the family
+    // macros rather than listed by hand, so a tag added to VARIANT_LANES is sorted into a lane count
+    // here before it can be added anywhere else -- RID and VH_VARIANT_MAX are not a family's to give,
+    // so they stay explicit.
+    VH_VARIANT_NONE_TAGS(VH_CASE_TAG)
+    VH_VARIANT_STRING_TAGS(VH_CASE_TAG)
     case VH_VARIANT_RID:
-    case VH_VARIANT_OBJECT:
-    case VH_VARIANT_CALLABLE:
-    case VH_VARIANT_SIGNAL:
-    case VH_VARIANT_DICTIONARY:
-    case VH_VARIANT_ARRAY:
-    case VH_VARIANT_PACKED_BYTE_ARRAY:
-    case VH_VARIANT_PACKED_INT32_ARRAY:
-    case VH_VARIANT_PACKED_INT64_ARRAY:
-    case VH_VARIANT_PACKED_FLOAT32_ARRAY:
-    case VH_VARIANT_PACKED_FLOAT64_ARRAY:
-    case VH_VARIANT_PACKED_STRING_ARRAY:
-    case VH_VARIANT_PACKED_VECTOR2_ARRAY:
-    case VH_VARIANT_PACKED_VECTOR3_ARRAY:
-    case VH_VARIANT_PACKED_COLOR_ARRAY:
-    case VH_VARIANT_PACKED_VECTOR4_ARRAY:
+    VH_VARIANT_OBJECT_TAGS(VH_CASE_TAG)
+    VH_VARIANT_REFERENCE_TAGS(VH_CASE_TAG)
+    VH_VARIANT_PACKED_TAGS(VH_CASE_TAG)
     case VH_VARIANT_MAX:
         return {0, 0};
     }
@@ -391,9 +384,7 @@ vh_value WireOf(const FOwnedValue& Owned)
         Out.Float = Lanes.F0;
         return Out;
 
-    case VH_VARIANT_STRING:
-    case VH_VARIANT_STRING_NAME:
-    case VH_VARIANT_NODE_PATH:
+    VH_VARIANT_STRING_TAGS(VH_CASE_TAG)
         Out.Type = VH_TYPE_STRING;
         Out.String.Utf8 = reinterpret_cast<const char*>(*Owned.Text);
         Out.String.Len = Owned.Text.Len();
@@ -555,9 +546,7 @@ FGodotValue FromWire(const vh_value& Value)
         Out.F0 = AsDouble(Value);
         return Out;
 
-    case VH_VARIANT_STRING:
-    case VH_VARIANT_STRING_NAME:
-    case VH_VARIANT_NODE_PATH:
+    VH_VARIANT_STRING_TAGS(VH_CASE_TAG)
         if (Value.Type == VH_TYPE_STRING)
         {
             Out.Text = verse::string(GodotVerse::MakeView(Value.String.Utf8, Value.String.Len));
@@ -604,6 +593,8 @@ FGodotValue FromWire(const vh_value& Value)
     }
     return Out;
 }
+
+#undef VH_CASE_TAG
 
 } // namespace
 
