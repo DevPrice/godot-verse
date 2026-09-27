@@ -43,7 +43,7 @@ extern "C" {
  * different toolchains and nothing links them.
  */
 #define VH_ABI_VERSION_MAJOR 12
-#define VH_ABI_VERSION_MINOR 3
+#define VH_ABI_VERSION_MINOR 4
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -110,7 +110,20 @@ typedef enum vh_status
 	 * Distinct from VH_ERR_STATE, which means the host could have done it and the moment was
 	 * wrong. This one never becomes possible, so the consumer's recourse is to stop asking --
 	 * which is why vh_host_kind() is readable before vh_init. */
-	VH_ERR_UNSUPPORTED
+	VH_ERR_UNSUPPORTED,
+
+	/* Added at ABI v12.4. No analysis the host holds can answer this yet, and nothing is wrong
+	 * with the question: none has landed, one is in flight, the last one read different text for
+	 * this file, or a build has generated code since and left no AST. The consumer's recourse is
+	 * vh_check_project_begin on the buffer it is asking about, then the same question once
+	 * vh_check_project_poll reports that analysis finished.
+	 *
+	 * Answered by the entry points that read an analysis -- vh_lookup_symbol, vh_complete_symbol,
+	 * vh_signature_at, vh_class_members and vh_class_override_candidates -- in place of what each
+	 * used to answer for these cases: VH_ERR_STATE for the position entry points, and
+	 * VH_ERR_NOT_FOUND for a class read before the first analysis, which said the class was not
+	 * there. A consumer that declared an AbiVersion below 12.4 is still given those two. */
+	VH_ERR_NOT_ANALYSED
 } vh_status;
 
 /* Outcome of a property read/write or a method call. The distinction is load bearing: the host
@@ -814,7 +827,7 @@ VH_ATTR VH_API int32_t vh_set_bindings(const char* SourceUtf8, int32_t SourceLen
  * Everything that *describes* a class answers about this build the moment it returns: the snapshot
  * is taken from the build's own semantic analysis. What a build does not leave is an AST, because
  * generating code puts it out of reach -- so the three entry points that resolve a position answer
- * VH_ERR_STATE until the consumer asks for an analysis. A consumer with an editor in it should ask
+ * VH_ERR_NOT_ANALYSED until the consumer asks for an analysis. A consumer with an editor in it should ask
  * for one after a successful build; one without an editor has nothing to ask for.
  *
  * Class names in this ABI are qualified by module from here on: `player` for a file in the root
@@ -849,8 +862,8 @@ VH_ATTR VH_API int32_t vh_check_project(const char* PathUtf8, const char* Source
  * at the end of each analysis and made current by vh_check_project_poll, so what they describe is
  * the last analysis that landed rather than the one in flight. The three that resolve a *position*
  * are the exception -- vh_lookup_symbol, vh_complete_symbol and vh_signature_at answer against the
- * AST the worker is rebuilding, which no snapshot describes, so they answer VH_ERR_STATE while one
- * runs rather than waiting for it.
+ * AST the worker is rebuilding, which no snapshot describes, so they answer VH_ERR_NOT_ANALYSED
+ * while one runs rather than waiting for it.
  *
  * An analysis begun here must be polled to completion: nothing else reaps one, and until it is
  * reaped the next vh_check_project_begin is refused and vh_tick stays a no-op. */
@@ -1673,13 +1686,14 @@ typedef struct vh_lookup_desc
  *
  * Only an analysis-only program can answer this. Code generation hangs an IR package off every
  * module and the accessors this walks assert rather than degrade when they find one -- so the
- * host tracks which kind of build produced the program it holds and answers VH_ERR_STATE rather
- * than trusting the caller to have asked at a safe moment. That is the same "ask again once an
- * analysis has landed" this answers while one is in flight, and it is what vh_compile_project
+ * host tracks which kind of build produced the program it holds and answers VH_ERR_NOT_ANALYSED
+ * rather than trusting the caller to have asked at a safe moment. That is the same "ask again once
+ * an analysis has landed" this answers while one is in flight, and it is what vh_compile_project
  * leaves behind: a build no longer runs an analysis of its own to put an AST back, so a caller
  * that wants one after a build asks for it.
  *
- * Answers VH_ERR_STATE while a vh_check_project_begin analysis is in flight. A position resolves
+ * Answers VH_ERR_NOT_ANALYSED while a vh_check_project_begin analysis is in flight, and before any
+ * analysis has left a program at all. A position resolves
  * against the AST, which the worker is rebuilding and which no snapshot describes, so this is the
  * one read that can neither answer nor be made to wait cheaply -- declining costs an underline for
  * a frame.
@@ -1837,8 +1851,9 @@ typedef struct vh_complete_item
  * checks it against the text the last analysis left the program holding.
  *
  * Runs no analysis and waits for none (ABI v7; until v6 it did both, and a first `.` cost the
- * editor a synchronous whole-project analysis). Answers VH_ERR_STATE when it cannot describe
- * SourceUtf8 -- either an analysis is in flight, or the program was built from different text --
+ * editor a synchronous whole-project analysis). Answers VH_ERR_NOT_ANALYSED when it cannot
+ * describe SourceUtf8 -- either an analysis is in flight, or the program was built from different
+ * text --
  * and the caller's recourse is vh_check_project_begin on this very buffer, then ask again once
  * vh_check_project_poll reaps it. The position is answered against the AST, which the worker
  * rebuilds and which no snapshot describes, so this is the same refusal vh_lookup_symbol makes
@@ -1900,7 +1915,8 @@ VH_ATTR VH_API int32_t vh_resolve_unknown_name(const char* NameUtf8,
  * still a member the author wrote.
  *
  * OutItems points into storage owned by the host, valid until the next call to this function.
- * Returns VH_ERR_NOT_FOUND when the class does not exist in the analysed program. */
+ * Returns VH_ERR_NOT_FOUND when the class does not exist in the analysed program, and
+ * VH_ERR_NOT_ANALYSED before any analysis has landed to say whether it does. */
 VH_ATTR VH_API int32_t vh_class_members(const char* ClassNameUtf8, const vh_complete_item** OutItems, int32_t* OutCount);
 
 /* Every member ClassNameUtf8 inherits that a subclass could still declare with <override> -- the
@@ -1921,7 +1937,9 @@ VH_ATTR VH_API int32_t vh_class_members(const char* ClassNameUtf8, const vh_comp
  * class the author is adding a method to is the text without that method.
  *
  * OutItems points into storage owned by the host, valid until the next call to this function.
- * Returns VH_ERR_NOT_FOUND when the class does not exist in the analysed program. */
+ * Returns VH_ERR_NOT_FOUND when the class does not exist in the analysed program, and
+ * VH_ERR_NOT_ANALYSED before any analysis has landed -- which is the first keystroke's case, and
+ * the consumer's cue to ask again once one has rather than to offer nothing. */
 VH_ATTR VH_API int32_t vh_class_override_candidates(const char* ClassNameUtf8, const vh_complete_item** OutItems, int32_t* OutCount);
 
 /* ---------------------------------------------------------- call signature -- */
@@ -1952,7 +1970,7 @@ typedef struct vh_signature_desc
  * vh_complete_symbol takes the receiver's: the argument list under construction does not analyse,
  * and there is nothing at the cursor to resolve.
  *
- * Runs no analysis and waits for none, and answers VH_ERR_STATE when it cannot describe
+ * Runs no analysis and waits for none, and answers VH_ERR_NOT_ANALYSED when it cannot describe
  * SourceUtf8 -- the whole of vh_complete_symbol's contract above, for the same reasons.
  *
  * OutResult points into storage owned by the host, valid until the next call to this function.

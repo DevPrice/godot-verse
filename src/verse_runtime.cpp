@@ -763,14 +763,18 @@ TypedArray<Dictionary> VerseRuntime::class_exports(const String &p_class_name, b
 	return exports;
 }
 
-Dictionary VerseRuntime::lookup_symbol(const String &p_globalized_path, int32_t p_line, int32_t p_column) const {
+Dictionary VerseRuntime::lookup_symbol(const String &p_globalized_path, int32_t p_line, int32_t p_column, bool *r_not_ready) const {
 	Dictionary result;
 	if (!host.is_loaded() || host.LookupSymbol == nullptr) {
 		return result;
 	}
 
 	const vh_lookup_desc *desc = nullptr;
-	if (host.LookupSymbol(p_globalized_path.utf8().get_data(), p_line, p_column, &desc) != VH_OK) {
+	const int32_t status = host.LookupSymbol(p_globalized_path.utf8().get_data(), p_line, p_column, &desc);
+	if (status != VH_OK) {
+		if (r_not_ready != nullptr && status == VH_ERR_NOT_ANALYSED) {
+			*r_not_ready = true;
+		}
 		return result;
 	}
 
@@ -824,7 +828,7 @@ TypedArray<Dictionary> VerseRuntime::complete_symbol(const String &p_globalized_
 	int32_t count = 0;
 	const int32_t status = host.CompleteSymbol(p_globalized_path.utf8().get_data(), p_source.utf8().get_data(), p_line, p_column, p_mode, &items, &count);
 	if (status != VH_OK) {
-		if (r_not_ready != nullptr && status == VH_ERR_STATE) {
+		if (r_not_ready != nullptr && status == VH_ERR_NOT_ANALYSED) {
 			*r_not_ready = true;
 		}
 		return options;
@@ -836,7 +840,7 @@ TypedArray<Dictionary> VerseRuntime::complete_symbol(const String &p_globalized_
 	return options;
 }
 
-TypedArray<Dictionary> VerseRuntime::class_members(const String &p_class_name) const {
+TypedArray<Dictionary> VerseRuntime::class_members(const String &p_class_name, bool *r_not_ready) const {
 	TypedArray<Dictionary> members;
 	if (!host.is_loaded() || host.ClassMembers == nullptr) {
 		return members;
@@ -844,7 +848,11 @@ TypedArray<Dictionary> VerseRuntime::class_members(const String &p_class_name) c
 
 	const vh_complete_item *items = nullptr;
 	int32_t count = 0;
-	if (host.ClassMembers(p_class_name.utf8().get_data(), &items, &count) != VH_OK) {
+	const int32_t status = host.ClassMembers(p_class_name.utf8().get_data(), &items, &count);
+	if (status != VH_OK) {
+		if (r_not_ready != nullptr && status == VH_ERR_NOT_ANALYSED) {
+			*r_not_ready = true;
+		}
 		return members;
 	}
 
@@ -854,7 +862,7 @@ TypedArray<Dictionary> VerseRuntime::class_members(const String &p_class_name) c
 	return members;
 }
 
-TypedArray<Dictionary> VerseRuntime::class_override_candidates(const String &p_class_name) const {
+TypedArray<Dictionary> VerseRuntime::class_override_candidates(const String &p_class_name, bool *r_not_ready) const {
 	TypedArray<Dictionary> candidates;
 	if (!host.is_loaded() || host.ClassOverrideCandidates == nullptr) {
 		return candidates;
@@ -862,7 +870,11 @@ TypedArray<Dictionary> VerseRuntime::class_override_candidates(const String &p_c
 
 	const vh_complete_item *items = nullptr;
 	int32_t count = 0;
-	if (host.ClassOverrideCandidates(p_class_name.utf8().get_data(), &items, &count) != VH_OK) {
+	const int32_t status = host.ClassOverrideCandidates(p_class_name.utf8().get_data(), &items, &count);
+	if (status != VH_OK) {
+		if (r_not_ready != nullptr && status == VH_ERR_NOT_ANALYSED) {
+			*r_not_ready = true;
+		}
 		return candidates;
 	}
 
@@ -881,7 +893,7 @@ Dictionary VerseRuntime::signature_at(const String &p_globalized_path, const Str
 	const vh_signature_desc *desc = nullptr;
 	const int32_t status = host.SignatureAt(p_globalized_path.utf8().get_data(), p_source.utf8().get_data(), p_line, p_column, &desc);
 	if (status != VH_OK || desc == nullptr) {
-		if (r_not_ready != nullptr && status == VH_ERR_STATE) {
+		if (r_not_ready != nullptr && status == VH_ERR_NOT_ANALYSED) {
 			*r_not_ready = true;
 		}
 		return result;

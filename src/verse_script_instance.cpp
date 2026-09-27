@@ -457,6 +457,7 @@ void call_func(GDExtensionScriptInstanceDataPtr p_self, GDExtensionConstStringNa
 		case VH_ERR_RUNTIME:
 		case VH_ERR_STOPPED:
 		case VH_ERR_UNSUPPORTED:
+		case VH_ERR_NOT_ANALYSED:
 			r_error->error = GDEXTENSION_CALL_OK;
 			return;
 	}

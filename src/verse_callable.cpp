@@ -101,6 +101,7 @@ void VerseCallable::call(const Variant **p_arguments, int p_argcount, Variant &r
 		case VH_ERR_THREAD:
 		case VH_ERR_STOPPED:
 		case VH_ERR_UNSUPPORTED:
+		case VH_ERR_NOT_ANALYSED:
 			return;
 	}
 }

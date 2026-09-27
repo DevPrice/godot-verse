@@ -85,15 +85,21 @@ vh_complete_item ToCompleteItem(const GodotVerse::FCompleteItem& Item)
 int32_t StatusFor(GodotVerse::EHostFailure Failure)
 {
     using GodotVerse::EHostFailure;
+
+    // Before 12.4 the four "not yet" reasons shared two codes with answers that mean something
+    // else, and a consumer built then acts on those: it re-asks on VH_ERR_STATE and treats
+    // VH_ERR_NOT_FOUND as nothing there. It would read the new code as a failure and never re-ask.
+    const bool bConsumerKnowsNotAnalysed = GetHost().ConsumerAbiVersion >= VH_ABI_VERSION_MAJOR * 1000 + 4;
+
     VH_EXHAUSTIVE_SWITCH_BEGIN
     switch (Failure)
     {
-    // "Not yet": the consumer's recourse is to have the buffer analysed and ask again.
     case EHostFailure::AnalysisRunning:
     case EHostFailure::BuiltSinceAnalysis:
     case EHostFailure::BufferNotAnalysed:
-        return VH_ERR_STATE;
+        return bConsumerKnowsNotAnalysed ? VH_ERR_NOT_ANALYSED : VH_ERR_STATE;
     case EHostFailure::NotAnalysed:
+        return bConsumerKnowsNotAnalysed ? VH_ERR_NOT_ANALYSED : VH_ERR_NOT_FOUND;
     case EHostFailure::InvalidPosition:
     case EHostFailure::NothingAtPosition:
     case EHostFailure::NotAFunction:
@@ -301,6 +307,7 @@ VH_ATTR int32_t InitHost(const vh_init_desc* Desc, bool bEngineAlreadyBooted)
 
     GVerseThreadId = FPlatformTLS::GetCurrentThreadId();
 
+    Host.ConsumerAbiVersion = Desc->AbiVersion;
     Host.Godot = Desc->Godot;
 
     // Everything past the consumer's own StructSize is memory it never wrote, and the copy above

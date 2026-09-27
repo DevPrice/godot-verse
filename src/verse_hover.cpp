@@ -205,7 +205,14 @@ Dictionary VerseHover::lookup_code(const String &p_code, const String &p_symbol,
 	}
 
 	const String globalized = ProjectSettings::get_singleton()->globalize_path(p_path);
-	const Dictionary found = runtime->lookup_symbol(globalized, (int32_t)line, (int32_t)column);
+	bool not_ready = false;
+	const Dictionary found = runtime->lookup_symbol(globalized, (int32_t)line, (int32_t)column, &not_ready);
+	if (not_ready) {
+		// A build since the analysis that saw this buffer has taken its AST away. The text still
+		// matches, so nothing else would ask for another analysis; ask for one, and the next hover
+		// over the same word answers.
+		language.request_check(p_path, normalized, VerseProjectState::CheckKind::ORDINARY);
+	}
 	if (found.is_empty()) {
 		return refuse_or_mirrored_class();
 	}

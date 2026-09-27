@@ -622,6 +622,17 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
+	// Before any analysis there is no snapshot to say whether a class exists, and "not yet" is
+	// what an editor's first keystroke must hear rather than "no such class".
+	{
+		const vh_complete_item* Early = nullptr;
+		int32_t EarlyCount = 0;
+		Step("vh_class_members before any analysis answers VH_ERR_NOT_ANALYSED",
+			 Host.ClassMembers("exports", &Early, &EarlyCount) == VH_ERR_NOT_ANALYSED);
+		Step("vh_class_override_candidates before any analysis answers VH_ERR_NOT_ANALYSED",
+			 Host.ClassOverrideCandidates("exports", &Early, &EarlyCount) == VH_ERR_NOT_ANALYSED);
+	}
+
 	// One call for every fixture: Verse builds a whole package at once, so every script that will
 	// run has to be in the list.
 	//
@@ -762,12 +773,12 @@ int main(int argc, char** argv)
 
 			auto Text = [](const char* Utf8, int32_t Len) { return std::string(Utf8 ? Utf8 : "", Len); };
 
-			// VH_ERR_STATE rather than VH_ERR_NOT_FOUND: the symbol is there, the program that
-			// could point at it is not. It is the same answer the host gives while a background
-			// analysis is in flight, and the same thing to do about it.
+			// VH_ERR_NOT_ANALYSED rather than VH_ERR_NOT_FOUND: the symbol is there, the program
+			// that could point at it is not. It is the same answer the host gives while a
+			// background analysis is in flight, and the same thing to do about it.
 			const vh_lookup_desc* TooEarly = nullptr;
 			LookupOk = Step("a position does not resolve straight after a build",
-						   Host.LookupSymbol(ExportsPathUtf8.c_str(), UseRow, UseColumn, &TooEarly) == VH_ERR_STATE)
+						   Host.LookupSymbol(ExportsPathUtf8.c_str(), UseRow, UseColumn, &TooEarly) == VH_ERR_NOT_ANALYSED)
 					&& LookupOk;
 
 			LookupOk = Step("one analysis puts the AST back",
@@ -1198,7 +1209,7 @@ int main(int argc, char** argv)
 			// queue the completion buffer, answer with what is free, ask again when it lands.
 			CompleteOk = Step("a buffer the host has not analysed refuses rather than analysing",
 							 Host.CompleteSymbol(ExportsPathUtf8.c_str(), Typing.c_str(), RecvRow, RecvColumn,
-											  VH_COMPLETE_MEMBERS, &Items, &Count) == VH_ERR_STATE)
+											  VH_COMPLETE_MEMBERS, &Items, &Count) == VH_ERR_NOT_ANALYSED)
 					  && CompleteOk;
 
 			AnalyseCompletionBuffer(Typing);
@@ -1547,7 +1558,7 @@ int main(int argc, char** argv)
 				Unrepaired.erase(Unrepaired.find("VhCompletionCursor") + strlen("VhCompletionCursor") + 1, 1);
 				CompleteOk = Step("without the `:` the whole file is lost to the parser",
 								 Host.CompleteSymbol(ExportsPathUtf8.c_str(), Unrepaired.c_str(), IfRow, IfColumn,
-												  VH_COMPLETE_SCOPE, &Items, &Count) == VH_ERR_STATE)
+												  VH_COMPLETE_SCOPE, &Items, &Count) == VH_ERR_NOT_ANALYSED)
 						  && CompleteOk;
 				AnalyseCompletionBuffer(Unrepaired);
 				CompleteOk = Step("and analysing it does not bring the position back",

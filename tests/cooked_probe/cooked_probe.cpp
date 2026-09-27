@@ -160,6 +160,7 @@ static const char* StatusName(int32_t Status)
 		case VH_ERR_THREAD: return "VH_ERR_THREAD";
 		case VH_ERR_STOPPED: return "VH_ERR_STOPPED";
 		case VH_ERR_UNSUPPORTED: return "VH_ERR_UNSUPPORTED";
+		case VH_ERR_NOT_ANALYSED: return "VH_ERR_NOT_ANALYSED";
 		default: return "?";
 	}
 }

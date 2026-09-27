@@ -220,8 +220,9 @@ public:
 	//
 	// Answered from the last analysis, which cannot tell that the buffer has moved since --
 	// so the caller must have established that the text at p_globalized_path is the text that
-	// analysis saw, or every locus below an edit is off by the rows it added.
-	godot::Dictionary lookup_symbol(const godot::String &p_globalized_path, int32_t p_line, int32_t p_column) const;
+	// analysis saw, or every locus below an edit is off by the rows it added. r_not_ready means
+	// what complete_symbol's does: a build or an analysis in flight has taken the AST away.
+	godot::Dictionary lookup_symbol(const godot::String &p_globalized_path, int32_t p_line, int32_t p_column, bool *r_not_ready = nullptr) const;
 
 	// What could be written at p_line/p_column of p_source, as an array of
 	// { name, type, owner, kind, is_var } -- the members of the expression there when
@@ -231,22 +232,25 @@ public:
 	// cursor.
 	//
 	// Takes the buffer to say which text it is asking about, not to have it analysed: since ABI
-	// v7 the host neither analyses nor waits here. r_not_ready is set when it answered VH_ERR_STATE
-	// -- an analysis is in flight, or the program was built from other text -- which is a different
-	// thing from an empty answer and is the caller's cue to have this very buffer analysed and ask
-	// again. Left alone otherwise, so a caller that does not care may pass nullptr.
+	// v7 the host neither analyses nor waits here. r_not_ready is set when it answered
+	// VH_ERR_NOT_ANALYSED -- an analysis is in flight, or the program was built from other text --
+	// which is a different thing from an empty answer and is the caller's cue to have this very
+	// buffer analysed and ask again. Left alone otherwise, so a caller that does not care may pass
+	// nullptr.
 	godot::TypedArray<godot::Dictionary> complete_symbol(const godot::String &p_globalized_path, const godot::String &p_source, int32_t p_line, int32_t p_column, int32_t p_mode, bool *r_not_ready = nullptr) const;
 
 	// Every member p_class_name declares itself, as { name, type, owner, path, line, kind,
 	// is_var } -- broader than class_exports, which answers only for the inspector. Read off the
-	// last analysis, so it follows the editor's buffer.
-	godot::TypedArray<godot::Dictionary> class_members(const godot::String &p_class_name) const;
+	// last analysis, so it follows the editor's buffer. r_not_ready is set before any analysis
+	// has landed, when an empty answer would say the class declares nothing.
+	godot::TypedArray<godot::Dictionary> class_members(const godot::String &p_class_name, bool *r_not_ready = nullptr) const;
 
 	// What p_class_name inherits and has not declared itself, in the same shape -- the names an
 	// `<override>` could still be written for. Read off the same snapshot, so it answers on the
 	// keystroke rather than after the analysis behind it, and describes the last analysed text:
-	// a method added since is neither in class_members nor missing from here.
-	godot::TypedArray<godot::Dictionary> class_override_candidates(const godot::String &p_class_name) const;
+	// a method added since is neither in class_members nor missing from here. r_not_ready as
+	// class_members'.
+	godot::TypedArray<godot::Dictionary> class_override_candidates(const godot::String &p_class_name, bool *r_not_ready = nullptr) const;
 
 	// The function called at p_line/p_column of p_source, as { name, result, params }. The
 	// position names the callee's last byte rather than the cursor, for the same reason

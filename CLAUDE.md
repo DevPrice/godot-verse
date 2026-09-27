@@ -212,7 +212,7 @@ emits — and note that its editor half has never been run.
 `include/verse_host_abi.h` is the only thing that crosses. Plain C — the two sides cannot share a
 C++ ABI. It is staged into the host's `Public/` by `build_host.py`, so both compile the same file.
 
-**`VH_ABI_VERSION` is 12.3.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
+**`VH_ABI_VERSION` is 12.4.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
 a major bump is a layout or meaning change and both sides must be rebuilt; a minor bump adds
 something an older consumer can ignore behind a `StructSize` check. A change to the header means
 bumping it and rebuilding **both** sides — the mismatch surfaces at `vh_init`, not at compile time.
@@ -227,6 +227,16 @@ as corruption rather than as a refusal. 9.0 added `IsNamed` there for that reaso
 analysis-only program behind it, so the three position entry points answer `VH_ERR_STATE` after
 a build until a consumer asks for an analysis. An older consumer would have read that as "no
 such symbol" and drawn nothing, silently.
+**12.4 is where "not analysed yet" became its own answer**: `VH_ERR_NOT_ANALYSED`, appended to
+`vh_status`, is what the five entry points that read an analysis -- `vh_lookup_symbol`,
+`vh_complete_symbol`, `vh_signature_at`, `vh_class_members`, `vh_class_override_candidates` --
+answer when no analysis can answer yet, where the three position ones used to say `VH_ERR_STATE`
+and the two class reads `VH_ERR_NOT_FOUND` before the first snapshot, which told an editor the class
+had no members. A minor and not a major because **the host answers a consumer by the minor it
+declared**: `vh_init_desc::AbiVersion` below 12.4 gets the two old codes back, which is the
+policy's "fall back rather than fail" for a new enumerator an older consumer cannot ignore. The
+reasons behind it are `EHostFailure` (`host/Private/HostResult.h`), and `VerseHost.cpp`'s
+`StatusFor` is the one place any of them becomes a status.
 **12.3 is where a layout mismatch is refused by name**: `vh_init_desc` grew `LayoutDigest`, the
 `VH_LAYOUT_DIGEST` the consumer compiled, and a host whose own differs answers `VH_ERR_ABI` with a
 sentence naming both. The digest is over the sizes and offsets `include/verse_host_abi_layout.h`
@@ -926,8 +936,8 @@ layer, and is skipped there when `../godot` is absent.
   analysis left, and 0.0 ms during one is the whole point: ~22 of these used to begin with a
   `std::thread::join` and cost the main thread 1.7 s apiece. The three that resolve a *position*
   cannot be snapshotted, because a position resolves against the AST the worker is rebuilding:
-  `vh_lookup_symbol`, `vh_complete_symbol` and `vh_signature_at` answer `VH_ERR_STATE` while one
-  runs, and the consumer's recourse is to queue that buffer and ask again. **Only the entry points
+  `vh_lookup_symbol`, `vh_complete_symbol` and `vh_signature_at` answer `VH_ERR_NOT_ANALYSED` while
+  one runs, and the consumer's recourse is to queue that buffer and ask again. **Only the entry points
   that *execute* Verse still wait**, because Solaris blocks the VM for the length of any build. If
   you add an entry point, it belongs in one of those three groups and never in a fourth.
 - **A build describes itself, and leaves no AST.** The snapshot is taken from inside the build, at

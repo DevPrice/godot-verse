@@ -12,6 +12,8 @@ namespace GodotVerse {
 struct FHostState
 {
     bool bInitialized{false};
+    /// vh_init_desc::AbiVersion, for an answer a lower minor has no spelling for.
+    int32 ConsumerAbiVersion{0};
     vh_godot_api Godot{};
     vh_diagnostic_fn OnDiagnostic{nullptr};
     void* DiagnosticCtx{nullptr};

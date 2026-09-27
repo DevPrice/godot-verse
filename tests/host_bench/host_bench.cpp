@@ -423,7 +423,7 @@ int main(int argc, char** argv)
 	//
 	//   refused      what the editor gets back on the keystroke itself, before it has queued
 	//                anything. It is the whole of the latency the author sees, and it must be
-	//                VH_ERR_STATE rather than an answer.
+	//                VH_ERR_NOT_ANALYSED rather than an answer.
 	//   analysis     the completion buffer through vh_check_project_begin/_poll, which is the
 	//                background wait before the full list can replace the partial one.
 	//   warm         the answer once that analysis has landed. This is the row the walk and the
@@ -500,7 +500,7 @@ int main(int argc, char** argv)
 									 VH_COMPLETE_MEMBERS, &Items, &Count);
 				MemberRefusedSamples.push_back(MillisSince(RefusedStart));
 				RefusalsExpected++;
-				RefusalsSeen += MemberRefusal == VH_ERR_STATE ? 1 : 0;
+				RefusalsSeen += MemberRefusal == VH_ERR_NOT_ANALYSED ? 1 : 0;
 
 				MemberAnalysisSamples.push_back(AnalyseBuffer(Typing));
 
@@ -528,7 +528,7 @@ int main(int argc, char** argv)
 									 VH_COMPLETE_SCOPE, &Items, &Count);
 				ScopeRefusedSamples.push_back(MillisSince(ScopeRefusedStart));
 				RefusalsExpected++;
-				RefusalsSeen += ScopeRefusal == VH_ERR_STATE ? 1 : 0;
+				RefusalsSeen += ScopeRefusal == VH_ERR_NOT_ANALYSED ? 1 : 0;
 
 				ScopeAnalysisSamples.push_back(AnalyseBuffer(ScopeTyping));
 
@@ -572,7 +572,7 @@ int main(int argc, char** argv)
 					SignatureAtFn(ExportsPathUtf8.c_str(), Unseen.c_str(), CalleeRow, CalleeColumn, &Signature);
 				SignatureRefusedSamples.push_back(MillisSince(SignatureRefusedStart));
 				RefusalsExpected++;
-				RefusalsSeen += SignatureRefusal == VH_ERR_STATE ? 1 : 0;
+				RefusalsSeen += SignatureRefusal == VH_ERR_NOT_ANALYSED ? 1 : 0;
 			}
 		}
 	}
@@ -876,7 +876,7 @@ int main(int argc, char** argv)
 	ReportSeries("vh_signature_at (refused)", SignatureRefusedSamples);
 	ReportSeries("vh_signature_at (warm)", SignatureSamples);
 	ReportSeries("vh_lookup_symbol (warm)", LookupSamples);
-	printf("[bench] %-28s %d of %d refused with VH_ERR_STATE\n",
+	printf("[bench] %-28s %d of %d refused with VH_ERR_NOT_ANALYSED\n",
 		   "completion refusals", RefusalsSeen, RefusalsExpected);
 	ReportSeries("vh_class_members", ClassMembersSamples);
 	printf("[bench] %-28s %d candidate(s) copied per call\n", "override candidates (size)", CandidateCount);

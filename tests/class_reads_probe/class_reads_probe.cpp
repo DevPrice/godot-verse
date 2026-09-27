@@ -83,6 +83,8 @@ const char *StatusName(int32_t Status) {
 			return "VH_ERR_STOPPED";
 		case VH_ERR_UNSUPPORTED:
 			return "VH_ERR_UNSUPPORTED";
+		case VH_ERR_NOT_ANALYSED:
+			return "VH_ERR_NOT_ANALYSED";
 		default:
 			return "?";
 	}

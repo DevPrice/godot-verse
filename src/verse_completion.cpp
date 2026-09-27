@@ -970,14 +970,19 @@ PackedStringArray VerseCompletion::receiver_classes_from_text(const String &p_so
 // nothing about is answered with what it said the last time it did. `vh_has_class` is not that
 // test: around an analysis that did not parse it can still answer yes for a class it describes no
 // member of. A class with members of its own and no candidates is answered fresh -- its
-// base changed, and the old list would offer overrides of a base it no longer extends.
-TypedArray<Dictionary> VerseCompletion::override_candidates(const String &p_class_name) const {
+// base changed, and the old list would offer overrides of a base it no longer extends. Before any
+// analysis has landed the host says so rather than answering empty, and r_not_ready passes that on.
+TypedArray<Dictionary> VerseCompletion::override_candidates(const String &p_class_name, bool *r_not_ready) const {
 	VerseRuntime *runtime = get_runtime();
 	if (runtime == nullptr) {
 		return TypedArray<Dictionary>();
 	}
-	const TypedArray<Dictionary> candidates = runtime->class_override_candidates(p_class_name);
-	if (!candidates.is_empty() || !runtime->class_members(p_class_name).is_empty()) {
+	bool not_ready = false;
+	const TypedArray<Dictionary> candidates = runtime->class_override_candidates(p_class_name, &not_ready);
+	if (not_ready && r_not_ready != nullptr) {
+		*r_not_ready = true;
+	}
+	if (!not_ready && (!candidates.is_empty() || !runtime->class_members(p_class_name).is_empty())) {
 		last_good_override_candidates[p_class_name] = candidates;
 		return candidates;
 	}
@@ -1433,7 +1438,11 @@ Dictionary VerseCompletion::complete_code(const String &p_code, const String &p_
 			//
 			// Members only, not the scope walk: everything else a scope admits lives in the AST,
 			// which is exactly what no analysis of this buffer has built yet.
-			const TypedArray<Dictionary> members = runtime->class_members(language.qualified_class_name(p_path));
+			bool members_not_ready = false;
+			const TypedArray<Dictionary> members = runtime->class_members(language.qualified_class_name(p_path), &members_not_ready);
+			if (members_not_ready) {
+				language.request_check(p_path, source, VerseProjectState::CheckKind::COMPLETION);
+			}
 			for (int64_t i = 0; i < members.size(); i++) {
 				const Dictionary item = members[i];
 				if (!matches_typed_prefix(item["name"], prefix)) {
@@ -1462,7 +1471,13 @@ Dictionary VerseCompletion::complete_code(const String &p_code, const String &p_
 		// Nothing but overrides: an inherited name that is not one is an ordinary call, and the
 		// thousands of them belong to the scope walk.
 		if (!declaring_in_class.is_empty()) {
-			const TypedArray<Dictionary> candidates = override_candidates(language.qualified_class_name(p_path));
+			// No analysis has landed at all on the first keystroke of a session, and an empty list
+			// then would be the whole popup (B13). Queued as a completion so that landing re-asks.
+			bool candidates_not_ready = false;
+			const TypedArray<Dictionary> candidates = override_candidates(language.qualified_class_name(p_path), &candidates_not_ready);
+			if (candidates_not_ready) {
+				language.request_check(p_path, source, VerseProjectState::CheckKind::COMPLETION);
+			}
 			for (int64_t i = 0; i < candidates.size(); i++) {
 				const Dictionary item = candidates[i];
 				const String name = item["name"];

@@ -61,8 +61,8 @@ private:
 	VerseScriptLanguage &language;
 
 	// vh_class_override_candidates for p_class_name, or the last answer it gave while the snapshot
-	// still described the class.
-	godot::TypedArray<godot::Dictionary> override_candidates(const godot::String &p_class_name) const;
+	// still described the class. r_not_ready is set when no analysis has landed yet.
+	godot::TypedArray<godot::Dictionary> override_candidates(const godot::String &p_class_name, bool *r_not_ready = nullptr) const;
 
 	// Keyed by module-qualified class name. Never cleared: a class the snapshot has again is
 	// answered fresh and overwrites its row, and one that never comes back costs one row.
