@@ -162,10 +162,15 @@ private:
     TOptional<EFailure> Failure;
 };
 
-/// The vh_status a consumer sees for a failure: the one place a reason becomes a status. Defined in
-/// VerseHost.cpp, beside the entry points; a unit whose answer reaches the ABI as a status of its
-/// own -- InvokeCallback's -- calls it rather than choosing one.
-int32 StatusFor(EHostFailure Failure);
+/// The vh_status a consumer that declared ConsumerAbiVersion (vh_init_desc::AbiVersion) sees for a
+/// failure: the one place a reason becomes a status, and a pure function of its two arguments.
+/// Defined in VerseHost.cpp, beside the entry points.
+int32 StatusFor(EHostFailure Failure, int32 ConsumerAbiVersion);
+
+/// StatusFor for the consumer this host was initialised by. What an entry point, or a unit whose
+/// answer reaches the ABI as a status of its own -- InvokeCallback's -- calls rather than choosing
+/// one.
+int32 ConsumerStatusFor(EHostFailure Failure);
 
 AUTORTFM_DISABLE void ReportUnreported(const char* Reason, const char* File, int32 Line);
 

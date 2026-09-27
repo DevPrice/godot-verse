@@ -177,8 +177,6 @@ TOptional<int32> ExpectedStatus(EHostFailure Failure, bool bNew, const TCHAR*& O
 
 AUTORTFM_DISABLE void TestStatusFor()
 {
-	FHostState& Host = GetHost();
-	const int32 Declared = Host.ConsumerAbiVersion;
 	const struct
 	{
 		int32 Version;
@@ -190,7 +188,6 @@ AUTORTFM_DISABLE void TestStatusFor()
 	};
 	for (const auto& Consumer : Consumers)
 	{
-		Host.ConsumerAbiVersion = Consumer.Version;
 		int32 Covered = 0;
 		for (int32 Raw = 0; Raw < 256; ++Raw)
 		{
@@ -202,12 +199,13 @@ AUTORTFM_DISABLE void TestStatusFor()
 			}
 			++Covered;
 			ExpectInt(FString::Printf(TEXT("status_for %s at %s"), Name, Consumer.Label),
-			          StatusFor((EHostFailure)Raw), Expected.GetValue());
+			          StatusFor((EHostFailure)Raw, Consumer.Version), Expected.GetValue());
 		}
 		ExpectInt(FString::Printf(TEXT("status_for covers every failure at %s"), Consumer.Label),
 		          Covered, (int32)EHostFailure::AnalysisNotReaped + 1);
 	}
-	Host.ConsumerAbiVersion = Declared;
+	ExpectInt(TEXT("consumer_status_for answers for the declared minor"),
+	          ConsumerStatusFor(EHostFailure::NotAnalysed), StatusFor(EHostFailure::NotAnalysed, VH_ABI_VERSION));
 }
 
 const uLang::CDataDefinition* FindMember(const uLang::CClass& Class, const char* Name)

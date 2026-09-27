@@ -83,14 +83,14 @@ vh_complete_item ToCompleteItem(const GodotVerse::FCompleteItem& Item)
 
 } // namespace
 
-int32 GodotVerse::StatusFor(GodotVerse::EHostFailure Failure)
+int32 GodotVerse::StatusFor(GodotVerse::EHostFailure Failure, int32 ConsumerAbiVersion)
 {
     using GodotVerse::EHostFailure;
 
     // Before 12.4 the four "not yet" reasons shared two codes with answers that mean something
     // else, and a consumer built then acts on those: it re-asks on VH_ERR_STATE and treats
     // VH_ERR_NOT_FOUND as nothing there. It would read the new code as a failure and never re-ask.
-    const bool bConsumerKnowsNotAnalysed = GetHost().ConsumerAbiVersion >= VH_ABI_VERSION_MAJOR * 1000 + 4;
+    const bool bConsumerKnowsNotAnalysed = ConsumerAbiVersion >= VH_ABI_VERSION_MAJOR * 1000 + 4;
 
     VH_EXHAUSTIVE_SWITCH_BEGIN
     switch (Failure)
@@ -144,7 +144,12 @@ int32 GodotVerse::StatusFor(GodotVerse::EHostFailure Failure)
     return VH_ERR_NOT_FOUND;
 }
 
-using GodotVerse::StatusFor;
+int32 GodotVerse::ConsumerStatusFor(GodotVerse::EHostFailure Failure)
+{
+    return StatusFor(Failure, GetHost().ConsumerAbiVersion);
+}
+
+using GodotVerse::ConsumerStatusFor;
 
 /// Unguarded, and it is the one entry point that must be: a consumer calls this *before* vh_init to
 /// decide whether to load the host at all, so there is no recorded thread to compare against and
@@ -731,7 +736,7 @@ extern "C" int32_t vh_check_project_begin(const char* PathUtf8, const char* Sour
     }
     const GodotVerse::TResult<void> Begun =
         GodotVerse::BeginBackgroundCheck(FUtf8String(Cstr(PathUtf8)), FUtf8String(Cstr(SourceUtf8)));
-    return Begun ? VH_OK : StatusFor(Begun.GetFailure());
+    return Begun ? VH_OK : ConsumerStatusFor(Begun.GetFailure());
 }
 
 extern "C" int32_t vh_check_project_poll(vh_bool* OutFinished)
@@ -1469,7 +1474,7 @@ extern "C" int32_t vh_lookup_symbol(const char* PathUtf8, int32_t Line, int32_t 
     GodotVerse::TResult<GodotVerse::FLookupDesc> Found = GodotVerse::LookupSymbol(Cstr(PathUtf8), Line, Column);
     if (!Found)
     {
-        return StatusFor(Found.GetFailure());
+        return ConsumerStatusFor(Found.GetFailure());
     }
     Lookup = MoveTemp(Found.GetValue());
 
@@ -1542,7 +1547,7 @@ extern "C" int32_t vh_complete_symbol(const char* PathUtf8,
         GodotVerse::Complete(Cstr(PathUtf8), FUtf8String(Cstr(SourceUtf8)), Line, Column, (vh_complete_mode)Mode);
     if (!Found)
     {
-        return StatusFor(Found.GetFailure());
+        return ConsumerStatusFor(Found.GetFailure());
     }
     Items = MoveTemp(Found.GetValue());
 
@@ -1582,7 +1587,7 @@ extern "C" int32_t vh_class_members(const char* ClassNameUtf8, const vh_complete
     GodotVerse::TResult<TArray<GodotVerse::FCompleteItem>> Found = GodotVerse::ClassMembers(Cstr(ClassNameUtf8));
     if (!Found)
     {
-        return StatusFor(Found.GetFailure());
+        return ConsumerStatusFor(Found.GetFailure());
     }
     Members = MoveTemp(Found.GetValue());
 
@@ -1622,7 +1627,7 @@ extern "C" int32_t vh_class_override_candidates(const char* ClassNameUtf8, const
     GodotVerse::TResult<TArray<GodotVerse::FCompleteItem>> Found = GodotVerse::ClassOverrideCandidates(Cstr(ClassNameUtf8));
     if (!Found)
     {
-        return StatusFor(Found.GetFailure());
+        return ConsumerStatusFor(Found.GetFailure());
     }
     Candidates = MoveTemp(Found.GetValue());
 
@@ -1705,7 +1710,7 @@ extern "C" int32_t vh_signature_at(const char* PathUtf8,
         GodotVerse::SignatureAt(Cstr(PathUtf8), FUtf8String(Cstr(SourceUtf8)), Line, Column);
     if (!Found)
     {
-        return StatusFor(Found.GetFailure());
+        return ConsumerStatusFor(Found.GetFailure());
     }
     Signature = MoveTemp(Found.GetValue());
 

@@ -858,7 +858,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
 
     if (!Instance || !Instance->Object.IsValid())
     {
-        return StatusFor(EHostFailure::InstanceReleased);
+        return ConsumerStatusFor(EHostFailure::InstanceReleased);
     }
 
     // The first entry into this instance is the earliest point at which Godot will accept a connect
@@ -874,13 +874,13 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
     TArray<FMethodDesc> Methods;
     if (!GetClassMethods(FUtf8StringView(ClassName), Methods))
     {
-        return StatusFor(EHostFailure::NoSuchClass);
+        return ConsumerStatusFor(EHostFailure::NoSuchClass);
     }
     const FMethodDesc* Method = Methods.FindByPredicate(
         [DecoratedName](const FMethodDesc& Candidate) { return FUtf8StringView(Candidate.DecoratedName).Equals(DecoratedName); });
     if (!Method)
     {
-        return StatusFor(EHostFailure::NoSuchMethod);
+        return ConsumerStatusFor(EHostFailure::NoSuchMethod);
     }
 
     // One shape cannot be settled yet: a single *struct* parameter is satisfied by one Godot
@@ -889,13 +889,13 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
     const bool bArityMayBeStructPack = Method->Params.Num() == 1 && ArgCount != 1;
     if (!bArityMayBeStructPack && (ArgCount < Method->RequiredParamCount || ArgCount > Method->Params.Num()))
     {
-        return StatusFor(EHostFailure::WrongArgumentCount);
+        return ConsumerStatusFor(EHostFailure::WrongArgumentCount);
     }
 
     FVerseFunction Resolved = LookupMethod(Instance, DecoratedName);
     if (!Resolved.IsValid())
     {
-        return StatusFor(EHostFailure::NoSuchMethod);
+        return ConsumerStatusFor(EHostFailure::NoSuchMethod);
     }
 
     // Parameter descriptions are not carried on FMethodDesc, which holds only what crosses the ABI,
@@ -917,7 +917,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
     RecordedMethodTypes(ClassName, DecoratedName, ParamTypes, ResultTypeDesc);
     if (ParamTypes.Num() != Method->Params.Num())
     {
-        return StatusFor(EHostFailure::SignatureNotRecorded);
+        return ConsumerStatusFor(EHostFailure::SignatureNotRecorded);
     }
 
     // **N Godot arguments satisfy one struct parameter, one per field.**
@@ -952,7 +952,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
     {
         // The deferred half of the check above. Reached only for a one-parameter method that turned
         // out not to be a struct taking this many fields.
-        return StatusFor(EHostFailure::WrongArgumentCount);
+        return ConsumerStatusFor(EHostFailure::WrongArgumentCount);
     }
 
     // After the arity is settled, so a call that was never going to run does not seal the instance
@@ -990,7 +990,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
                 const TResult<void> Crossed = WireToValue(Context, Args[Index], ParamTypes[Index], Value);
                 if (!Crossed)
                 {
-                    Status = StatusFor(Crossed.GetFailure());
+                    Status = ConsumerStatusFor(Crossed.GetFailure());
                     return;
                 }
                 Converted.Add(Value);
@@ -1008,7 +1008,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
                     const TResult<void> Answered = ValueToWire(Context, OpResult.Value, ResultTypeDesc, OutStorage, OutResult);
                     if (!Answered)
                     {
-                        Status = StatusFor(Answered.GetFailure());
+                        Status = ConsumerStatusFor(Answered.GetFailure());
                     }
                 }
                 break;
@@ -1016,7 +1016,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
             case Verse::FOpResult::Fail:
                 // A <decides> method that ran and declined. Distinct from VH_ERR_NOT_FOUND, which
                 // would say there had been nothing to call.
-                Status = StatusFor(EHostFailure::Declined);
+                Status = ConsumerStatusFor(EHostFailure::Declined);
                 break;
 
             case Verse::FOpResult::Yield:
@@ -1025,7 +1025,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
                 break;
 
             default:
-                Status = StatusFor(EHostFailure::Aborted);
+                Status = ConsumerStatusFor(EHostFailure::Aborted);
                 break;
             }
         });
@@ -1037,9 +1037,9 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceCall(FInstance* Instance,
     // visible from here: the raise itself does not return through us.
     if (TransactionResult != AutoRTFM::ETransactionResult::Committed)
     {
-        return StatusFor(EHostFailure::Aborted);
+        return ConsumerStatusFor(EHostFailure::Aborted);
     }
-    return bBodyRan ? Status : StatusFor(EHostFailure::Halted);
+    return bBodyRan ? Status : ConsumerStatusFor(EHostFailure::Halted);
 }
 
 AUTORTFM_DISABLE int32 GodotVerse::InstanceToString(FInstance* Instance,
@@ -1053,7 +1053,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceToString(FInstance* Instance,
 
     if (!Instance || !Instance->Object.IsValid())
     {
-        return StatusFor(EHostFailure::InstanceReleased);
+        return ConsumerStatusFor(EHostFailure::InstanceReleased);
     }
 
     // From the snapshot, so this costs no analysis and never waits -- Godot asks for an object's
@@ -1062,14 +1062,14 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceToString(FInstance* Instance,
     const TResult<const FAnalysisSnapshot::FClass*> Found = FindSnapshotClass(ClassName);
     if (!Found || Found.GetValue()->ToStringDecorated.IsEmpty())
     {
-        return StatusFor(EHostFailure::NoSuchMethod);
+        return ConsumerStatusFor(EHostFailure::NoSuchMethod);
     }
 
     Verse::VFunction* const Function =
         FindVFunctionByDecoratedName(FUtf8StringView(Found.GetValue()->ToStringDecorated));
     if (!Function)
     {
-        return StatusFor(EHostFailure::NoSuchMethod);
+        return ConsumerStatusFor(EHostFailure::NoSuchMethod);
     }
 
     // The result is read as a `string`, which is the only thing Godot has anywhere to put it. The
@@ -1106,16 +1106,16 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceToString(FInstance* Instance,
                 if (const TResult<void> Answered = ValueToWire(Context, OpResult.Value, StringType, OutStorage, OutResult);
                     !Answered)
                 {
-                    Status = StatusFor(Answered.GetFailure());
+                    Status = ConsumerStatusFor(Answered.GetFailure());
                 }
                 break;
 
             case Verse::FOpResult::Fail:
-                Status = StatusFor(EHostFailure::Declined);
+                Status = ConsumerStatusFor(EHostFailure::Declined);
                 break;
 
             default:
-                Status = StatusFor(EHostFailure::Aborted);
+                Status = ConsumerStatusFor(EHostFailure::Aborted);
                 break;
             }
         });
@@ -1124,11 +1124,11 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceToString(FInstance* Instance,
 
     if (TransactionResult != AutoRTFM::ETransactionResult::Committed)
     {
-        return StatusFor(EHostFailure::Aborted);
+        return ConsumerStatusFor(EHostFailure::Aborted);
     }
     if (!bBodyRan)
     {
-        return StatusFor(EHostFailure::Halted);
+        return ConsumerStatusFor(EHostFailure::Halted);
     }
     return Status;
 }
@@ -1222,7 +1222,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InvokeCallback(int64 CallbackId,
     const TResult<FCallbackTarget> Found = FindCallback(CallbackId);
     if (!Found)
     {
-        return StatusFor(Found.GetFailure());
+        return ConsumerStatusFor(Found.GetFailure());
     }
     const FCallbackTarget& Target = Found.GetValue();
 
@@ -1231,7 +1231,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InvokeCallback(int64 CallbackId,
     if (Target.AwaitToken != 0)
     {
         const TResult<void> Delivered = DeliverToAwaiter(Target.AwaitToken, Args, ArgCount);
-        return Delivered ? VH_OK : StatusFor(Delivered.GetFailure());
+        return Delivered ? VH_OK : ConsumerStatusFor(Delivered.GetFailure());
     }
 
     // The permanent connection an `@export_signal` event member holds. Before the instance lookup
@@ -1240,7 +1240,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InvokeCallback(int64 CallbackId,
     if (Target.EventSignalId != 0)
     {
         const TResult<void> Delivered = DeliverToEvent(Target.EventSignalId, Args, ArgCount);
-        return Delivered ? VH_OK : StatusFor(Delivered.GetFailure());
+        return Delivered ? VH_OK : ConsumerStatusFor(Delivered.GetFailure());
     }
 
     FInstance** const Bound = GInstancesByHandle.Find(Target.OwnerHandle);
@@ -1248,7 +1248,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InvokeCallback(int64 CallbackId,
     {
         // The node was freed. Godot's own is_valid() should have caught this first; answering
         // rather than raising is what keeps a late emission from taking the frame down.
-        return StatusFor(EHostFailure::UnknownId);
+        return ConsumerStatusFor(EHostFailure::UnknownId);
     }
 
     // A foreign signal's subscriber: nothing declares that signal's payload, so the arguments cross
@@ -1258,12 +1258,12 @@ AUTORTFM_DISABLE int32 GodotVerse::InvokeCallback(int64 CallbackId,
         FHostState& Host = GetHost();
         if (!Host.Godot.NewRef || !Host.Godot.RefSet)
         {
-            return StatusFor(EHostFailure::GodotUnavailable);
+            return ConsumerStatusFor(EHostFailure::GodotUnavailable);
         }
         const int64 Ref = Host.Godot.NewRef(Host.Godot.Ctx, VH_VARIANT_ARRAY);
         if (Ref == 0)
         {
-            return StatusFor(EHostFailure::GodotUnavailable);
+            return ConsumerStatusFor(EHostFailure::GodotUnavailable);
         }
         for (int32 Index = 0; Index < ArgCount; ++Index)
         {
