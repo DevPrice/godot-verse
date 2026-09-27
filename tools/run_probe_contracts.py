@@ -237,6 +237,10 @@ _SUBSCRIBE_ORDER_LINE = re.compile(r"^((?:callback order \d|after cancelling C):
 # An engine or host C++ source location: `Foo.cpp:123` or `Bar.h:45:9`. Not `.verse`, whose line
 # number is the fixture's own content and is exactly what a *_reject.verse golden is testing.
 _SOURCE_LINE = re.compile(r"(\.(?:cpp|cc|cxx|h|hpp|hxx|inl|ipp)):\d+(?::\d+)?")
+# A frame in the bridge's own Verse library (host/Verse/*.native.verse). Its line moves with every
+# edit to that hand-written file, which is not what a fixture tests; a fixture's own `.verse`
+# lines are left alone.
+_NATIVE_VERSE_LINE = re.compile(r"(\.native\.verse):\d+")
 # UE's other source-location spelling, split across two bracket groups in a fatal error's own
 # header line: "[File:...Foo.cpp] [Line: 123]".
 _UE_LINE_BRACKET = re.compile(r"\[Line: \d+\]")
@@ -265,6 +269,7 @@ def normalize(text: str, repo: Path, engine: Path) -> str:
     text = _EPOCH.sub(r"\1 = <epoch>", text)
     text = _SUBSCRIBE_ORDER_LINE.sub(_subscribe_order_repl, text)
     text = _SOURCE_LINE.sub(r"\1", text)
+    text = _NATIVE_VERSE_LINE.sub(r"\1", text)
     text = _UE_LINE_BRACKET.sub("[Line: <line>]", text)
     return text
 
