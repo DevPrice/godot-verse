@@ -333,8 +333,13 @@ the inspector and the wire make of a declared type (`DescribeType`, `DescribeExp
 `HostLookup` is lookup, completion and the argument hint -- the code Epic's language server will
 replace, which never enters the VM; `HostEngineAdapters` is where a definition was written (the
 mirror's side table and `PrototypeOf`), a script class by qualified name, and the decorated names
-the VM keys by, each a function a caller cannot go around; `HostScriptState.h` is the accessors
-the split-out units read HostScript.cpp's state through;
+the VM keys by, each a function a caller cannot go around; `HostSignals` is signals at run time --
+binding, emitting, subscribing and the waits -- with the public half still declared in
+`HostScript.h`; `HostCallbacks` is the registry of Callables handed to Godot, the one table touched
+off the game thread, reachable only under its lock (`FLockedCallbacks`, which `check`s it);
+`HostVerseEntry.h` is the one `EnterVerse`; `HostScriptState.h` is the accessors the split-out
+units read HostScript.cpp's state through (`CurrentSemanticProgram`, `DescribeMemberType`,
+`RecordedSignalShapes`, `PeekFieldObject`, `DescribeBoundFunction` and the class finders);
 `HostDebug` is the `Verse::FDebugger` and the profiler's accumulators, and nothing else in the host
 knows either exists; `HostFatal` records a fatal error before the process ends; `GodotBindings`
 and `GodotClasses` are the native Verse surface. The cooked
@@ -1208,9 +1213,9 @@ layer, and is skipped there when `../godot` is absent.
   worst shape (registers, emits, never delivers back, every await hangs), so `ConnectDelivery`'s
   refusal is reported. Every `signal(t)` — declared or engine accessor — keeps connect-while-awaiting, and
   `tests/integration` asserts the connection count returns to zero on both sides of a `race`.
-  `GEventBindingIds` is what an event has instead of `vh_signal`'s `Id` field, and `ReleaseInstance`
-  drops the row, the callback, the reference and the strong pointer together — the strong pointer is
-  a GC root per scripted node if it outlives the instance.
+  `GEventBindingIds` is what an event has instead of `vh_signal`'s `Id` field; one function,
+  `ReleaseEventBindings` (`HostSignals.h`), is the only release of a binding's row, callback,
+  reference and strong pointer.
 - Verse's own `signalable` cannot be implemented here — its `Signal` is `no_rollback` and every
   Godot callback runs in a transaction. **`listenable` can and is**: it is `awaitable` +
   `subscribable` and does *not* extend `signalable`, so `signal(t)` implements it and a declared
