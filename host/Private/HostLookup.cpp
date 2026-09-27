@@ -941,11 +941,12 @@ AUTORTFM_DISABLE bool AttributeClassFitsPosition(const uLang::CClass& Class,
                                                  const uLang::CSemanticProgram& Program,
                                                  ECompleteFilter Filter)
 {
-    if (Class.HasAttributeClass(Program._attributeScopeSpecifier, Program))
+    const uLang::CDefinition& Prototype = PrototypeOf(Class);
+    if (Prototype.HasAttributeClass(Program._attributeScopeSpecifier, Program))
     {
         return Filter == ECompleteFilter::Specifiers;
     }
-    if (Class.HasAttributeClass(Program._attributeScopeAttribute, Program))
+    if (Prototype.HasAttributeClass(Program._attributeScopeAttribute, Program))
     {
         return Filter == ECompleteFilter::PrefixAttributes;
     }
@@ -977,7 +978,7 @@ AUTORTFM_DISABLE bool IsAttributeName(const uLang::CDefinition& Definition, ECom
     }
     if (const CFunction* Function = Definition.AsNullable<CFunction>())
     {
-        if (!Function->IsConstructor())
+        if (!PrototypeOf(*Function).AsChecked<CFunction>().IsConstructor())
         {
             return false;
         }
@@ -1068,7 +1069,7 @@ AUTORTFM_DISABLE bool DescribeCompletion(const uLang::CDefinition& Definition, E
         // An attribute's `<constructor>` is the one the author writes -- `@clamp_min("0.0")` --
         // and IsAttributeName has already established that this is one. Everywhere else a
         // constructor is the copy the compiler generated per class, which has no spelling.
-        if (Function->IsConstructor() && Filter != ECompleteFilter::PrefixAttributes
+        if (PrototypeOf(*Function).AsChecked<CFunction>().IsConstructor() && Filter != ECompleteFilter::PrefixAttributes
             && Filter != ECompleteFilter::Specifiers)
         {
             return false;
