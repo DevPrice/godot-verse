@@ -25,6 +25,12 @@ std::string utf8_of(const String &p_text) {
 
 /// The mirrored Verse class for a Godot class, or empty. Binary search, because the table is
 /// sorted by Godot name and this is asked once per class per generation.
+///
+/// The same question `mirrored_class` in verse_api_lookup.h answers with a linear scan over the
+/// same table, and deliberately not that one: this runs once per class of a whole generation's
+/// roster rather than once per keystroke, where the O(log n) here is worth the std::string this
+/// file already works in and the linear scan there is worth staying godot::String-shaped for its
+/// callers. A generated-bindings-scale roster is the only reason the two are not one function.
 std::string mirrored_verse_class(const String &p_godot_name) {
 	const std::string name = utf8_of(p_godot_name);
 	int64_t low = 0;

@@ -1,6 +1,7 @@
 #include "verse_syntax_highlighter.h"
 
 #include "verse_api_classes.h"
+#include "verse_api_lookup.h"
 #include "verse_script.h"
 #include "verse_script_language.h"
 
@@ -25,17 +26,6 @@ namespace {
 
 VerseRuntime *get_runtime() {
 	return Object::cast_to<VerseRuntime>(Engine::get_singleton()->get_singleton("VerseRuntime"));
-}
-
-// The Verse class one of Godot's stands for, or null when that class was not mirrored -- which a
-// chain walk meets whenever gen_verse_api.py was run with --classes-file.
-const char *mirrored_class(const StringName &p_godot_class) {
-	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
-		if (p_godot_class == StringName(verse_api::classes[i].godot_name)) {
-			return verse_api::classes[i].verse_name;
-		}
-	}
-	return nullptr;
 }
 
 // Data members only: a method reaches the highlighter as a Function or FunctionDefinition token

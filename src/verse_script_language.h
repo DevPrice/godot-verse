@@ -2,6 +2,7 @@
 
 // _make_template returns a Ref<Script>, and Ref's destructor needs the complete type;
 // script_language_extension.hpp only forward-declares it.
+#include "verse_api_lookup.h"
 #include "verse_bindings.h"
 #include "verse_project_state.h"
 #include "verse_script.h"
@@ -48,17 +49,8 @@ godot::String verse_doc_comment_above(const godot::String &p_source, int64_t p_l
 // Godot's documentation renderer reads. Every description handed to Godot goes through it.
 godot::String verse_doc_bbcode(const godot::String &p_doc);
 
-// The Godot class a mirrored Verse class name stands for, or nullptr for a name that is not part of
-// the generated API -- a class the author wrote, most often. Shared rather than looked up twice:
-// verse_script.cpp turns an export's class hint into the name an inspector slot filters by, and
-// that has to be the same table the rest of the bridge resolves a Verse class name through.
-const char *verse_godot_class_for(const godot::String &p_verse_class);
-
-// The name Godot knows a declared class by, from the two fields the ABI carries for one
-// (vh_param_desc::ClassUtf8 and ClassKind, and vh_export_desc's hint pair, which say the same
-// thing two ways). Empty for a class Godot has no name for, which is what leaves an argument
-// drawn as a plain Object rather than filtered by a name nothing can resolve.
-godot::StringName verse_godot_class_name(const godot::String &p_verse_class, int32_t p_class_kind);
+// verse_godot_class_for and verse_godot_class_name, which verse_script.cpp and verse_runtime.cpp
+// also use, are declared in verse_api_lookup.h, included above.
 
 #ifdef TOOLS_ENABLED
 // The EditorInterface singleton, or nullptr when this process is not an editor.
