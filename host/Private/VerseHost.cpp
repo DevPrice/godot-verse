@@ -81,6 +81,29 @@ vh_complete_item ToCompleteItem(const GodotVerse::FCompleteItem& Item)
         Item.bIsNamed ? 1 : 0};
 }
 
+/// The one place a host failure becomes the vh_status a consumer acts on.
+int32_t StatusFor(GodotVerse::EHostFailure Failure)
+{
+    using GodotVerse::EHostFailure;
+    VH_EXHAUSTIVE_SWITCH_BEGIN
+    switch (Failure)
+    {
+    // "Not yet": the consumer's recourse is to have the buffer analysed and ask again.
+    case EHostFailure::AnalysisRunning:
+    case EHostFailure::BuiltSinceAnalysis:
+    case EHostFailure::BufferNotAnalysed:
+        return VH_ERR_STATE;
+    case EHostFailure::NotAnalysed:
+    case EHostFailure::InvalidPosition:
+    case EHostFailure::NothingAtPosition:
+    case EHostFailure::NotAFunction:
+    case EHostFailure::NoSuchClass:
+        return VH_ERR_NOT_FOUND;
+    }
+    VH_EXHAUSTIVE_SWITCH_END
+    return VH_ERR_NOT_FOUND;
+}
+
 } // namespace
 
 /// Unguarded, and it is the one entry point that must be: a consumer calls this *before* vh_init to
@@ -1393,33 +1416,17 @@ extern "C" int32_t vh_lookup_symbol(const char* PathUtf8, int32_t Line, int32_t 
         return VH_ERR_STATE;
     }
 
-    // A position is not a question a snapshot can answer -- the loci live in the AST, which the
-    // worker is rebuilding -- so this one declines rather than waits. VH_ERR_STATE is what
-    // vh_check_project_begin already answers for "an analysis is in flight", and a hover that says
-    // nothing for a frame is what the consumer does with it: the GDExtension's _lookup_code already
-    // declines on vh_check_project_busy for exactly this reason.
-    if (GodotVerse::IsBackgroundCheckRunning())
-    {
-        return VH_ERR_STATE;
-    }
-
-    // And the same answer for the same reason after a build: generating code puts the AST every
-    // locus lives in out of reach, and what the consumer should do about it is ask again once an
-    // analysis has run. Answering VH_ERR_NOT_FOUND would say the symbol is not there.
-    if (!GodotVerse::ProgramIsAnalysisOnly())
-    {
-        return VH_ERR_STATE;
-    }
-
     // The ABI promises the strings outlive the call, and the descriptor only points at the
     // harvest's -- so both are static rather than stack.
     static GodotVerse::FLookupDesc Lookup;
     static vh_lookup_desc Desc;
 
-    if (!GodotVerse::LookupSymbol(Cstr(PathUtf8), Line, Column, Lookup))
+    GodotVerse::TResult<GodotVerse::FLookupDesc> Found = GodotVerse::LookupSymbol(Cstr(PathUtf8), Line, Column);
+    if (!Found)
     {
-        return VH_ERR_NOT_FOUND;
+        return StatusFor(Found.GetFailure());
     }
+    Lookup = MoveTemp(Found.GetValue());
 
     Desc = vh_lookup_desc{
         (int32_t)sizeof(vh_lookup_desc),
@@ -1481,24 +1488,18 @@ extern "C" int32_t vh_complete_symbol(const char* PathUtf8,
         return VH_ERR_ABI;
     }
 
-    // ABI v7: this neither analyses nor waits. A position is answered against the AST, which only
-    // an analysis of this very buffer builds, so a buffer the program does not describe is a
-    // refusal the caller acts on -- vh_check_project_begin on it, then ask again after the poll --
-    // rather than a stall it never asked for. Same code and same reasoning as vh_lookup_symbol.
-    if (!GodotVerse::ProgramDescribes(FUtf8String(Cstr(PathUtf8)), FUtf8String(Cstr(SourceUtf8))))
-    {
-        return VH_ERR_STATE;
-    }
-
     // Static for the same reason vh_lookup_symbol's descriptor is: the ABI promises the strings
     // outlive the call, and the items only point at the harvest's.
     static TArray<GodotVerse::FCompleteItem> Items;
     static TArray<vh_complete_item> Descs;
 
-    if (!GodotVerse::Complete(Cstr(PathUtf8), FUtf8String(Cstr(SourceUtf8)), Line, Column, (vh_complete_mode)Mode, Items))
+    GodotVerse::TResult<TArray<GodotVerse::FCompleteItem>> Found =
+        GodotVerse::Complete(Cstr(PathUtf8), FUtf8String(Cstr(SourceUtf8)), Line, Column, (vh_complete_mode)Mode);
+    if (!Found)
     {
-        return VH_ERR_NOT_FOUND;
+        return StatusFor(Found.GetFailure());
     }
+    Items = MoveTemp(Found.GetValue());
 
     Descs.Reset(Items.Num());
     for (const GodotVerse::FCompleteItem& Item : Items)
@@ -1533,10 +1534,12 @@ extern "C" int32_t vh_class_members(const char* ClassNameUtf8, const vh_complete
     static TArray<GodotVerse::FCompleteItem> Members;
     static TArray<vh_complete_item> MemberDescs;
 
-    if (!GodotVerse::ClassMembers(Cstr(ClassNameUtf8), Members))
+    GodotVerse::TResult<TArray<GodotVerse::FCompleteItem>> Found = GodotVerse::ClassMembers(Cstr(ClassNameUtf8));
+    if (!Found)
     {
-        return VH_ERR_NOT_FOUND;
+        return StatusFor(Found.GetFailure());
     }
+    Members = MoveTemp(Found.GetValue());
 
     MemberDescs.Reset(Members.Num());
     for (const GodotVerse::FCompleteItem& Member : Members)
@@ -1571,10 +1574,12 @@ extern "C" int32_t vh_class_override_candidates(const char* ClassNameUtf8, const
     static TArray<GodotVerse::FCompleteItem> Candidates;
     static TArray<vh_complete_item> CandidateDescs;
 
-    if (!GodotVerse::ClassOverrideCandidates(Cstr(ClassNameUtf8), Candidates))
+    GodotVerse::TResult<TArray<GodotVerse::FCompleteItem>> Found = GodotVerse::ClassOverrideCandidates(Cstr(ClassNameUtf8));
+    if (!Found)
     {
-        return VH_ERR_NOT_FOUND;
+        return StatusFor(Found.GetFailure());
     }
+    Candidates = MoveTemp(Found.GetValue());
 
     CandidateDescs.Reset(Candidates.Num());
     for (const GodotVerse::FCompleteItem& Candidate : Candidates)
@@ -1647,21 +1652,17 @@ extern "C" int32_t vh_signature_at(const char* PathUtf8,
         return VH_ERR_STATE;
     }
 
-    // The same refusal vh_complete_symbol makes, for the same reason: the editor asks both about
-    // one keystroke, and neither runs an analysis of its own any more.
-    if (!GodotVerse::ProgramDescribes(FUtf8String(Cstr(PathUtf8)), FUtf8String(Cstr(SourceUtf8))))
-    {
-        return VH_ERR_STATE;
-    }
-
     static GodotVerse::FSignatureDesc Signature;
     static TArray<vh_complete_item> ParamDescs;
     static vh_signature_desc Desc;
 
-    if (!GodotVerse::SignatureAt(Cstr(PathUtf8), FUtf8String(Cstr(SourceUtf8)), Line, Column, Signature))
+    GodotVerse::TResult<GodotVerse::FSignatureDesc> Found =
+        GodotVerse::SignatureAt(Cstr(PathUtf8), FUtf8String(Cstr(SourceUtf8)), Line, Column);
+    if (!Found)
     {
-        return VH_ERR_NOT_FOUND;
+        return StatusFor(Found.GetFailure());
     }
+    Signature = MoveTemp(Found.GetValue());
 
     ParamDescs.Reset(Signature.Params.Num());
     for (const GodotVerse::FCompleteItem& Param : Signature.Params)

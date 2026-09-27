@@ -6,6 +6,7 @@
 #include "Containers/Array.h"
 #include "Containers/StringView.h"
 #include "Containers/UnrealString.h"
+#include "HostResult.h"
 #include "verse_host_abi.h"
 
 namespace uLang {
@@ -56,9 +57,10 @@ struct FLookupDesc
 /// for only asking about text the last analysis actually saw -- nothing here can detect an edit
 /// since, and a stale locus is a confident jump to the wrong line.
 ///
-/// Only ever valid on an analysis-only program. Code generation replaces a definition's AST node
-/// with an IR node, and the accessors this walks assert rather than fall back.
-AUTORTFM_DISABLE bool LookupSymbol(FUtf8StringView Path, int32 Line, int32 Column, FLookupDesc& OutDesc);
+/// Only ever answers off an analysis-only program: code generation replaces a definition's AST node
+/// with an IR node, and the accessors this walks assert rather than fall back. After a build, and
+/// while an analysis is rebuilding the program, it declines with the reason instead of waiting.
+AUTORTFM_DISABLE TResult<FLookupDesc> LookupSymbol(FUtf8StringView Path, int32 Line, int32 Column);
 
 /// One name completion could offer, described the way FLookupDesc describes a definition minus
 /// the location -- completion says what a name is, not where it was written.
@@ -99,12 +101,12 @@ struct FSignatureDesc
     TArray<FCompleteItem> Params;
 };
 
-/// Every member ClassName declares itself, read off the semantic program the last analysis left.
-/// Broader than GetClassExports -- methods included, `@editable` not required -- because this
-/// exists to become documentation rather than an inspector.
+/// Every member ClassName declares itself, read off the snapshot the last analysis left. Broader
+/// than GetClassExports -- methods included, `@editable` not required -- because this exists to
+/// become documentation rather than an inspector.
 ///
-/// False means the class is not in the analysed program at all.
-AUTORTFM_DISABLE bool ClassMembers(FUtf8StringView ClassName, TArray<FCompleteItem>& OutItems);
+/// NotAnalysed before any analysis has landed; NoSuchClass for a class the last one did not have.
+AUTORTFM_DISABLE TResult<TArray<FCompleteItem>> ClassMembers(FUtf8StringView ClassName);
 
 /// What ClassName could still declare with <override>: every overridable member it inherits and
 /// does not already declare, described exactly as Complete describes the same names in
@@ -112,37 +114,32 @@ AUTORTFM_DISABLE bool ClassMembers(FUtf8StringView ClassName, TArray<FCompleteIt
 ///
 /// Same extraction, so the two cannot drift -- the walk is CollectClassAndSupers with Seen already
 /// holding the class' own names, which is what makes the superclass' copy of an override the
-/// class has written lose to it there and be absent here.
-///
-/// False means the class is not in the analysed program at all.
-AUTORTFM_DISABLE bool ClassOverrideCandidates(FUtf8StringView ClassName, TArray<FCompleteItem>& OutItems);
+/// class has written lose to it there and be absent here. Declines as ClassMembers does.
+AUTORTFM_DISABLE TResult<TArray<FCompleteItem>> ClassOverrideCandidates(FUtf8StringView ClassName);
 
 /// The function called at Line/Column of Path, with that file's text replaced by SourceText, and
 /// its parameters. Line/Column name the callee's last byte rather than the cursor: the argument
 /// list being typed does not analyse, so there is nothing at the cursor to resolve.
 ///
-/// Reads the program the last analysis left, exactly as Complete does. Neither checks that the
-/// program describes SourceText -- ProgramDescribes is that question, and the ABI layer asks it
-/// first so that "cannot answer yet" and "nothing there" stay different answers.
-AUTORTFM_DISABLE bool SignatureAt(FUtf8StringView Path,
-                                  const FUtf8String& SourceText,
-                                  int32 Line,
-                                  int32 Column,
-                                  FSignatureDesc& OutDesc);
+/// Reads the program the last analysis left, exactly as Complete does, and declines as it does
+/// when that analysis was not of SourceText.
+AUTORTFM_DISABLE TResult<FSignatureDesc> SignatureAt(FUtf8StringView Path,
+                                                     const FUtf8String& SourceText,
+                                                     int32 Line,
+                                                     int32 Column);
 
 /// Lists what could be written at Line/Column of Path -- the members of the expression there, or
 /// everything its scope admits.
 ///
-/// Runs no analysis: it reads the AST the last one left behind, which is why the caller has to
-/// have had this very buffer analysed first. It does not have to have analysed *cleanly* -- uLang
-/// keeps the analysed children of an expression it could not analyse, which is what lets
-/// `Position.` still name vector2 as the receiver.
-AUTORTFM_DISABLE bool Complete(FUtf8StringView Path,
-                               const FUtf8String& SourceText,
-                               int32 Line,
-                               int32 Column,
-                               vh_complete_mode Mode,
-                               TArray<FCompleteItem>& OutItems);
+/// Runs no analysis: it reads the AST the last one left behind, and declines with
+/// BufferNotAnalysed or AnalysisRunning unless that analysis was of this very buffer. It does not
+/// have to have analysed *cleanly* -- uLang keeps the analysed children of an expression it could
+/// not analyse, which is what lets `Position.` still name vector2 as the receiver.
+AUTORTFM_DISABLE TResult<TArray<FCompleteItem>> Complete(FUtf8StringView Path,
+                                                         const FUtf8String& SourceText,
+                                                         int32 Line,
+                                                         int32 Column,
+                                                         vh_complete_mode Mode);
 
 /// ClassMembers' answer for one script class, read off the current program rather than the
 /// snapshot, which is what the snapshot is filled from. False when the program has no such class.

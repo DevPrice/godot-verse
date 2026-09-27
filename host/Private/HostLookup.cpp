@@ -483,19 +483,29 @@ AUTORTFM_DISABLE FUtf8String DocOf(const uLang::CDefinition& Definition, const u
 
 }
 
-AUTORTFM_DISABLE bool LookupSymbol(FUtf8StringView Path, int32 Line, int32 Column, FLookupDesc& OutDesc)
+AUTORTFM_DISABLE TResult<FLookupDesc> LookupSymbol(FUtf8StringView Path, int32 Line, int32 Column)
 {
-    OutDesc = FLookupDesc{};
-
-    if (!ProgramIsAnalysisOnly() || Line < 0 || Column < 0)
+    // A position is not a question a snapshot can answer -- the loci live in the AST, which the
+    // worker is rebuilding -- so this declines rather than waits.
+    if (IsBackgroundCheckRunning())
     {
-        return false;
+        return EHostFailure::AnalysisRunning;
+    }
+    if (!ProgramIsAnalysisOnly())
+    {
+        return EHostFailure::BuiltSinceAnalysis;
+    }
+    if (Line < 0 || Column < 0)
+    {
+        return EHostFailure::InvalidPosition;
     }
     uLang::CSemanticProgram* const Program = CurrentSemanticProgram();
     if (!Program || !Program->_AstProject)
     {
-        return false;
+        return EHostFailure::NotAnalysed;
     }
+
+    FLookupDesc OutDesc;
 
     const FUtf8String ProjectVersePath(ScriptVersePath);
     FLookupVisitor Visitor(*Program, FUtf8String(Path), (uint32)Line, (uint32)Column);
@@ -522,7 +532,7 @@ AUTORTFM_DISABLE bool LookupSymbol(FUtf8StringView Path, int32 Line, int32 Colum
 
     if (!Visitor.Found)
     {
-        return false;
+        return EHostFailure::NothingAtPosition;
     }
 
     const uLang::CDefinition& Definition = *Visitor.Found;
@@ -580,7 +590,7 @@ AUTORTFM_DISABLE bool LookupSymbol(FUtf8StringView Path, int32 Line, int32 Colum
             FillLocation(*Overridden, OutDesc.OverriddenPath, OutDesc.OverriddenLine, OutDesc.OverriddenColumn);
         }
     }
-    return true;
+    return MoveTemp(OutDesc);
 }
 
 namespace {
@@ -1325,20 +1335,38 @@ AUTORTFM_DISABLE void CollectExtensionMethods(const uLang::CScope* FromScope,
     }
 }
 
+/// Why the program the last analysis left cannot answer a position question about SourceText as
+/// Path's text, or nothing when it can. Neither completion nor the argument hint analyses a buffer
+/// of its own (ABI v7), so a buffer the program does not describe is the caller's to have analysed
+/// and ask about again, rather than a stall it never asked for.
+AUTORTFM_DISABLE TOptional<EHostFailure> WhyProgramCannotDescribe(FUtf8StringView Path, const FUtf8String& SourceText)
+{
+    if (IsBackgroundCheckRunning())
+    {
+        return EHostFailure::AnalysisRunning;
+    }
+    if (!ProgramDescribes(FUtf8String(Path), SourceText))
+    {
+        return EHostFailure::BufferNotAnalysed;
+    }
+    return {};
+}
+
 } // namespace
 
-AUTORTFM_DISABLE bool Complete(FUtf8StringView Path,
-                               const FUtf8String& SourceText,
-                               int32 Line,
-                               int32 Column,
-                               vh_complete_mode Mode,
-                               TArray<FCompleteItem>& OutItems)
+AUTORTFM_DISABLE TResult<TArray<FCompleteItem>> Complete(FUtf8StringView Path,
+                                                         const FUtf8String& SourceText,
+                                                         int32 Line,
+                                                         int32 Column,
+                                                         vh_complete_mode Mode)
 {
-    OutItems.Empty();
-
+    if (const TOptional<EHostFailure> Declined = WhyProgramCannotDescribe(Path, SourceText))
+    {
+        return Declined.GetValue();
+    }
     if (Line < 0 || Column < 0)
     {
-        return false;
+        return EHostFailure::InvalidPosition;
     }
 
     const double Started = FPlatformTime::Seconds();
@@ -1346,8 +1374,10 @@ AUTORTFM_DISABLE bool Complete(FUtf8StringView Path,
     uLang::CSemanticProgram* const Program = CurrentSemanticProgram();
     if (!Program || !Program->_AstProject)
     {
-        return false;
+        return EHostFailure::NotAnalysed;
     }
+
+    TArray<FCompleteItem> OutItems;
 
     const FUtf8String ProjectVersePath(ScriptVersePath);
     double WalkSeconds = 0.0;
@@ -1546,12 +1576,12 @@ AUTORTFM_DISABLE bool Complete(FUtf8StringView Path,
                             OutItems.Num());
                     fflush(stderr);
                 }
-                return true;
+                return MoveTemp(OutItems);
             }
         }
     }
 
-    return false;
+    return EHostFailure::NothingAtPosition;
 }
 
 AUTORTFM_DISABLE void ClassOwnMembers(const uLang::CClass& Class, TArray<FCompleteItem>& OutItems)
@@ -1628,54 +1658,53 @@ AUTORTFM_DISABLE bool ClassOverrideCandidatesLive(FUtf8StringView ClassName,
     return true;
 }
 
-AUTORTFM_DISABLE bool ClassMembers(FUtf8StringView ClassName, TArray<FCompleteItem>& OutItems)
+AUTORTFM_DISABLE TResult<TArray<FCompleteItem>> ClassMembers(FUtf8StringView ClassName)
 {
-    OutItems.Empty();
     const TSharedPtr<const FAnalysisSnapshot>& Snapshot = GetAnalysisSnapshot();
     if (!Snapshot)
     {
-        return false;
+        return EHostFailure::NotAnalysed;
     }
     if (const FAnalysisSnapshot::FClass* const Found = Snapshot->Classes.Find(FUtf8String(ClassName)))
     {
-        OutItems = Found->Members;
-        return true;
+        return Found->Members;
     }
     // A generated binding. Asked second because the two are different namespaces and a name in
     // both is the author's own class rather than the one generated from their GDScript.
     if (const TArray<FCompleteItem>* const Binding = Snapshot->BindingMembers.Find(FUtf8String(ClassName)))
     {
-        OutItems = *Binding;
-        return true;
+        return *Binding;
     }
-    return false;
+    return EHostFailure::NoSuchClass;
 }
 
-AUTORTFM_DISABLE bool ClassOverrideCandidates(FUtf8StringView ClassName, TArray<FCompleteItem>& OutItems)
+AUTORTFM_DISABLE TResult<TArray<FCompleteItem>> ClassOverrideCandidates(FUtf8StringView ClassName)
 {
-    OutItems.Empty();
     const TSharedPtr<const FAnalysisSnapshot>& Snapshot = GetAnalysisSnapshot();
-    const FAnalysisSnapshot::FClass* const Found =
-        Snapshot ? Snapshot->Classes.Find(FUtf8String(ClassName)) : nullptr;
+    if (!Snapshot)
+    {
+        return EHostFailure::NotAnalysed;
+    }
+    const FAnalysisSnapshot::FClass* const Found = Snapshot->Classes.Find(FUtf8String(ClassName));
     if (!Found)
     {
-        return false;
+        return EHostFailure::NoSuchClass;
     }
-    OutItems = Found->OverrideCandidates;
-    return true;
+    return Found->OverrideCandidates;
 }
 
-AUTORTFM_DISABLE bool SignatureAt(FUtf8StringView Path,
-                                  const FUtf8String& SourceText,
-                                  int32 Line,
-                                  int32 Column,
-                                  FSignatureDesc& OutDesc)
+AUTORTFM_DISABLE TResult<FSignatureDesc> SignatureAt(FUtf8StringView Path,
+                                                     const FUtf8String& SourceText,
+                                                     int32 Line,
+                                                     int32 Column)
 {
-    OutDesc = FSignatureDesc{};
-
+    if (const TOptional<EHostFailure> Declined = WhyProgramCannotDescribe(Path, SourceText))
+    {
+        return Declined.GetValue();
+    }
     if (Line < 0 || Column < 0)
     {
-        return false;
+        return EHostFailure::InvalidPosition;
     }
 
     const double Started = FPlatformTime::Seconds();
@@ -1683,8 +1712,10 @@ AUTORTFM_DISABLE bool SignatureAt(FUtf8StringView Path,
     uLang::CSemanticProgram* const Program = CurrentSemanticProgram();
     if (!Program || !Program->_AstProject)
     {
-        return false;
+        return EHostFailure::NotAnalysed;
     }
+
+    FSignatureDesc OutDesc;
 
     // The callee resolves the way any other identifier does, so this reuses the lookup walk rather
     // than the completion one: what is wanted is the definition at a position, not a scope.
@@ -1705,10 +1736,14 @@ AUTORTFM_DISABLE bool SignatureAt(FUtf8StringView Path,
         }
     }
 
-    const uLang::CFunction* Function = Visitor.Found ? Visitor.Found->AsNullable<uLang::CFunction>() : nullptr;
+    if (!Visitor.Found)
+    {
+        return EHostFailure::NothingAtPosition;
+    }
+    const uLang::CFunction* Function = Visitor.Found->AsNullable<uLang::CFunction>();
     if (!Function)
     {
-        return false;
+        return EHostFailure::NotAFunction;
     }
 
     OutDesc.Name = FUtf8String(Function->AsNameCString());
@@ -1750,7 +1785,7 @@ AUTORTFM_DISABLE bool SignatureAt(FUtf8StringView Path,
                 OutDesc.Params.Num());
         fflush(stderr);
     }
-    return true;
+    return MoveTemp(OutDesc);
 }
 
 } // namespace GodotVerse
