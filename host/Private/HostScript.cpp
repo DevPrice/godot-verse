@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "HostScript.h"
+#include "HostScriptState.h"
 #include "HostTypeModel.h"
 #include "verse_diagnostics.h"
 #include "AutoRTFM.h"
@@ -96,17 +97,21 @@
 #include <cstdio>
 #include <thread>
 
+using GodotVerse::AnalysisTraceEnabled;
 using GodotVerse::BindingsVersePath;
 using GodotVerse::ClassChainOfOrigin;
 using GodotVerse::ClassifyDeclaredType;
 using GodotVerse::ClassOriginOf;
 using GodotVerse::EClassOrigin;
 using GodotVerse::EDeclaredKind;
+using GodotVerse::CurrentSemanticProgram;
 using GodotVerse::FDeclaredType;
+using GodotVerse::FindScriptClassLive;
 using GodotVerse::FindStructLayout;
 using GodotVerse::GodotVersePath;
 using GodotVerse::NearestAncestorOfOrigin;
 using GodotVerse::QualifiedNameOf;
+using GodotVerse::ScriptSnippetText;
 using GodotVerse::ScriptVersePath;
 using GodotVerse::UnwrapDeclaredType;
 
@@ -441,9 +446,6 @@ public:
         return false; // Do not halt the toolchain.
     }
 };
-
-/// Whether VH_TRACE_ANALYSIS asked for a trace. Defined below, beside the trace it gates.
-AUTORTFM_DISABLE bool AnalysisTraceEnabled();
 
 /// The parser, with one snippet's parse remembered: /Godot.org/Godot's digest, which is the same
 /// 2.1 MB of text at every build and every analysis for the life of the process.
@@ -804,14 +806,6 @@ AUTORTFM_DISABLE bool MirrorDefinitionsRecorded();
 
 /// Drops the table, so that a host torn down and started again records it afresh.
 AUTORTFM_DISABLE void ForgetMirrorDefinitions();
-
-/// Whether VH_TRACE_ANALYSIS asked for a trace of every build. Read once: GetEnvironmentVariable
-/// allocates, and the analysis this is asked about is the per-keystroke path.
-AUTORTFM_DISABLE bool AnalysisTraceEnabled()
-{
-    static const bool bEnabled = !FPlatformMisc::GetEnvironmentVariable(TEXT("VH_TRACE_ANALYSIS")).IsEmpty();
-    return bEnabled;
-}
 
 /// Where one build's time went, accumulated from the compiler's own statistics events.
 ///
@@ -1455,6 +1449,56 @@ AUTORTFM_DISABLE bool HeldProgramIsThisBuild(const TArray<GodotVerse::FScriptSou
 }
 
 } // namespace
+
+AUTORTFM_DISABLE uLang::CSemanticProgram* GodotVerse::CurrentSemanticProgram()
+{
+    if (!GIde.IsValid())
+    {
+        return nullptr;
+    }
+    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
+    return BuildManager.IsValid() ? BuildManager->GetProgramContext()._Program.Get() : nullptr;
+}
+
+AUTORTFM_DISABLE bool GodotVerse::ScriptSnippetText(FUtf8StringView Path, FUtf8String& OutText)
+{
+    for (const uLang::TSRef<FHostSourceSnippet>& Candidate : GScriptSnippets)
+    {
+        if (!FULangConversionUtils::ULangStrToFUtf8String(Candidate->GetPath()).Equals(FUtf8String(Path), ESearchCase::IgnoreCase))
+        {
+            continue;
+        }
+        const uLang::TOptional<uLang::CUTF8String> Text = Candidate->GetText();
+        if (!Text.IsSet())
+        {
+            return false;
+        }
+        OutText = FULangConversionUtils::ULangStrToFUtf8String(*Text);
+        return true;
+    }
+    return false;
+}
+
+AUTORTFM_DISABLE const uLang::CClass* GodotVerse::FindScriptClassLive(FUtf8StringView ClassName)
+{
+    uLang::CSemanticProgram* const Program = CurrentSemanticProgram();
+    if (!Program)
+    {
+        return nullptr;
+    }
+
+    const FUtf8String ClassPath = FUtf8String(ScriptVersePath) + UTF8TEXT("/") + FUtf8String(ClassName);
+    return Program->FindDefinitionByVersePath<uLang::CClass>(
+        FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
+}
+
+/// Read once: GetEnvironmentVariable allocates, and the analysis this is asked about is the
+/// per-keystroke path.
+AUTORTFM_DISABLE bool GodotVerse::AnalysisTraceEnabled()
+{
+    static const bool bEnabled = !FPlatformMisc::GetEnvironmentVariable(TEXT("VH_TRACE_ANALYSIS")).IsEmpty();
+    return bEnabled;
+}
 
 AUTORTFM_DISABLE bool GodotVerse::EnterContentScope()
 {
@@ -8200,17 +8244,12 @@ AUTORTFM_DISABLE bool GodotVerse::LookupSymbol(FUtf8StringView Path, int32 Line,
 {
     OutDesc = FLookupDesc{};
 
-    if (!GIde.IsValid() || !GProgramIsAnalysisOnly || Line < 0 || Column < 0)
+    if (!ProgramIsAnalysisOnly() || Line < 0 || Column < 0)
     {
         return false;
     }
-    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
-    if (!BuildManager.IsValid())
-    {
-        return false;
-    }
-    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
-    if (!Program->_AstProject)
+    uLang::CSemanticProgram* const Program = CurrentSemanticProgram();
+    if (!Program || !Program->_AstProject)
     {
         return false;
     }
@@ -8489,7 +8528,7 @@ AUTORTFM_DISABLE FUtf8String SubjectTypeOfDiagnostic(FUtf8StringView Path, int32
 
     // A name with a receiver needs at least a receiver byte and a dot in front of it, so a column
     // below three cannot be one and the arithmetic below would run off the start of the line.
-    if (!GIde.IsValid() || Column < 3)
+    if (Column < 3)
     {
         return FUtf8String();
     }
@@ -8497,38 +8536,19 @@ AUTORTFM_DISABLE FUtf8String SubjectTypeOfDiagnostic(FUtf8StringView Path, int32
     // Whether there is a receiver at all is a question about the text, and the text is here: the
     // snippets the analysis ran over are the host's own. Asking the AST instead would mean trusting
     // whatever expression happens to sit two bytes before a bare unresolved identifier.
-    const FHostSourceSnippet* Found = nullptr;
-    for (const TSRef<FHostSourceSnippet>& Candidate : GScriptSnippets)
-    {
-        if (FULangConversionUtils::ULangStrToFUtf8String(Candidate->GetPath()).Equals(FUtf8String(Path), ESearchCase::IgnoreCase))
-        {
-            Found = &*Candidate;
-            break;
-        }
-    }
-    if (!Found)
+    FUtf8String Text;
+    if (!ScriptSnippetText(Path, Text))
     {
         return FUtf8String();
     }
-    const uLang::TOptional<CUTF8String> MaybeText = Found->GetText();
-    if (!MaybeText.IsSet())
-    {
-        return FUtf8String();
-    }
-    const FUtf8String Text = FULangConversionUtils::ULangStrToFUtf8String(*MaybeText);
     const int32 NameOffset = OffsetOfRowColumn(Text, Row, Column);
     if (NameOffset < 2 || Text[NameOffset - 1] != UTF8CHAR('.'))
     {
         return FUtf8String();
     }
 
-    const TSPtr<CProgramBuildManager> BuildManager = GIde->GetBuildManager();
-    if (!BuildManager.IsValid())
-    {
-        return FUtf8String();
-    }
-    const TSRef<CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
-    if (!Program->_AstProject)
+    CSemanticProgram* const Program = CurrentSemanticProgram();
+    if (!Program || !Program->_AstProject)
     {
         return FUtf8String();
     }
@@ -9082,20 +9102,15 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
 {
     OutItems.Empty();
 
-    if (!GIde.IsValid() || Line < 0 || Column < 0)
+    if (Line < 0 || Column < 0)
     {
         return false;
     }
 
     const double Started = FPlatformTime::Seconds();
 
-    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
-    if (!BuildManager.IsValid())
-    {
-        return false;
-    }
-    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
-    if (!Program->_AstProject)
+    uLang::CSemanticProgram* const Program = CurrentSemanticProgram();
+    if (!Program || !Program->_AstProject)
     {
         return false;
     }
@@ -9307,27 +9322,6 @@ AUTORTFM_DISABLE bool GodotVerse::Complete(FUtf8StringView Path,
 
 namespace {
 
-/// One of the script package's own classes by the module-qualified name every ClassNameUtf8 in the
-/// ABI carries, or null.
-AUTORTFM_DISABLE const uLang::CClass* FindScriptClassLive(FUtf8StringView ClassName)
-{
-    if (!GIde.IsValid())
-    {
-        return nullptr;
-    }
-
-    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
-    if (!BuildManager.IsValid())
-    {
-        return nullptr;
-    }
-    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
-
-    const FUtf8String ClassPath = FUtf8String(ScriptVersePath) + UTF8TEXT("/") + FUtf8String(ClassName);
-    return Program->FindDefinitionByVersePath<uLang::CClass>(
-        FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
-}
-
 /// The `ToString` extension method the project wrote for this class, as a decorated name.
 ///
 /// R-NODE-10's first hook, and it is looked for in the class's *enclosing scope* rather than among
@@ -9475,18 +9469,19 @@ AUTORTFM_DISABLE bool ClassOverrideCandidatesLive(FUtf8StringView ClassName,
 AUTORTFM_DISABLE bool GodotVerse::ClassMembers(FUtf8StringView ClassName, TArray<FCompleteItem>& OutItems)
 {
     OutItems.Empty();
-    if (!GSnapshot)
+    const TSharedPtr<const FAnalysisSnapshot>& Snapshot = GetAnalysisSnapshot();
+    if (!Snapshot)
     {
         return false;
     }
-    if (const FAnalysisSnapshot::FClass* const Found = GSnapshot->Classes.Find(FUtf8String(ClassName)))
+    if (const FAnalysisSnapshot::FClass* const Found = Snapshot->Classes.Find(FUtf8String(ClassName)))
     {
         OutItems = Found->Members;
         return true;
     }
     // A generated binding. Asked second because the two are different namespaces and a name in
     // both is the author's own class rather than the one generated from their GDScript.
-    if (const TArray<FCompleteItem>* const Binding = GSnapshot->BindingMembers.Find(FUtf8String(ClassName)))
+    if (const TArray<FCompleteItem>* const Binding = Snapshot->BindingMembers.Find(FUtf8String(ClassName)))
     {
         OutItems = *Binding;
         return true;
@@ -9497,8 +9492,9 @@ AUTORTFM_DISABLE bool GodotVerse::ClassMembers(FUtf8StringView ClassName, TArray
 AUTORTFM_DISABLE bool GodotVerse::ClassOverrideCandidates(FUtf8StringView ClassName, TArray<FCompleteItem>& OutItems)
 {
     OutItems.Empty();
+    const TSharedPtr<const FAnalysisSnapshot>& Snapshot = GetAnalysisSnapshot();
     const FAnalysisSnapshot::FClass* const Found =
-        GSnapshot ? GSnapshot->Classes.Find(FUtf8String(ClassName)) : nullptr;
+        Snapshot ? Snapshot->Classes.Find(FUtf8String(ClassName)) : nullptr;
     if (!Found)
     {
         return false;
@@ -10303,20 +10299,15 @@ AUTORTFM_DISABLE bool GodotVerse::SignatureAt(FUtf8StringView Path,
 {
     OutDesc = FSignatureDesc{};
 
-    if (!GIde.IsValid() || Line < 0 || Column < 0)
+    if (Line < 0 || Column < 0)
     {
         return false;
     }
 
     const double Started = FPlatformTime::Seconds();
 
-    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
-    if (!BuildManager.IsValid())
-    {
-        return false;
-    }
-    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
-    if (!Program->_AstProject)
+    uLang::CSemanticProgram* const Program = CurrentSemanticProgram();
+    if (!Program || !Program->_AstProject)
     {
         return false;
     }
