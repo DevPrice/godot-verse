@@ -1,0 +1,8 @@
+[gd_resource type="Resource" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://cyclic/res_b.gd" id="1"]
+[ext_resource type="Resource" path="res://cyclic/a.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+other = ExtResource("2")

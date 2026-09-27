@@ -1,0 +1,7 @@
+config_version=5
+
+[application]
+
+config/name="godot-verse contract"
+run/main_scene=""
+config/features=PackedStringArray("4.5")

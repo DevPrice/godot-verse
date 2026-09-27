@@ -6,7 +6,7 @@ R-QUAL-3. The three layers R-QUAL-1 names, in the order a failure is cheapest to
 
   units        the lexer, the class-declaration scanner and the GDScript converter, which need neither Godot nor UE
   abi          host_smoke, which drives the whole C ABI with no Godot, and the cooker
-  contract     re-derives gen_verse_keywords.py's and audit_const_overrides.py's hand tables against a UE or Godot source checkout, and every tests/verse_probe fixture against a golden transcript (docs/architecture-review.md item 4 steps 1 and 5)
+  contract     re-derives gen_verse_keywords.py's and audit_const_overrides.py's hand tables against a UE or Godot source checkout, every tests/verse_probe fixture against a golden transcript, and tests/godot_contract's Godot facts against a fresh dump (docs/architecture-review.md item 4 steps 1, 3 and 5)
   integration  a headless Godot with Verse scripts attached, asserting on behaviour
   export       a headless Godot export, asserting on the tree it produced
   web          a Web export on the vm backend (nothreads), run in headless Chrome
@@ -1777,7 +1777,7 @@ def _layer_list(text: str) -> list[str]:
     return layers
 
 
-def run_contract(results: Results, engine: Path | None, do_build: bool) -> None:
+def run_contract(results: Results, engine: Path | None, do_build: bool, godot: Path | None) -> None:
     """docs/architecture-review.md item 4 step 5: the tables gen_verse_keywords.py and
     audit_const_overrides.py hand-maintain, re-derived from their stated engine or Godot source and
     checked against what is committed, rather than trusted to still match a source tree that moved
@@ -1789,6 +1789,11 @@ def run_contract(results: Results, engine: Path | None, do_build: bool) -> None:
     itself still asserts nothing, so this is what re-runs it and fails when the compiler or the VM
     answers differently than the recorded transcript. It needs only the host, so it is skipped on
     the same UE-checkout test the abi layer uses, plus `bin/verse_probe.exe`.
+
+    The fourth step is `tests/godot_contract` (item 4 step 3): a headless Godot project that loads no
+    GDExtension at all, so it needs only the Godot binary and not the host, `tools/run_godot_contract.py`
+    drives it and adds the two facts a Godot *source* checkout answers, skipped like the two table
+    checks above when `../godot` is absent.
     """
     if engine is None:
         results.skip("gen_verse_keywords --check", "no Unreal checkout -- set UE_ROOT or pass --engine")
@@ -1809,21 +1814,32 @@ def run_contract(results: Results, engine: Path | None, do_build: bool) -> None:
 
     if engine is None:
         results.skip("probe_contract", "no Unreal checkout -- set UE_ROOT or pass --engine")
+    else:
+        host_dll = engine / "Engine" / "Binaries" / "Win64" / "verse_host.dll"
+        if not host_dll.is_file():
+            results.skip("probe_contract", f"{host_dll} not built -- run tools/build_host.py")
+        elif do_build and not build("build_verse_probe.py"):
+            results.record("probe_contract", False)
+        else:
+            probe = REPO / "bin" / "verse_probe.exe"
+            if not probe.is_file():
+                results.skip("probe_contract", "not built -- run tools/build_verse_probe.py")
+            else:
+                run("probe_contract",
+                    [sys.executable, str(REPO / "tools" / "run_probe_contracts.py"),
+                     "--engine", str(engine)],
+                    results, cases="probe_contract")
+
+    if godot is None:
+        results.skip("godot_contract", "no Godot binary -- set GODOT or pass --godot")
         return
-    host_dll = engine / "Engine" / "Binaries" / "Win64" / "verse_host.dll"
-    if not host_dll.is_file():
-        results.skip("probe_contract", f"{host_dll} not built -- run tools/build_host.py")
+    project = REPO / "tests" / "godot_contract"
+    if not (project / "project.godot").is_file():
+        results.skip("godot_contract", "tests/godot_contract is not a Godot project")
         return
-    if do_build and not build("build_verse_probe.py"):
-        results.record("probe_contract", False)
-        return
-    probe = REPO / "bin" / "verse_probe.exe"
-    if not probe.is_file():
-        results.skip("probe_contract", "not built -- run tools/build_verse_probe.py")
-        return
-    run("probe_contract",
-        [sys.executable, str(REPO / "tools" / "run_probe_contracts.py"), "--engine", str(engine)],
-        results, cases="probe_contract")
+    run("godot_contract",
+        [sys.executable, str(REPO / "tools" / "run_godot_contract.py"), "--godot", str(godot)],
+        results, cases="godot_contract")
 
 
 def main() -> None:
@@ -1858,7 +1874,7 @@ def main() -> None:
         run_abi(results, engine, args.build)
     if "contract" in only:
         results.layer = "contract"
-        run_contract(results, engine, args.build)
+        run_contract(results, engine, args.build, godot)
     if "integration" in only:
         results.layer = "integration"
         run_integration(results, engine, godot)

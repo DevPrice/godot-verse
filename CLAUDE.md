@@ -528,6 +528,20 @@ crashing will fail its truncated comparison, which is the cue to give it back a 
 `--record` rewrites every golden; run it after a change to `host/Verse` that is meant to change what
 a fixture answers.
 
+The fourth step is `tests/godot_contract` (item 4 step 3), driven by `tools/run_godot_contract.py`:
+a headless Godot project that loads no GDExtension at all — no `addons/`, no
+`extension_list.cfg` — so it needs only the Godot binary and never touches `verse_host.dll`, and is
+what to re-run on an `api_version` bump rather than the other three steps here. It asserts what
+plain GDScript can observe on its own (`Variant::booleanize()` of an empty Variant; B30's cyclic
+`ResourceLoader` load answering a null `Ref`, with `tools/run_godot_contract.py` also holding the
+run to B30's own printed sentence; the GDCLASS/GDSOFTCLASS split for `IP`, `NavigationServer2D` and
+`DisplayServer`, exercising the same singleton B21 warns about, safely, because this project never
+installs godot-cpp's instance-binding callback) plus two facts that live only in Godot's own C++ and
+need a Godot *source* checkout at `../godot` (skipped like the two table checks above when it is
+absent): the `ScriptLanguageExtensionProfilingInfo` stride trap's registration string, read from a
+fresh `--dump-extension-api` of the binary under test rather than the pinned copy in
+`godot-cpp/gdextension`, and the dictionary key `script_path` B29 says a newer Godot renamed.
+
 **integration** — three headless Godot projects. `tests/integration` for behaviour;
 `tests/coverage_diagnostic` for the R-SCN-2 diagnostics, which is its own project because its one
 script deliberately does not compile and one unresolvable name in the first would take every other
