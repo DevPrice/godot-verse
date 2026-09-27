@@ -43,7 +43,7 @@ not a description of what exists.
 
 | document | the section that corrects it | what the phase left standing |
 | --- | --- | --- |
-| `phase-2-design.md` | §11 | the whole mirror: 1036 classes, 793 enums, `vh_object` as the native root |
+| `phase-2-design.md` | §11 | the whole mirror: <!--fact:mirror.classes-->1036 classes, <!--fact:mirror.enums-->793 enums, `vh_object` as the native root |
 | `phase-3-design.md` | §11 | generations; §1.1 has OQ-12's answer |
 | `phase-4-design.md` | §13, and **`phase-4-gaps.md`** (21 entries, all closed) | virtuals, signals, `@GlobalScope`, the math types |
 | `phase-4b-design.md` | §15, which corrects §3 outright (it describes work Phase 2 had already shipped) and half of §4.2 | R-NODE-3: `helper{}` is a live Godot object. §5–§9 are still unbuilt |
@@ -59,7 +59,7 @@ Three documents are not phase records and are the ones to read before adding a f
 - **`docs/signal-declaration.md`** — why a script-declared signal is moving from a `signal(t)` member
   to `@export_signal` over an ordinary `event(t)`, what that cannot change (the emit verb stays the
   bridge's: `signalable.Signal` is `no_rollback` and Godot has to be the dispatcher), and the staged
-  plan. §4 is the measured table, including the three refusals; §7 is why the 503 engine accessors
+  plan. §4 is the measured table, including the three refusals; §7 is why the <!--fact:mirror.signal_accessors-->503 engine accessors
   **stay** on `signal(t)` rather than moving with it; §10 is the five `IsSignalClass` call sites and
   which three move. Read it before touching anything that tests for a signal type.
 
@@ -72,7 +72,8 @@ Three documents are not phase records and are the ones to read before adding a f
   `EngineDebugger` and the editor UI inward has no automated test and never will. B1–B9, B15–B18,
   B20, B22–B35, B37 and B39–B42 are defects, all fixed, and B36 is reported rather than closed; B12 is a Verse fact; B13 a latency finding; B14 the
   sandboxed export run. **B30 is the one to read before calling `ResourceLoader` from anything a
-  resource load can reach**: Godot answers a cyclic load `ERR_BUSY` and a null `Ref` silently, so
+  resource load can reach**: Godot answers a cyclic load `ERR_BUSY` and a null `Ref` silently
+  (contract: godot/cyclic_resource_load_answers_null, godot/b30_cyclic_load_log_sentence), so
   the only thing printed is the asking side's own sentence — which names the resource *asked for*
   and never the one it collided with, and reads as that resource being broken. A `.verse` load
   builds the project, a build generates the bindings, and generating them loads every `class_name`
@@ -120,17 +121,17 @@ Three documents are not phase records and are the ones to read before adding a f
   headless run.
   **B37 is the one to read before declaring a Godot parameter anywhere**: Verse has no null and
   a class has no value for one, so an object argument is declared `?class` unless Godot's own
-  dump marks it `"meta": "required"` (godotengine/godot#86079) — 112 of the mirror's 1020 are
+  dump marks it `"meta": "required"` (godotengine/godot#86079) — <!--fact:mirror.object_args_required-->112 of the mirror's <!--fact:mirror.object_args_total-->1020 are
   marked, and they are the ones written most, so `AddChild(Child)` is unchanged and the
   yardstick needed no edit. A plain value does **not** coerce to an option, so the rest cost
   their callers an `option{}`; options *are* covariant, so one `VhFromMaybeObject(?object)`
   packs every one. A generated binding has no metadata in either source, so all of its object
   arguments are optional. The same metadata reads the other way for a *result*:
-  `RequiredResult<T>` takes `<decides>` off 40 of the mirror's 759 object returns, so the Tween
+  `RequiredResult<T>` takes `<decides>` off <!--fact:mirror.object_returns_required-->38 of the mirror's <!--fact:mirror.object_returns_total-->715 object returns, so the Tween
   chain and `SceneTree.GetRoot` are ordinary calls. **A virtual reads both halves**, because
-  Godot's declaration is a promise the override keeps — which is what finally gave the 43
-  object-returning virtuals a default body and took them off the skip list: 41 are `?class`
-  defaulting to `false`, and the 2 Godot marks keep the class and default to `Err`. A signal's
+  Godot's declaration is a promise the override keeps — which is what finally gave the <!--fact:mirror.object_returning_virtuals-->43
+  object-returning virtuals a default body and took them off the skip list: <!--fact:mirror.object_returning_virtuals_optional-->41 are `?class`
+  defaulting to `false`, and the <!--fact:mirror.object_returning_virtuals_required-->2 Godot marks keep the class and default to `Err`. A signal's
   payload is still not spelled for null and can carry it. The **singletons** are not this rule
   and have no metadata to read: the dump's table is a name and a type, and which two can be
   absent comes from `"api_type": "editor"`.
@@ -167,7 +168,7 @@ Three documents are not phase records and are the ones to read before adding a f
   Its second half is why `request_check` keeps a slot per kind: one slot let `_validate` displace
   the analysis a hint was waiting on, and only a completion analysis re-asks. **B28 is the one to
   read before walking a class ancestry from a mirrored name**: `verse_api::classes` carries the
-  sixteen math types and `rid` beside the 1036 classes, ClassDB has heard of none of them, and
+  sixteen math types and `rid` beside the <!--fact:mirror.classes-->1036 classes, ClassDB has heard of none of them, and
   `godot_classdb_class_for` is the test every such walk has to make first. **B26 is the one to read before touching `_reload`, the placeholder path or
   anything a script answers about a default**: a placeholder's `values` map is the only copy a
   non-tool script's exported values have in the editor, Godot refuses to store one for a name
@@ -198,7 +199,7 @@ settled them, every GDScript construct and what it becomes, and the five Verse s
 converter writes that no fixture here has compiled. Read it before changing what the converter
 emits — and note that its editor half has never been run.
 
-`docs/nonatomic-methods.md` is generated — R-AUD-3's list of the 1132 emitted methods whose
+`docs/nonatomic-methods.md` is generated — R-AUD-3's list of the <!--fact:mirror.nonatomic_methods-->1142 emitted methods whose
 `<transacts>` promises a rollback the bridge cannot perform.
 
 ## Two binaries, one C header
@@ -331,7 +332,7 @@ instead of sources). `Verse/*.native.verse` is the `/Godot.org/Godot` package.
 **Those three are also the only types a native may name.** VNI refuses anything else at build time
 — *"V3564: `class engine used as a parameter/result in a native function must also be native"* — so
 a native can never answer a *mirrored* class, only `vh_object` for a cast to narrow. That is why a
-singleton accessor is a cast rather than a call, and why the 39 that cannot fail have to raise
+singleton accessor is a cast rather than a call, and why the <!--fact:mirror.singletons_raising-->39 that cannot fail have to raise
 through `Err` to be total rather than simply dropping `<decides>` (spec R-TYPE-4). It is the first
 thing to check against any plan that would have the host answer a typed object.
 
@@ -745,7 +746,7 @@ the editor and `export_check.gd` as an autoload in an export.
 | `src/verse_api_classes.h` | `tools/gen_verse_api.py` | same |
 | `host/Private/GodotMathLayout.gen.h` | `tools/gen_verse_api.py` | same — the math types' field trees, so the host builds one the way the Verse struct declares it |
 | `include/verse_host_variant_tags.gen.h` | `tools/gen_verse_api.py` | `VARIANT_LANES` — `vh_variant_tag` itself, which `verse_host_abi.h` includes, and `VH_VARIANT_TAGS(X)`: each tag's Godot `Variant::Type`, its lane family and a math type's component count, plus one X-macro per family. Its numbers are pinned in `VH_VARIANT_TAG_ABI`, and generation fails if Godot's would move one. `build_host.py` stages it beside the ABI header |
-| `host/Verse/GodotVariantTags.native.verse` | `tools/gen_verse_api.py` | same — the Verse half of the same rows: `TagNil` and the 38 `Tag...` constants a native struct's `Tag` field is checked against, in the ABI's own number order. Used to be hand-written at the top of `GodotApi.native.verse`, which still declares everything else the packers need |
+| `host/Verse/GodotVariantTags.native.verse` | `tools/gen_verse_api.py` | same — the Verse half of the same rows: `TagNil` and the <!--fact:mirror.variant_tag_constants-->38 `Tag...` constants a native struct's `Tag` field is checked against, in the ABI's own number order. Used to be hand-written at the top of `GodotApi.native.verse`, which still declares everything else the packers need |
 | `include/verse_host_abi_layout.h` | `tools/gen_abi_layout.py` | clang's record layout of `verse_host_abi.h` for every CI target — the size and offsets of each array-handed struct as `static_assert`s, and `VH_LAYOUT_DIGEST` over them. Needs emsdk's clang, so it is not in CI's generated check; `--check` reports a stale file. Staged by `build_host.py` too |
 | `src/verse_api_skipped.h` | `tools/gen_verse_api.py` | same — every Godot member the mirror does not carry under its own name, and why, which is what `_validate` turns into a sentence (R-SCN-2) |
 | `host/Private/GodotClassNames.gen.h` | `tools/gen_verse_api.py` | same — every Godot class and the mirrored Verse class an object of it crosses as, which is what R-SCN-6's cast is built on. Every class, not only the emitted ones: a `--classes-file` build still has to make a handle cross as *something*, so each row names its nearest emitted ancestor |
@@ -757,13 +758,13 @@ the editor and `export_check.gd` as an autoload in an export.
 | `vm/vbc_ops.gen.h` | `tools/gen_vbc_ops.py --emit-cpp` | same — the interpreter's half of the same op schema: an enum class of opcodes, and per-op constexpr tables (name, emitted, may-park, yields, operand roles/kinds) the decoder reads instead of hand-maintaining a mirror of `ops.json`. Carries the same schema digest `HostVbcOps.gen.h` does, so a `.vbc` stamped by one engine commit and read on another is refused rather than misread |
 | `bin/host_build_id.gen.h` | `tools/build_host.py` | the staged host sources themselves — a digest of `host/` plus the ABI header, and the engine commit beside it — staged into the host's `Private/` and baked into every host binary, so a cooked sidecar and the host reading it can be told apart. A digest rather than `HEAD` so a doc commit does not invalidate three binaries. Not committed |
 
-**What the mirror is**, since no single file shows it: all 1036 Godot classes as a Verse class
-hierarchy, Godot's own `Object` among them; its 793 enums as real Verse enums; all 1413 of
+**What the mirror is**, since no single file shows it: all <!--fact:mirror.classes-->1036 Godot classes as a Verse class
+hierarchy, Godot's own `Object` among them; its <!--fact:mirror.enums-->793 enums as real Verse enums; all <!--fact:mirror.virtuals-->1380 of
 `extension_api.json`'s virtuals, spelled Godot's way, every one of them emitted; properties as writable members rather than get/set pairs; **Godot's `bool` as two
-different things** — 568 predicates and 161 bool virtuals as `<decides>:void`, the way Verse's own
-comparisons and `GodotMath`'s `HasPoint` are spelled, and `logic` kept for the 306 methods that
+different things** — <!--fact:mirror.predicates-->568 predicates and <!--fact:mirror.bool_virtuals-->161 bool virtuals as `<decides>:void`, the way Verse's own
+comparisons and `GodotMath`'s `HasPoint` are spelled, and `logic` kept for the <!--fact:mirror.logic_methods-->308 methods that
 answer a value rather than a test (an accessor with a `set_` twin, an outcome like `MoveAndSlide`);
-503 engine-signal
+<!--fact:mirror.signal_accessors-->503 engine-signal
 accessors; `@GlobalScope`'s constants and statics reachable through per-class `...Statics` modules;
 the 16 math types with methods and definable operators in ordinary Verse; **Godot's RID as a `rid`
 struct** rather than a bare `int` — it is not a math type, because it crosses as a scalar rather
@@ -1022,9 +1023,9 @@ layer, and is skipped there when `../godot` is absent.
   `explain_effect_errors` is gone: it keyed on the code and the callee's package and never on which
   effect had been refused, so a `suspends` refusal took the `transacts` branch and gave the opposite
   of correct advice (`by-hand-findings.md` B7). The compiler's own text stands.
-- **A method's effect is Godot's `is_const`.** 3996 mirror methods carry `<reads>`, and the test is
+- **A method's effect is Godot's `is_const`.** <!--fact:mirror.reads_methods-->4019 mirror methods carry `<reads>`, and the test is
   `const` **and answering a value** — Godot's `const` means "does not mutate the C++ object", so the
-  38 const-and-void methods are `OS.set_environment`, `CanvasItem.draw_string` and 36 more that
+  <!--fact:mirror.const_void_methods-->50 const-and-void methods are `OS.set_environment`, `CanvasItem.draw_string` and 48 more that
   plainly do something. A `<reads>` body dispatches through `VhCallValueConst`, not `VhCallValue`;
   the two have to move together.
 - **The dynamic route has a `<reads>` twin too, and its honesty is the caller's.** `object.Call`
@@ -1058,7 +1059,7 @@ layer, and is skipped there when `../godot` is absent.
   `vh_release_instance`. It costs ~2.6 KB per scripted node and ~0.06 µs per call, both measured
   with `tools/build_bench.py`. `vh_tick` is not where anything recovers.
 - **`Await` is ordinary Verse over `/Verse.org/Verse`'s `event(t)`.** `signal(t)` holds one and
-  `Await<public>()<suspends>:t` forwards to it, which covers a script's own signals and all 503
+  `Await<public>()<suspends>:t` forwards to it, which covers a script's own signals and all <!--fact:mirror.signal_accessors-->503
   mirrored engine-signal accessors alike. The host half is small because **`verse::event` is a
   UObject with a public C++ `Signal`**: the host reads the event off the signal object and signals it
   directly, and Epic's code then does FIFO resumption, per-task scopes and dropping a cancelled
@@ -1070,7 +1071,7 @@ layer, and is skipped there when `../godot` is absent.
   *not* a spelling — glitch 3532 plus 3523, because the specifier makes it a different function.
   Both are said in the `.verse` template rather than diagnosed.
 - **`defer` in a suspending body runs on cancellation as well as on return** (measured,
-  `tests/verse_probe/sleep_probe.verse`). The whole connection lifetime of `Await` rests on it: it
+  `tests/verse_probe/sleep_probe.verse`) (contract: probe/sleep_probe.verse). The whole connection lifetime of `Await` rests on it: it
   connects with `CONNECT_ONE_SHOT`, holds the signal object, and disconnects in a `defer` — which is
   the only reason a `race` whose loser never resumed leaves nothing behind.
 - **`Sleep(Seconds)` is a native `<suspends>` on `FPlatformTime::Seconds()`**, resumed from the pump,
@@ -1108,12 +1109,12 @@ layer, and is skipped there when `../godot` is absent.
   non-public `@export` member has always reached the inspector. A `<private>` signal is therefore
   private from *Verse* callers and from nothing else: anything holding the node can connect to it
   and emit it. Binding stays unambiguous because the compiler refuses a member that shadows an
-  inaccessible one of the same name (glitch 3593, `tests/verse_probe/signal_shadow_probe.verse`).
+  inaccessible one of the same name (glitch 3593, `tests/verse_probe/signal_shadow_probe.verse`) (contract: probe/signal_shadow_probe.verse).
 - **Both member types are supported and neither is deprecated**, because they are not
   interchangeable. `event(t)` satisfies `awaitable(t)`/`signalable(t)` and is where Epic is heading;
   `signal(t)` satisfies **`listenable(t)`**, keeps its connection scoped to the wait, and has no
   bypass hazard. `docs/signal-declaration.md` §11 is the table of which to reach for. `signal(t)` is
-  also what the 503 engine accessors answer, which is not going to change.
+  also what the <!--fact:mirror.signal_accessors-->503 engine accessors answer, which is not going to change.
 - **The Verse book's `subscribable_event` does not exist in this drop** — the book says the feature
   is unreleased. What exists is `subscribable_event_intrnl`, `<epic_internal>` and slated for
   deletion by its own comment; it *is* reachable from a script package and *does* satisfy
@@ -1169,7 +1170,7 @@ layer, and is skipped there when `../godot` is absent.
   remains does one thing, `VhAdoptRef(Self)`, because a container the archetype minted reached no
   converter and so had no `UObject` shadow to release its table entry; that call is `<reads>` and
   writes nothing, which is what keeps the class `<reads>`. All of it is measured in
-  `tests/verse_probe/ref_block_probe.verse`. `MakeArray()` and `MakeDictionary()` still exist and do
+  `tests/verse_probe/ref_block_probe.verse` (contract: probe/ref_block_probe.verse). `MakeArray()` and `MakeDictionary()` still exist and do
   nothing; a `typed_array(t)` has no bare archetype, because `Unpack` and `Pack` are required
   members, so its maker supplies those two and no `Ref` and the same default mints it.
 - **`BeginDestroy` releases only what the host recorded as minted.** Every object crossing *from*
@@ -1189,12 +1190,12 @@ layer, and is skipped there when `../godot` is absent.
 - **An object-returning method in the mirror is `<decides>` unless Godot says the result cannot
   be null, and the singleton accessors are not.** `GetParent[]`, `GetTree[]`, `GetViewport[]` are
   failable because Godot really answers null there — R-TYPE-4's rule that nullability belongs to
-  the *type*, so an object return is the only failable one. **40 of the 759 are not**, because
+  the *type*, so an object return is the only failable one. **<!--fact:mirror.object_returns_required-->38 of <!--fact:mirror.object_returns_total-->715 are not**, because
   `RequiredResult<T>` marks them (godotengine/godot#86079): the whole Tween builder chain,
   `SceneTree.GetRoot`, `CreateTimer`, `CreateTween`, `GetMultiplayer`. Those are spelled
   `GetRoot()` and raise through `Err` if the *cast* refuses — Godot answering a class outside
-  the mirror — which is the same answer the 39 total singleton accessors give. Of the 41 singletons only `EditorInterface` and `GDScriptLanguageProtocol` can be
-  absent in a game, and only those two accessors are failable. The other 39 are spelled
+  the mirror — which is the same answer the <!--fact:mirror.singletons_raising-->39 total singleton accessors give. Of the <!--fact:mirror.singletons_total-->41 singletons only `EditorInterface` and `GDScriptLanguageProtocol` can be
+  absent in a game, and only those two accessors are failable. The other <!--fact:mirror.singletons_raising-->39 are spelled
   `GetEngine()` and raise through `Err` if the cast ever refuses — a raise rather than a plain
   total accessor because V3564 forbids the spelling that would need neither. **A raise is not a
   failure**: it costs the raising instance its content scope, so weigh that before spelling
@@ -1203,9 +1204,11 @@ layer, and is skipped there when `../godot` is absent.
   `GodotClassNames.gen.h` is keyed by exact name off that dump. `GDCLASS` registers a class in
   ClassDB the first time one is constructed, so a driver class is in ClassDB and *not* in the dump —
   `IP` answers `IPWindows`, `NavigationServer2D` answers `GodotNavigationServer2D` — and the lookup
-  misses, which costs the handle its class and every cast over it. `GDSOFTCLASS` is the one that
+  misses, which costs the handle its class and every cast over it
+  (contract: godot/singleton_class_ip, godot/singleton_class_navigation_server_2d). `GDSOFTCLASS` is the one that
   does not, because it leaves `get_class()` to the nearest `GDCLASS` ancestor, which is why
-  `DisplayServerWindows` crosses as `display_server` and needs nothing. Godot moves classes between
+  `DisplayServerWindows` crosses as `display_server` and needs nothing
+  (contract: godot/singleton_class_display_server_is_gdsoftclass). Godot moves classes between
   the two macros between releases, so a caller that knows the class before it has a handle should
   say so (`MirroredClassFor`, and what the singleton accessors pass).
 
@@ -1246,7 +1249,8 @@ layer, and is skipped there when `../godot` is absent.
   its own** unless the author writes `profile("tag"){…}`, which the compiler accepts in a
   `/user@localhost` package and the VM reports through `FVerseProfilingDelegates`.
 - **`ScriptLanguageExtensionProfilingInfo` is a stride trap.** Godot's real `ProfilingInfo` has had
-  five fields since 4.3; its `GDREGISTER_NATIVE_STRUCT` string still lists four, so godot-cpp's
+  five fields since 4.3 (contract: godot/profiling_info_struct_field_count); its `GDREGISTER_NATIVE_STRUCT` string still lists four
+  (contract: godot/profiling_info_registration_stride), so godot-cpp's
   struct is 32 bytes for an array whose elements are 40 and `p_info_array[i]` corrupts for any
   `i > 0`. The stride comes from `Engine::get_version_info()`. Check the registration string against
   the header before trusting any other generated native struct.
@@ -1279,9 +1283,9 @@ layer, and is skipped there when `../godot` is absent.
   `PackageRelativeVersePath` is dead under VerseVM — and asking the *semantic* program for one must
   not use `EPathMode::PackageRelative`, which is fatal for a class with no package.
 - **A runtime host has no semantic program and can never build one**, so everything the analysis
-  alone could describe is recorded and carried in the sidecar (version **8**): the declared types of
+  alone could describe is recorded and carried in the sidecar (version **<!--fact:abi.sidecar_version-->8**): the declared types of
   every member, method and signal, **whether a member is `var`** (without which every write an
-  exported game made to its own state was silently dropped), the payload of all 503 mirrored
+  exported game made to its own state was silently dropped), the payload of all <!--fact:mirror.signal_accessors-->503 mirrored
   engine-signal accessors (without which `Timer.Timeout().Await()` connects and never resumes), the
   **decorated name of a class's `ToString` extension method** (R-NODE-10: it is a module-level
   definition, so there is nothing on the class to find it from), the cooked package list — a
@@ -1339,9 +1343,9 @@ layer, and is skipped there when `../godot` is absent.
   diagnostics. Two *functions* differing only by case are fine (`VHFROMINT` beside `VhFromInt`
   compiles), and so is all of it in an ordinary script package (`widget` struct beside a `Widget`
   function). This is why the general variant builder is `MakeVariant` and not `Variant`, and it is
-  a live constraint on any new mirror function: check the name against the 1036 mirrored class
+  a live constraint on any new mirror function: check the name against the <!--fact:mirror.classes-->1036 mirrored class
   names and the four native types first. Measured in `tests/verse_probe/variant_any_probe.verse`'s
-  header; three builds to find, because only the runtime compiler objects.
+  header (contract: probe/variant_any_probe.verse); three builds to find, because only the runtime compiler objects.
 
   **The mechanism, read out of the engine.** Verse's own naming is case-*sensitive* —
   `CSymbolTable::FindOrAddInternal` compares bytes (`uLangCore/Private/uLang/Common/Text/Symbol.cpp`
@@ -1391,7 +1395,7 @@ layer, and is skipped there when `../godot` is absent.
   is never entered — do not "optimise" that by adding an inherited-methods pass. And **they carry
   `no_rollback`**, so a script's own `<transacts>` code may not call its own `_Get`; Godot is the
   caller. R-NODE-10 is done; `_ToString` is not among them and never will be (see "Verse itself").
-- **A virtual that answers Godot a `bool` is `<decides>:void`, and the specifier is alone.** All 161
+- **A virtual that answers Godot a `bool` is `<decides>:void`, and the specifier is alone.** All <!--fact:mirror.bool_virtuals-->161
   of them, `_Set` included: Godot asks "did you handle it" or "is it so", which is a test and not a
   value. `_HasPoint<override>(Point:vector2)<decides>:void = Solid?` is the spelling.
   `<decides>` **does not narrow** — its effect descriptor rescinds only `decides` and excludes
@@ -1399,19 +1403,21 @@ layer, and is skipped there when `../godot` is absent.
   helpers. `<decides><transacts>` would rescind `no_rollback` and start wall 8's cascade at every
   one of them. The price is that a bool virtual is **uncallable from Verse at all**, because a
   failure context refuses `no_rollback`: Godot is the only caller, through `vh_instance_call`.
-  Measured both ways in `tests/verse_probe/decides_virtual_{probe,reject}.verse`, whose reject file
+  Measured both ways in `tests/verse_probe/decides_virtual_{probe,reject}.verse`
+  (contract: probe/decides_virtual_probe.verse, probe/decides_virtual_reject.verse), whose reject file
   also records the one migration mistake the compiler does **not** catch — an override that fixes
   the return type and drops the specifier is accepted, because effects are contravariant, and
   answers *handled, every time*.
 - **The status is the whole answer for one of these, in both directions.** A `<decides>:void` call
   writes no value whether it succeeds or declines, and Godot reads a script virtual's result
-  through `Variant::booleanize()` — `!is_zero()` — so an empty Variant is `false` either way.
+  through `Variant::booleanize()` — `!is_zero()` — so an empty Variant is `false` either way
+  (contract: godot/booleanize_empty_variant_is_false).
   Declining is right by accident and succeeding is silently wrong, so `call_func` writes `true` and
   `false` itself. Anything else reading a `<decides>` result has to do the same.
 - **A class member may not shadow an inherited mirrored one, and Godot's signals are members too.**
   `Hidden:signal(int)` on a `node2d` is *"Instance data member `Hidden` is already defined in
   `canvas_item`, did you mean to add the `<override>` specifier?"* — because `canvas_item` mirrors
-  Godot's `hidden` signal as a `Hidden` accessor. Every one of the 503 signal accessors and 3312
+  Godot's `hidden` signal as a `Hidden` accessor. Every one of the <!--fact:mirror.signal_accessors-->503 signal accessors and <!--fact:mirror.properties-->3312
   properties is a name a script cannot reuse, and the compiler reports it at the *declaration* with
   no hint that the collision is with generated code. Rename the member; there is nothing to override.
 - **A module-level name and a local of that name are ambiguous, not shadowing** — and an *extension
@@ -1436,7 +1442,7 @@ layer, and is skipped there when `../godot` is absent.
   prefer the more specific overload. The spelling that works is the **extension method** —
   `(X:my_class).ToString<public>()<transacts>:string` — which is what a Verse author reaches for
   anyway, and what R-NODE-10 uses instead of the `_ToString` virtual `phase-4b-design.md` §7 first
-  proposed. Measured in `tests/verse_probe/tostring_probe.verse`, which carries all five rounds.
+  proposed. Measured in `tests/verse_probe/tostring_probe.verse` (contract: probe/tostring_probe.verse), which carries all five rounds.
 - **`X.ToString()` and `"{X}"` are not the same lookup.** The first reaches an extension method; the
   second desugars to the free `ToString(X)` and reaches `ToString(:object)` — Godot's own
   `to_string()`. So a Verse override is invisible to interpolation *directly* and reached by it
@@ -1459,7 +1465,7 @@ layer, and is skipped there when `../godot` is absent.
   mechanism is that `false` is both a `logic` and the empty option, and an option is a 0-or-1
   array — one value inhabiting all three families is a call site that resolves none of them, the
   same shape of argument as `array{}` having no element type. Measured in
-  `tests/verse_probe/variant_api_probe.verse`; **this is why there is no overloaded `AsVariant`**
+  `tests/verse_probe/variant_api_probe.verse` (contract: probe/variant_api_probe.verse); **this is why there is no overloaded `AsVariant`**
   and why each Variant lane keeps its own `Variant<GodotType>`. What it does *not* forbid is a
   single builder that never overloads: **`MakeVariant[Value]` takes `any`**, so there is nothing to
   resolve, and the host reads the lane off what the value says about itself. It is `<decides>`
@@ -1479,7 +1485,7 @@ layer, and is skipped there when `../godot` is absent.
   member and an extension method's shape is receiver-plus-tuple. `VariantKind(V)` deliberately did
   not move: as `V.Kind()` it would put `Kind` in module scope, where a local of that name becomes
   ambiguous rather than shadowing.
-- **The mirror's `Tag...` constants are not a script's to write.** `TagInt` and its 38 siblings
+- **The mirror's `Tag...` constants are not a script's to write.** `TagInt` and its <!--fact:mirror.variant_tag_constants-->38 siblings
   carry no access specifier, so they are the mirror's own; a script naming one is glitch 3593,
   whose message is about control scopes. What a Godot property dictionary's `"type"` key wants is
   the generated `ToInt(:variant_type)`, which is `<public>` and is the closer analogue of the
@@ -1503,7 +1509,7 @@ layer, and is skipped there when `../godot` is absent.
   `<# ... #>` and `<#>` and no documentation variant; what documents a declaration is the comment
   above it, which is what Epic's own generators read and what a library `@doc("...")` is rewritten
   into in a digest. A script may write `@doc("...")` itself with `using { /Verse.org/Native }`
-  (`tests/verse_probe/doc_attribute_probe.verse`); without the `using` it is glitch 3506. The
+  (`tests/verse_probe/doc_attribute_probe.verse`) (contract: probe/doc_attribute_probe.verse); without the `using` it is glitch 3506. The
   bridge reads the comment first and the attribute as the host's fallback, so either documents a
   member.
 - **`operator'()'` is a reserved intrinsic.** Verse rewrites `Data[Key]` on a non-function callee
