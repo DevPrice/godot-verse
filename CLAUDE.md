@@ -504,15 +504,29 @@ Needs only the host, so it is skipped on the same UE-checkout test the other two
 
 A probe golden is normalized before it is written and before it is compared, the same way both
 times, so a worktree's own absolute path never shows up as a diff: the repo root and the engine
-checkout become `<repo>`/`<engine>`, a hex address becomes `<addr>` (only
-`vm_values_false_probe.verse`'s fatal-assertion callstack has any), and a generation number becomes
-`<gen>`. Two fixtures are excluded rather than recorded -- `vm_tasks_subscribe_probe.verse` (several
-`Subscribe` handlers on one signal deliver in a different order every process) and
-`vm_values_probe.verse` (`CrossKind`'s false-string/empty-string map key lookup answers differently
-run to run) -- both measured nondeterministic across three runs of the same unchanged binary, with
-the reason recorded in `tools/run_probe_contracts.py`'s own manifest rather than papered over with a
-looser check. `--record` rewrites every golden; run it after a change to `host/Verse` that is meant
-to change what a fixture answers.
+checkout become `<repo>`/`<engine>`, a hex address becomes `<addr>` -- both `0x`-prefixed and a bare
+8-16 hex-digit token, which is what `AutoRTFM::FunctionMapLookupExhaustive`'s "Could not find
+function ADDRESS" prints -- a generation number becomes `<gen>`, and an engine or host C++ source
+location (`Foo.cpp:123`, `Bar.h:45:9`) has its line and column stripped to just `Foo.cpp`, because
+that number is the *host's* and any host edit shifts it; a `.verse` location is left exact, since
+that line is the fixture's own content. Two fixtures are excluded rather than recorded --
+`vm_tasks_subscribe_probe.verse` (several `Subscribe` handlers on one signal deliver in a different
+order every process) and `vm_values_probe.verse` (`CrossKind`'s false-string/empty-string map key
+lookup answers differently run to run) -- both measured nondeterministic across three runs of the
+same unchanged binary, with the reason recorded in `tools/run_probe_contracts.py`'s own manifest
+rather than papered over with a looser check.
+
+Three more are `known_defect`: `vm_natives_probe.verse`, `vm_objects_wideint_probe.verse` and
+`vm_values_false_probe.verse` each end the process in a UE **fatal error** -- two are a Verse runtime
+diagnostic raised from inside closed AutoRTFM code (a delegate lambda in `VerseHost.cpp` called
+without `AutoRTFM::Open`), the third a VM-internal assertion -- which is a host defect, not a fact
+about the language. Their golden is truncated at the first fatal line's own message; the callstack
+after it is the host's line numbers and addresses, not the fixture's answer, so it is neither
+recorded nor checked. A match still prints, but as a skip (`known defect: ...`) rather than `ok`, so
+it stays visible in every run rather than blending into the passes; a host fix that stops one
+crashing will fail its truncated comparison, which is the cue to give it back a full golden.
+`--record` rewrites every golden; run it after a change to `host/Verse` that is meant to change what
+a fixture answers.
 
 **integration** — three headless Godot projects. `tests/integration` for behaviour;
 `tests/coverage_diagnostic` for the R-SCN-2 diagnostics, which is its own project because its one
