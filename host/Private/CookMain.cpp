@@ -242,6 +242,7 @@ AUTORTFM_DISABLE INT32_MAIN_INT32_ARGC_TCHAR_ARGV()
 	vh_init_desc Desc{};
 	Desc.StructSize = sizeof(vh_init_desc);
 	Desc.AbiVersion = VH_ABI_VERSION;
+	Desc.LayoutDigest = VH_LAYOUT_DIGEST;
 	Desc.OnDiagnostic = &OnDiagnostic;
 	Desc.OnRuntimeError = &OnRuntimeError;
 	if (const int32_t Status = GodotVerse::InitCookerAfterEngineBoot(Desc))
