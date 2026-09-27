@@ -2,8 +2,8 @@
 """Runs every tests/verse_probe fixture and holds its transcript to a recorded golden.
 
 docs/architecture-review.md item 4 step 1: `verse_probe` measures what the Verse compiler and the
-VM actually do -- 68 of 77 fixtures with `--class`, a class instantiated and its zero-argument
-methods called; the other 9 compile-only, most of them `*_reject.verse` files whose diagnostic
+VM actually do -- 68 of 79 fixtures with `--class`, a class instantiated and its zero-argument
+methods called; the other 11 compile-only, most of them `*_reject.verse` files whose diagnostic
 *text* is the answer -- but it asserts nothing itself and nothing re-runs it when the engine moves.
 This is what promotes each fixture into an assertion: a golden transcript under
 tests/verse_probe/expected/, and a byte-for-byte (after normalizing what cannot be the same twice)
@@ -11,6 +11,7 @@ comparison against a fresh run.
 
     python tools/run_probe_contracts.py --engine <UE checkout>            # check (the default)
     python tools/run_probe_contracts.py --engine <UE checkout> --record   # (re)write the goldens
+    python tools/run_probe_contracts.py --record --only a.verse,b.verse    # just those fixtures
 
 Each fixture is one flat `bin/verse_probe.exe` invocation -- the file, and `--class <name>` when the
 header gives one, taken from each fixture's own header comment. FIXTURES below is that table; a
@@ -104,6 +105,7 @@ FIXTURES: list[Fixture] = [
     Fixture("decides_virtual_reject.verse", None),
     Fixture("default_cdo_probe.verse", "default_cdo_probe"),
     Fixture("doc_attribute_probe.verse", "doc_attribute_probe", invented=True),
+    Fixture("doc_attribute_reject.verse", None),
     Fixture("effect_trap.verse", None),
     Fixture("effects_probe.verse", "effects_probe"),
     Fixture("effects_reject.verse", None),
@@ -135,6 +137,7 @@ FIXTURES: list[Fixture] = [
     Fixture("sleep_probe.verse", "sleep_probe"),
     Fixture("stdlib_types_probe.verse", "stdlib_types_probe", invented=True),
     Fixture("subscribable_event_probe.verse", "subscribable_event_probe"),
+    Fixture("subscribable_event_reject.verse", None),
     Fixture("tostring_probe.verse", "tostring_probe", invented=True),
     Fixture("vararg_arity_probe.verse", "vararg_arity_probe"),
     Fixture("vararg_probe.verse", "vararg_probe"),
@@ -305,9 +308,9 @@ def golden_path(fixture: Fixture) -> Path:
     return EXPECTED_DIR / f"{fixture.name}.txt"
 
 
-def record(engine: Path) -> int:
+def record(engine: Path, fixtures: list[Fixture]) -> int:
     EXPECTED_DIR.mkdir(parents=True, exist_ok=True)
-    for fixture in FIXTURES:
+    for fixture in fixtures:
         if fixture.exclude:
             print(f"[probe_contract] {fixture.name}: excluded -- {fixture.exclude}")
             continue
@@ -321,10 +324,10 @@ def record(engine: Path) -> int:
     return 0
 
 
-def check(engine: Path) -> int:
+def check(engine: Path, fixtures: list[Fixture]) -> int:
     failed = 0
     skipped = 0
-    for fixture in FIXTURES:
+    for fixture in fixtures:
         if fixture.exclude:
             skipped += 1
             print(f"[probe_contract] {fixture.name}: skip -- {fixture.exclude}")
@@ -350,7 +353,7 @@ def check(engine: Path) -> int:
                                              fromfile="expected", tofile="actual"))
             excerpt = "".join(diff[:12]).replace("\n", " / ")
             print(f"[probe_contract] {fixture.name}: FAIL ({excerpt})")
-    total = len(FIXTURES) - skipped
+    total = len(fixtures) - skipped
     print(f"[probe_contract] {total - failed} passed, {failed} failed, {skipped} skipped")
     return 1 if failed else 0
 
@@ -359,7 +362,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--engine", help="the Unreal checkout (default: UE_ROOT, then ../UnrealEngine)")
     parser.add_argument("--record", action="store_true", help="(re)write every golden instead of checking it")
+    parser.add_argument("--only", help="comma-separated fixture file names to record or check, rather than all")
     args = parser.parse_args()
+
+    fixtures = FIXTURES
+    if args.only:
+        wanted = [name.strip() for name in args.only.split(",") if name.strip()]
+        known = {fixture.name for fixture in FIXTURES}
+        unknown = [name for name in wanted if name not in known]
+        if unknown:
+            print(f"[probe_contract] not in FIXTURES: {', '.join(unknown)}", file=sys.stderr)
+            return 2
+        fixtures = [fixture for fixture in FIXTURES if fixture.name in wanted]
 
     engine = find_engine(args.engine)
     if engine is None:
@@ -369,7 +383,7 @@ def main() -> int:
         print(f"[probe_contract] {PROBE_EXE} not built -- run tools/build_verse_probe.py", file=sys.stderr)
         return 2
 
-    return record(engine) if args.record else check(engine)
+    return record(engine, fixtures) if args.record else check(engine, fixtures)
 
 
 if __name__ == "__main__":

@@ -8,10 +8,11 @@ on every run. This test reads both and fails the moment they disagree, so an eng
 moves a count is a red test naming the paragraph rather than a stale sentence nobody re-reads.
 
 It also checks the citations a "measured" or "verified against the engine" sentence carries --
-`(contract: probe/sleep_probe.verse)` or `(contract: godot/cyclic_resource_load_answers_null)` --
-against the two contract-layer namespaces those citations can name: a `tests/verse_probe` fixture
-with a golden under `tests/verse_probe/expected/`, or one of `tools/run_godot_contract.py`'s case
-names. A citation to a fixture or case that no longer exists fails here rather than staying a dead
+`(contract: probe/sleep_probe.verse)`, `(contract: godot/cyclic_resource_load_answers_null)` or
+`(contract: tripwire/no_doc_comment_syntax)` -- against the three contract-layer namespaces those
+citations can name: a `tests/verse_probe` fixture with a golden under `tests/verse_probe/expected/`,
+one of `tools/run_godot_contract.py`'s case names, or one of `tools/run_tripwires.py`'s tripwires
+(each of which must also be cited). A citation to a fixture or case that no longer exists fails here rather than staying a dead
 link.
 
 No pytest dependency: prints one line per case and exits non-zero if any case fails.
@@ -62,6 +63,18 @@ GODOT_CONTRACT_CASES = {
     "singleton_class_display_server_is_gdsoftclass",
     "b30_cyclic_load_log_sentence",
 }
+
+# tools/run_tripwires.py's tripwire ids (docs/architecture-review.md item 4 step 4), literal for
+# GODOT_CONTRACT_CASES' reason: a rename there is the drift this test catches. A `tripwire/<id>`
+# citation must name one of these, and every one of them must be cited somewhere in CLAUDE.md, so a
+# tripwire cannot exist without the paragraph it retires.
+TRIPWIRES = {
+    "attribute_takes_one_argument",
+    "no_doc_comment_syntax",
+    "subscribable_event_unreleased",
+    "no_verse_lsp_binary",
+}
+RUN_TRIPWIRES = REPO / "tools" / "run_tripwires.py"
 
 failures = []
 
@@ -121,6 +134,7 @@ def check_contract_citations(text: str) -> None:
           "no (contract: ...) citations found in CLAUDE.md")
 
     seen = set()
+    cited_tripwires = set()
     for m in citations:
         line = text.count("\n", 0, m.start()) + 1
         for raw in m.group(1).split(","):
@@ -137,9 +151,21 @@ def check_contract_citations(text: str) -> None:
                 name = cite[len("godot/"):]
                 check(case_name, name in GODOT_CONTRACT_CASES,
                       f"{where}: {name!r} is not one of tools/run_godot_contract.py's case names")
+            elif cite.startswith("tripwire/"):
+                name = cite[len("tripwire/"):]
+                cited_tripwires.add(name)
+                check(case_name, name in TRIPWIRES,
+                      f"{where}: {name!r} is not one of tools/run_tripwires.py's tripwire ids")
             else:
                 check(case_name, False,
-                      f"{where}: {cite!r} names neither a probe/<fixture>.verse nor a godot/<case>")
+                      f"{where}: {cite!r} names none of probe/<fixture>.verse, godot/<case>, tripwire/<id>")
+
+    runner = RUN_TRIPWIRES.read_text(encoding="utf-8")
+    for name in sorted(TRIPWIRES):
+        check(f"tripwire {name} is cited in CLAUDE.md", name in cited_tripwires,
+              f"no (contract: tripwire/{name}) citation in CLAUDE.md")
+        check(f"tripwire {name} is in run_tripwires.py", f'Tripwire("{name}",' in runner,
+              f"tools/run_tripwires.py declares no Tripwire({name!r}, ...)")
 
 
 def main() -> int:

@@ -507,7 +507,8 @@ then regenerating the mirror.
 
 `tools/run_verse_lsp.py` exists to say clearly that there is no Verse language server binary to
 launch: uLangLSP is a message-type library and nothing in the UE checkout links it into an
-executable. If a future engine drop provides one, that script finds and execs it.
+executable. If a future engine drop provides one, that script finds and execs it -- and the
+contract layer says so first (contract: tripwire/no_verse_lsp_binary).
 
 ### Tests
 
@@ -576,7 +577,8 @@ asks the units directly: every `EDeclaredKind` the classifier answers, `Describe
 `DescribeExportType`, a wire-to-Verse-to-wire round trip per kind that crosses, a sidecar round trip
 of the declared types and var-ness (per class and through a whole `WriteClassSidecar` /
 `LoadClassSidecar`), `StatusFor` for every `EHostFailure` at both consumer minors, and the engine
-adapters. `KindName` and `ExpectedStatus` there are exhaustive switches, so **a new kind or failure
+adapters. `--tripwires` runs the contract layer's host-side tripwire cases instead, over
+`tests/host_unit/unit_tripwires.verse`, and prints them under `[tripwire]`. `KindName` and `ExpectedStatus` there are exhaustive switches, so **a new kind or failure
 reason fails that file's build until the test names it**. `build_host.py` stages the test's `.cpp`
 into `Private/` for that target alone; the exe stays in `Engine/Binaries/Win64`, because VNI finds
 the Verse sources relative to the running module, and `--build` does not rebuild it.
@@ -630,6 +632,14 @@ it stays visible in every run rather than blending into the passes; a host fix t
 crashing will fail its truncated comparison, which is the cue to give it back a full golden.
 `--record` rewrites every golden; run it after a change to `host/Verse` that is meant to change what
 a fixture answers.
+
+Beside the goldens run **the tripwires** (item 4 step 4, `docs/tripwires.md`), driven by
+`tools/run_tripwires.py`: four limitations of Epic's that the bridge works around -- an attribute
+takes one argument, Verse has no doc-comment syntax, `subscribable_event` is unreleased, nothing
+links uLangLSP -- each asserted to *still hold*, through the engine's own files, a probe fixture's
+refusal and `verse_host_unit --tripwires`. A FAIL line names the adapter to retire and the section
+that explains it; a check whose input is absent skips alone. CLAUDE.md cites each in the
+contract form with a `tripwire/` prefix, and `tests/claims` holds every id to a citation.
 
 The fourth step is `tests/godot_contract` (item 4 step 3), driven by `tools/run_godot_contract.py`:
 a headless Godot project that loads no GDExtension at all — no `addons/`, no
@@ -1267,7 +1277,10 @@ layer, and is skipped there when `../godot` is absent.
   is unreleased. What exists is `subscribable_event_intrnl`, `<epic_internal>` and slated for
   deletion by its own comment; it *is* reachable from a script package and *does* satisfy
   `listenable`, and its `Signal` is still `no_rollback`, so it changes nothing about the emit verb.
-  `docs/signal-declaration.md` §12 is why it is not built on. Re-check on every engine drop.
+  `docs/signal-declaration.md` §12 is why it is not built on. Re-checked on every run, both halves
+  (contract: tripwire/subscribable_event_unreleased);
+  `HostSignals.cpp`'s `SignalVerseEvent` is the one place the host signals a Verse event, and
+  where adopting Epic's type would land.
 - **The emit verb is the bridge's, whichever type declares the member.** `signal(t).Signal` and
   `event(t).Emit` both go out to Godot and come back through the member's connection, which is what
   makes a Verse handler and a GDScript handler see one ordering. An event's own `Signal` resumes
@@ -1644,18 +1657,25 @@ layer, and is skipped there when `../godot` is absent.
   multi-argument attribute takes **one string and splits it**: `@rpc("any_peer call_local")`,
   `@export_flags("Fire,Water,Earth")`. **Re-check this on every engine drop** -- when either fix
   lands, the several-argument spelling is the one to move to, and moving is additive because the
-  one-string form keeps working beside it.
-  **And `tests/verse_probe` cannot see any of this** -- a refused attribute comes back as
-  status 4 with zero diagnostics, and a *user* package may not declare `class(attribute)` at
-  all, so the attribute package cannot be checked in isolation either. The integration layer
-  is where Godot's own diagnostic path prints it.
+  one-string form keeps working beside it. `AttributeArgument` (`HostEngineAdapters.h`) is the
+  only reader, and the tripwire re-checks both refusals on every run
+  (contract: tripwire/attribute_takes_one_argument): the overload one is a diagnostic
+  `tests/verse_probe` prints (`rpc_attribute_probe.verse`), and the tuple one is asked of the
+  adapter by `verse_host_unit --tripwires` -- a *user* package may not declare `class(attribute)`
+  (glitch 3552), but it may declare a `<constructor>` for one of the bridge's, which puts a tuple
+  where GetAttributeTextValue looks. A refused attribute *in the attribute package itself* still
+  comes back as status 4 with zero diagnostics, and the integration layer is where Godot's own
+  diagnostic path prints it.
 - **Verse has no doc-comment syntax, and `@doc` is a `using` away.** The parser knows `#`,
   `<# ... #>` and `<#>` and no documentation variant; what documents a declaration is the comment
   above it, which is what Epic's own generators read and what a library `@doc("...")` is rewritten
   into in a digest. A script may write `@doc("...")` itself with `using { /Verse.org/Native }`
-  (`tests/verse_probe/doc_attribute_probe.verse`) (contract: probe/doc_attribute_probe.verse); without the `using` it is glitch 3506. The
+  (`tests/verse_probe/doc_attribute_probe.verse`) (contract: probe/doc_attribute_probe.verse); without the `using` it is glitch 3506
+  (`doc_attribute_reject.verse`). The
   bridge reads the comment first and the attribute as the host's fallback, so either documents a
-  member.
+  member. `DocOf` (`HostEngineAdapters.h`) is the host's one reader, and it switches exhaustively
+  over the parser's four comment kinds, so a doc-comment kind fails the host build there
+  (contract: tripwire/no_doc_comment_syntax).
 - **`operator'()'` is a reserved intrinsic.** Verse rewrites `Data[Key]` on a non-function callee
   into a call to it, but refuses to let anything *define* one — as a class member or as a free
   function — so the bracket syntax cannot be given a meaning. Container lookup is

@@ -271,6 +271,10 @@ generated code still compiles and no longer means what its comments say.
    a contract test that asserts the limitation *still holds*. When Epic fixes it, the test fails,
    names the adapter to retire, and names the design section that explains it. This is how
    "Epic shipping real tooling" arrives as a to-do list rather than as a surprise.
+   **Built:** `docs/tripwires.md` is the table (tripwire, adapter, design section) and
+   `tools/run_tripwires.py` the contract-layer suite. The adapters are `AttributeArgument` and
+   `DocOf` in `host/Private/HostEngineAdapters.h`, `SignalVerseEvent` in `HostSignals.cpp`, and
+   `run_verse_lsp.py`'s `find_lsp_exe`.
 5. **Make the keyword and const tables re-derivable.** `gen_verse_keywords.py` transcribes
    `GRAMMAR_KEYWORDS` from `VerseGrammar.h` by line-number comment, and `CONST_OVERRIDES` is 127
    rows pasted from a run against a separate Godot checkout. Both go stale silently. Have the

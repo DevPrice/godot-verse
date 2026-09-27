@@ -6,7 +6,7 @@ R-QUAL-3. The three layers R-QUAL-1 names, in the order a failure is cheapest to
 
   units        the lexer, the class-declaration scanner and the GDScript converter, which need neither Godot nor UE
   abi          host_smoke, which drives the whole C ABI with no Godot, and the cooker
-  contract     re-derives gen_verse_keywords.py's and audit_const_overrides.py's hand tables against a UE or Godot source checkout, every tests/verse_probe fixture against a golden transcript, and tests/godot_contract's Godot facts against a fresh dump (docs/architecture-review.md item 4 steps 1, 3 and 5)
+  contract     re-derives gen_verse_keywords.py's and audit_const_overrides.py's hand tables against a UE or Godot source checkout, every tests/verse_probe fixture against a golden transcript, tests/godot_contract's Godot facts against a fresh dump, and tools/run_tripwires.py's limitations of Epic's against the engine (docs/architecture-review.md item 4 steps 1, 3, 4 and 5)
   integration  a headless Godot with Verse scripts attached, asserting on behaviour
   export       a headless Godot export, asserting on the tree it produced
   web          a Web export on the vm backend (nothreads), run in headless Chrome
@@ -2098,6 +2098,9 @@ def run_contract(results: Results, engine: Path | None, do_build: bool, godot: P
     GDExtension at all, so it needs only the Godot binary and not the host, `tools/run_godot_contract.py`
     drives it and adds the two facts a Godot *source* checkout answers, skipped like the two table
     checks above when `../godot` is absent.
+
+    Step 4 is `tools/run_tripwires.py` (docs/tripwires.md): each workaround for a missing Epic
+    feature, asserted to still be needed, so the day one is not fails naming its adapter.
     """
     if engine is None:
         results.skip("gen_verse_keywords --check", "no Unreal checkout -- set UE_ROOT or pass --engine")
@@ -2133,6 +2136,15 @@ def run_contract(results: Results, engine: Path | None, do_build: bool, godot: P
                     [sys.executable, str(REPO / "tools" / "run_probe_contracts.py"),
                      "--engine", str(engine)],
                     results, cases="probe_contract")
+
+    # Item 4 step 4: each limitation of Epic's the bridge works around, asserted to still hold. Its
+    # checks skip themselves one by one, so only the checkout is a prerequisite of the suite.
+    if engine is None:
+        results.skip("tripwires", "no Unreal checkout -- set UE_ROOT or pass --engine")
+    else:
+        run("tripwires",
+            [sys.executable, str(REPO / "tools" / "run_tripwires.py"), "--engine", str(engine)],
+            results, require_line="[tripwire] ", cases="tripwire")
 
     if godot is None:
         results.skip("godot_contract", "no Godot binary -- set GODOT or pass --godot")
