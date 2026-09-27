@@ -36,6 +36,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import godot_env  # noqa: E402
 from run_tests import find_engine, find_godot, stage_extension  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
@@ -179,7 +180,7 @@ def collect(project: Path, godot: Path, engine: Path, wanted: set[str], limit: i
     positions = project / POSITIONS
     shutil.copy2(REPO / "tools" / "complete_probe.gd", driver)
     positions.write_text(json.dumps(by_path), encoding="utf-8")
-    env = dict(os.environ, UE_ROOT=str(engine))
+    env = godot_env.env_for(godot_env.DEFAULT_HOME, dict(os.environ, UE_ROOT=str(engine)))
     try:
         completed = subprocess.run(
             [str(godot), "--headless", "--path", str(project),

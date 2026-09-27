@@ -50,6 +50,7 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "tools"))
 from gdextension import generate as generate_gdextension  # noqa: E402
+import godot_env  # noqa: E402
 import test_records  # noqa: E402
 
 # Where a Godot binary tends to be when nobody has said. Deliberately short: a guess that finds the
@@ -145,11 +146,11 @@ def find_godot(explicit: str | None) -> Path | None:
     return None
 
 
-def stream(argv: list[str], cwd: Path | None = None) -> tuple[int, str]:
+def stream(argv: list[str], cwd: Path | None = None, env: dict[str, str] | None = None) -> tuple[int, str]:
     """Runs argv with stdout and stderr merged, echoing each line as it arrives, and returns the
-    exit code and everything it printed."""
+    exit code and everything it printed. `env=None` inherits this process's own, as before."""
     lines: list[str] = []
-    with subprocess.Popen(argv, cwd=str(cwd or REPO), stdout=subprocess.PIPE,
+    with subprocess.Popen(argv, cwd=str(cwd or REPO), env=env, stdout=subprocess.PIPE,
                           stderr=subprocess.STDOUT, text=True, errors="replace") as process:
         assert process.stdout is not None
         for line in process.stdout:
@@ -157,6 +158,13 @@ def stream(argv: list[str], cwd: Path | None = None) -> tuple[int, str]:
             sys.stdout.flush()
             lines.append(line)
     return process.returncode, "".join(lines)
+
+
+def godot_isolated_env(**extra: str) -> dict[str, str]:
+    """The environment for a Godot process this script launches: APPDATA/LOCALAPPDATA (or the
+    XDG_* trio off Windows) redirected into bin/godot_home/, so no run here touches Devin's real
+    editor settings, recent-projects list or caches. `extra` is merged in on top."""
+    return godot_env.env_for(godot_env.DEFAULT_HOME, dict(os.environ, **extra))
 
 
 def said(output: str, expected: "str | re.Pattern[str]") -> bool:
@@ -175,7 +183,8 @@ def diag(diagnostic_id: str, *placeholders: str) -> "str | re.Pattern[str]":
 
 def run(name: str, argv: list[str], results: Results, cwd: Path | None = None,
         require_line: str | None = None, require_all: "list[str | re.Pattern[str]] | None" = None,
-        refute_all: "list[str | re.Pattern[str]] | None" = None, cases: str | None = None) -> bool:
+        refute_all: "list[str | re.Pattern[str]] | None" = None, cases: str | None = None,
+        env: dict[str, str] | None = None) -> bool:
     """Runs a test binary, echoing its own per-case lines. Exit code decides pass or fail.
 
     `cases` is the tag the binary prints its case lines under (`test_records.PLAIN` for the
@@ -194,7 +203,7 @@ def run(name: str, argv: list[str], results: Results, cwd: Path | None = None,
     it was given.
     """
     print(f"[run_tests] --- {name} ---")
-    returncode, output = stream(argv, cwd)
+    returncode, output = stream(argv, cwd, env)
     results.last_output = output
     ok = returncode == 0
     if ok and require_line is not None and require_line not in output:
@@ -596,9 +605,10 @@ def stage_extension(project: Path, for_export: bool = False) -> str | None:
     return None
 
 
-# Where Godot keeps tests/integration's user:// on Windows, from its config/name. The host writes a
-# fatal error's record into logs/ there (vh_init_desc's FatalLogPathUtf8).
-INTEGRATION_CRASH_LOG = (Path(os.environ.get("APPDATA", "")) / "Godot" / "app_userdata" /
+# Where Godot keeps tests/integration's user:// under the isolated profile every launch here uses
+# (godot_isolated_env), from its config/name. The host writes a fatal error's record into logs/
+# there (vh_init_desc's FatalLogPathUtf8).
+INTEGRATION_CRASH_LOG = (godot_env.appdata_dir(godot_env.DEFAULT_HOME) / "Godot" / "app_userdata" /
                          "godot-verse integration tests" / "logs" / "verse_crash.log")
 
 
@@ -619,7 +629,7 @@ def run_host_fatal(results: Results, godot: Path, project: Path) -> None:
         completed = subprocess.run(
             [str(godot), "--headless", "--path", str(project),
              "--script", "res://test_main.gd", "--quit-after", "600"],
-            env=dict(os.environ, VERSE_HOST_TEST_FATAL=kind),
+            env=godot_isolated_env(VERSE_HOST_TEST_FATAL=kind),
             capture_output=True, text=True, errors="replace", timeout=600)
         output = (completed.stdout or "") + (completed.stderr or "")
         if completed.returncode == 0:
@@ -681,7 +691,7 @@ def ensure_integration_reference(results: Results, engine: Path | None, godot: P
     layer = results.layer
     results.layer = "integration"
     run("integration", _integration_argv(godot, project), results, require_line="passed, ",
-        cases="integration")
+        cases="integration", env=godot_isolated_env())
     results.layer = layer
     _keep_integration_reference(results)
 
@@ -756,6 +766,7 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
         # the same error, stack and all on every repeat, is silenced in vh_init's -LogCmds; the
         # raises test_main.gd makes on purpose are what would print one if it came back.
         refute_all=["LogVerseRuntime:"],
+        env=godot_isolated_env(),
     )
     _keep_integration_reference(results)
     if reports_fatal:
@@ -851,6 +862,7 @@ def run_coverage_diagnostic(results: Results, engine: Path | None, godot: Path |
         results,
         require_line="[coverage] done",
         require_all=COVERAGE_EXPLANATIONS,
+        env=godot_isolated_env(),
     )
 
 
@@ -926,6 +938,7 @@ def run_binding_cycle(results: Results, engine: Path | None, godot: Path | None)
         require_line="[cycle] done",
         require_all=["[cycle] loaded cycle_probe.gd: yes"],
         refute_all=BINDING_CYCLE_REFUSALS,
+        env=godot_isolated_env(),
     )
 
 
@@ -1093,6 +1106,7 @@ def run_export(results: Results, engine: Path | None, godot: Path | None) -> Non
     if template is None:
         results.skip("export", "the Windows release export template for this Godot is not installed")
         return
+    _isolate_export_templates(godot)
 
     why = stage_extension(project, for_export=True)
     if why is not None:
@@ -1105,7 +1119,7 @@ def run_export(results: Results, engine: Path | None, godot: Path | None) -> Non
         completed = subprocess.run(
             [str(godot), "--headless", "--path", str(project),
              "--export-release", "Windows Desktop", str(out)],
-            capture_output=True, text=True, errors="replace")
+            env=godot_isolated_env(), capture_output=True, text=True, errors="replace")
 
         # The export log is relayed only when something is wrong with it: it is six hundred lines
         # of "Storing File" and the assertions below are what this layer is actually for.
@@ -1176,12 +1190,17 @@ def run_export(results: Results, engine: Path | None, godot: Path | None) -> Non
 def scrubbed_game_env() -> dict[str, str]:
     """The environment B14 ran an exported game in by hand (R-DIST-10): no UE_ROOT, VERSE_HOST_DLL
     or VERSE_COOKER, and a PATH reaching Windows alone, so nothing can lead the game to the Unreal
-    checkout, to Godot or to bin/. A game that still finds its host found it by where it runs."""
+    checkout, to Godot or to bin/. A game that still finds its host found it by where it runs.
+
+    Also isolated (godot_isolated_env's APPDATA/LOCALAPPDATA redirect): the exported game is still a
+    Godot process, and its own user:// (godot-verse integration tests' app_userdata) is not Devin's
+    to write into either.
+    """
     unset = {"UE_ROOT", "VERSE_HOST_DLL", "VERSE_COOKER", "PATH"}
     env = {name: value for name, value in os.environ.items() if name.upper() not in unset}
     system_root = os.environ.get("SystemRoot", r"C:\Windows")
     env["PATH"] = os.pathsep.join([str(Path(system_root) / "system32"), system_root])
-    return env
+    return godot_env.env_for(godot_env.DEFAULT_HOME, env)
 
 
 def _launch_export(results: Results, exe: Path) -> bool:
@@ -1347,6 +1366,7 @@ def run_export_vm(results: Results, engine: Path | None, godot: Path | None) -> 
     if template is None:
         results.skip("export-vm", "the Windows release export template for this Godot is not installed")
         return
+    _isolate_export_templates(godot)
 
     project = _vm_backend_project(base_project)
     try:
@@ -1361,7 +1381,7 @@ def run_export_vm(results: Results, engine: Path | None, godot: Path | None) -> 
             completed = subprocess.run(
                 [str(godot), "--headless", "--path", str(project),
                  "--export-release", "Windows Desktop", str(out)],
-                capture_output=True, text=True, errors="replace")
+                env=godot_isolated_env(), capture_output=True, text=True, errors="replace")
 
             if completed.returncode != 0 or not out.is_file():
                 sys.stdout.write(completed.stdout or "")
@@ -1456,6 +1476,15 @@ def _export_template_dir(godot: Path) -> Path | None:
     if not appdata:
         return None
     return Path(appdata) / "Godot" / "export_templates" / version
+
+
+def _isolate_export_templates(godot: Path) -> None:
+    """Makes bin/godot_home see the export templates found against the *real* APPDATA above, so an
+    `--export-release` launched with `godot_isolated_env()` still finds them (godot_env.py's
+    `ensure_export_templates`: a junction, made once)."""
+    real_dir = _export_template_dir(godot)
+    if real_dir is not None:
+        godot_env.ensure_export_templates(godot_env.DEFAULT_HOME, real_dir)
 
 
 def _export_template(godot: Path) -> Path | None:
@@ -1640,7 +1669,7 @@ def _check_web_refuses_host(godot: Path, project: Path) -> bool:
         completed = subprocess.run(
             [str(godot), "--headless", "--path", str(project),
              "--export-release", "Web", str(Path(work_str) / "index.html")],
-            capture_output=True, text=True, errors="replace")
+            env=godot_isolated_env(), capture_output=True, text=True, errors="replace")
     output = (completed.stdout or "") + (completed.stderr or "")
     if said(output, diag("VG6101", '"host"')):
         print("[web] a Web export with backend.web=\"host\" is refused: ok")
@@ -1690,6 +1719,7 @@ def run_web(results: Results, engine: Path | None, godot: Path | None, threads: 
         results.skip(layer, f"the Web dlink{'' if threads else '/nothreads'} release export template "
                             "for this Godot is not installed")
         return
+    _isolate_export_templates(godot)
 
     project = _web_backend_project(base_project, threads)
     try:
@@ -1704,7 +1734,7 @@ def run_web(results: Results, engine: Path | None, godot: Path | None, threads: 
             completed = subprocess.run(
                 [str(godot), "--headless", "--path", str(project),
                  "--export-release", "Web", str(out)],
-                capture_output=True, text=True, errors="replace")
+                env=godot_isolated_env(), capture_output=True, text=True, errors="replace")
 
             if completed.returncode != 0 or not out.is_file():
                 sys.stdout.write(completed.stdout or "")
@@ -1813,22 +1843,14 @@ EDITOR_LAYER_TIMEOUT = 600
 EDITOR_CASES_ADDON = REPO / "tests" / "editor" / "addons" / "verse_editor_cases"
 
 
-def _godot_minor_version(godot: Path) -> str | None:
-    completed = subprocess.run([str(godot), "--version"], capture_output=True, text=True,
-                               errors="replace")
-    printed = (completed.stdout or "").strip().splitlines()
-    parts = printed[-1].split(".") if printed else []
-    return ".".join(parts[:2]) if len(parts) >= 2 else None
-
-
 def _editor_layer_project(base_project: Path, godot: Path) -> tuple[Path, dict[str, str]]:
     """A throwaway copy of base_project with the driver plugin enabled, and the environment to open
-    it in, whose editor settings live inside the copy.
-
-    APPDATA and LOCALAPPDATA are where a Windows editor keeps its settings, its project list and
-    every project's user://, and Devin's own editor reads the same ones. The settings file is
-    written before the editor starts because the language is read at startup: English, so the
-    editor's own strings -- a button's tooltip, a dialog's title -- are the ones the cases look for.
+    it in, whose editor settings live inside the copy -- godot_env.env_for's isolated profile, a
+    fresh one per run rather than the shared bin/godot_home/ every other layer reuses, because this
+    is the one layer that has to pin a language and a debug port before the editor's first launch,
+    and a stale pin from an earlier run would be wrong silently. The settings file is written before
+    the editor starts because the language is read at startup: English, so the editor's own strings
+    -- a button's tooltip, a dialog's title -- are the ones the cases look for.
     """
     work = Path(tempfile.mkdtemp(prefix="verse_editor_"))
     project = work / base_project.name
@@ -1839,17 +1861,9 @@ def _editor_layer_project(base_project: Path, godot: Path) -> tuple[Path, dict[s
                 '\n[editor_plugins]\n\n'
                 f'enabled=PackedStringArray("res://addons/{EDITOR_CASES_ADDON.name}/plugin.cfg")\n')
 
-    appdata = work / "appdata"
-    settings_dir = appdata / "Godot"
-    settings_dir.mkdir(parents=True)
-    version = _godot_minor_version(godot) or "4.7"
-    (settings_dir / f"editor_settings-{version}.tres").write_text(
-        '[gd_resource type="EditorSettings" format=3]\n\n[resource]\n'
-        'interface/editor/localization/editor_language = "en"\n'
-        f"network/debug/remote_port = {EDITOR_DEBUG_PORT}\n", encoding="utf-8")
-    (work / "localappdata").mkdir()
-    env = dict(os.environ, APPDATA=str(appdata), LOCALAPPDATA=str(work / "localappdata"))
-    return project, env
+    home = work / "home"
+    godot_env.write_editor_settings(home, godot, language="en", debug_port=EDITOR_DEBUG_PORT)
+    return project, godot_env.env_for(home)
 
 
 def run_editor(results: Results, engine: Path | None, godot: Path | None) -> None:

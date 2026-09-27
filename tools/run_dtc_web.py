@@ -35,6 +35,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "tools"))
+import godot_env  # noqa: E402
 import run_tests  # noqa: E402
 
 EXPECTED_CHECKS = 30
@@ -129,6 +130,7 @@ def main() -> int:
         print(f"[dtc-web] SKIP -- the Web dlink{'' if threads else '/nothreads'} release export "
               "template for this Godot is not installed")
         return 0
+    run_tests._isolate_export_templates(godot)
 
     # A throwaway copy, exactly as run_tests.py's own web layer uses one: dodge-the-creeps'
     # project.godot and export_presets.cfg are editor-owned (CLAUDE.md) and never take the
@@ -149,7 +151,8 @@ def main() -> int:
             completed = subprocess.run(
                 [str(godot), "--headless", "--path", str(project),
                  "--export-release", "Web", str(out)],
-                capture_output=True, text=True, errors="replace")
+                env=godot_env.env_for(godot_env.DEFAULT_HOME), capture_output=True, text=True,
+                errors="replace")
 
             if completed.returncode != 0 or not out.is_file():
                 sys.stdout.write(completed.stdout or "")

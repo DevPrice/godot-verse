@@ -47,6 +47,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import godot_env  # noqa: E402
 import test_records  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
@@ -94,7 +95,8 @@ def dump_extension_api(godot: Path) -> dict | None:
     with tempfile.TemporaryDirectory(prefix="godot_contract_dump_") as tmp:
         try:
             result = subprocess.run([str(godot), "--headless", "--dump-extension-api", "--quit"],
-                                     cwd=tmp, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                     cwd=tmp, env=godot_env.env_for(godot_env.DEFAULT_HOME),
+                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                      text=True, errors="replace", timeout=120)
         except subprocess.TimeoutExpired:
             _emit(f"[{TAG}] extension_api_dump: FAIL (--dump-extension-api did not exit in 120s)")
@@ -172,7 +174,8 @@ def run_project(godot: Path) -> tuple[int, str]:
     argv = [str(godot), "--headless", "--path", str(PROJECT), "--script", "res://test_main.gd",
             "--quit-after", "60"]
     try:
-        result = subprocess.run(argv, cwd=str(REPO), stdout=subprocess.PIPE,
+        result = subprocess.run(argv, cwd=str(REPO), env=godot_env.env_for(godot_env.DEFAULT_HOME),
+                                 stdout=subprocess.PIPE,
                                  stderr=subprocess.STDOUT, text=True, errors="replace", timeout=120)
         return result.returncode, result.stdout
     except subprocess.TimeoutExpired as timeout:

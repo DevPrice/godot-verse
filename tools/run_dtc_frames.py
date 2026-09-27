@@ -26,6 +26,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "tools"))
+import godot_env  # noqa: E402
 import run_tests  # noqa: E402
 
 FRAME_TIMES = re.compile(r"frame_times: (.*)$")
@@ -49,11 +50,13 @@ def measure(godot: Path, backend: str, runs: int) -> list[str] | None:
         if why is not None:
             print(f"[dtc-frames] {backend}: SKIP -- {why}")
             return None
+        run_tests._isolate_export_templates(godot)
         with tempfile.TemporaryDirectory(prefix=f"dtc_frames_{backend}_out_") as out_dir:
             exe = Path(out_dir) / "dodge.exe"
             exported = subprocess.run(
                 [str(godot), "--headless", "--path", str(project), "--export-release", "Windows Desktop", str(exe)],
-                capture_output=True, text=True, errors="replace")
+                env=godot_env.env_for(godot_env.DEFAULT_HOME), capture_output=True, text=True,
+                errors="replace")
             if exported.returncode != 0 or not exe.is_file():
                 sys.stdout.write((exported.stdout or "") + (exported.stderr or ""))
                 print(f"[dtc-frames] {backend}: the export failed")
@@ -62,7 +65,8 @@ def measure(godot: Path, backend: str, runs: int) -> list[str] | None:
             for index in range(runs):
                 launched = subprocess.run(
                     [str(exe), "--headless", "--fixed-fps", "60", "--", "--verse-check", "--verse-frame-times"],
-                    capture_output=True, text=True, errors="replace", timeout=LAUNCH_TIMEOUT)
+                    env=godot_env.env_for(godot_env.DEFAULT_HOME), capture_output=True, text=True,
+                    errors="replace", timeout=LAUNCH_TIMEOUT)
                 output = (launched.stdout or "") + (launched.stderr or "")
                 found = [m.group(1) for m in map(FRAME_TIMES.search, output.splitlines()) if m]
                 passed = "all checks passed" in output

@@ -443,11 +443,15 @@ reviewed files of `docs/web-vm/spec/` alone. Keep it that way — do not bring V
     python tools/run_dtc_web.py           # dodge-the-creeps on the interpreter in headless Chrome; --threads
     python tools/run_dtc_frames.py        # its frame times, exported for Windows on each backend
     python tools/run_vm_bench.py          # vm/ against the UE host on one cook; --wasm, --wasm-profile
+    python tools/godot_env.py -- <godot> ...  # a one-off headless Godot, isolated from Devin's real profile
 
 `tools/build_host.py` needs a UE source checkout with the Verse toolchain — `--engine`, or
 `UE_ROOT`. Building the host and running the tests are fine to do unprompted, and so is **headless**
-Godot. **Ask before launching the editor** (`godot --path demo` with no `--headless`), which opens a
-window.
+Godot -- run directly through `tools/godot_env.py` (above) rather than a bare `godot --headless
+...`, so a one-off cannot write into Devin's real `editor_settings-4.7.tres`, `projects.cfg` or
+caches the way a naive invocation did (every launch inside `tools/` already goes through the same
+helper). **Ask before launching the editor** (`godot --path demo` with no `--headless`), which opens
+a window.
 
 **godot-cpp's API dump is pinned in `SConstruct`** (`api_version` = 4.7), and `gdextension.py`
 derives both the built library's name and the `.gdextension`'s `[libraries]` rows from the same
@@ -475,6 +479,20 @@ of the harness's own (`kind` `harness`). The run's last lines name every failing
 case name. **A case name printed twice in one suite is a harness failure**, because a name-keyed
 comparison cannot tell the two apart — so a check inside a loop names its row. A case line saying
 FAIL fails its suite even when the binary exits 0.
+
+**Every Godot process any layer launches is isolated from Devin's real editor profile**
+(`tools/godot_env.py`, `godot_isolated_env()` here): APPDATA and LOCALAPPDATA — the XDG_* trio off
+Windows, unexercised today — redirected into `bin/godot_home/`, so nothing here writes into the
+real `editor_settings-4.7.tres`, `projects.cfg` or the per-project shader/import caches. The
+directory is persistent across runs, not wiped per invocation, so a run does not pay Godot's
+first-run hardware detection and shader warmup on every layer; delete it by hand if it is ever
+suspected of holding something stale. An export layer still finds Devin's real export templates
+without copying them: `_isolate_export_templates` makes a Windows directory junction from the
+isolated profile's `export_templates/<version>` onto the real one, once, rather than rewriting any
+`export_presets.cfg` — which would mean an uncommitted line in `dodge-the-creeps/export_presets.cfg`
+on every run, the file this same section says is editor-owned. The **editor** layer below is the one
+exception with its own throwaway profile per run, because it has to pin a language and a debug port
+before the editor's first launch; it builds that profile with the same `godot_env.py` functions.
 
 **units** — lexer, class-declaration scanner, module map, doc-markup converter, signature parser,
 the naming-rule differential test, the GDScript converter, generator, and `vm/`'s own cases
@@ -634,9 +652,10 @@ an export log. **A pack stores paths with `res://` trimmed off** (`editor_export
 popup and hover tooltip, the inspector, the docks and Play (`docs/editor-test-audit.md`, whose
 residual list is what stays by hand). `run_tests.py` copies the project to a throwaway directory
 the way export-vm does, copies `tests/editor/addons/verse_editor_cases` into it and enables that
-plugin, sets `editor/run/main_run_args="--headless"`, and points `APPDATA`/`LOCALAPPDATA` into the
-copy with an editor settings file pinning the language to English and the debugger to port 6118,
-so Devin's own editor settings, project list and debug port are never touched. The plugin does
+plugin, sets `editor/run/main_run_args="--headless"`, and points `APPDATA`/`LOCALAPPDATA` into a
+throwaway profile of its own (`godot_env.py`'s `write_editor_settings`/`env_for`, not the shared
+`bin/godot_home/` every other layer reuses) pinning the language to English and the debugger to
+port 6118, so Devin's own editor settings, project list and debug port are never touched. The plugin does
 nothing unless the display server is headless **and** `--verse-editor-cases` is on the command
 line; its cases live in `editor_cases.gd`, print as `[editor] <case>: ok`, and a per-step watchdog
 fails the run by the step's name rather than hanging. **A case that presses Play goes through
@@ -747,8 +766,9 @@ at all are Godot's own C++, and that half is `docs/by-hand-findings.md`. A compl
 an analysis where a hover costs none, so `probe_complete` takes a `--limit` and picks its carets.
 
 **`dodge-the-creeps/`** is the yardstick: the whole game in Verse, with no GDScript in it but the
-check drivers. `godot --headless --fixed-fps 60 --path dodge-the-creeps -s res://headless_check.gd`,
-30 checks, one line each. `--fixed-fps` is not optional; headless, a `Timer` counts real seconds
+check drivers. `python tools/godot_env.py -- <godot> --headless --fixed-fps 60 --path
+dodge-the-creeps -s res://headless_check.gd`, 30 checks, one line each -- through `godot_env.py`
+rather than bare, so a by-hand run of the yardstick costs Devin's real profile nothing either. `--fixed-fps` is not optional; headless, a `Timer` counts real seconds
 while the loop runs flat out. It is deliberately **not** in `run_tests.py` — a yardstick that gates
 the build stops measuring. `checks.gd` is the library its two drivers share, `headless_check.gd` in
 the editor and `export_check.gd` as an autoload in an export.
