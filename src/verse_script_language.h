@@ -4,6 +4,7 @@
 // script_language_extension.hpp only forward-declares it.
 #include "verse_api_lookup.h"
 #include "verse_bindings.h"
+#include "verse_completion.h"
 #include "verse_debugger.h"
 #include "verse_profiler.h"
 #include "verse_project_state.h"
@@ -260,6 +261,17 @@ public:
 	void queue_check(const godot::String &p_path, const godot::String &p_source) const {
 		project_state.queue_check(p_path, p_source);
 	}
+	// The rest of VerseProjectState's public face, added for VerseCompletion (verse_completion.cpp)
+	// to reach through: it holds a VerseScriptLanguage& rather than the project_state member
+	// itself, the way VerseDebugger and VerseProfiler do not need to.
+	bool is_built() const { return project_state.is_built(); }
+	uint64_t analysis_epoch_value() const { return project_state.analysis_epoch_value(); }
+	void request_check(const godot::String &p_path, const godot::String &p_source, VerseProjectState::CheckKind p_kind) const {
+		project_state.request_check(p_path, p_source, p_kind);
+	}
+	void flush_pending_check() const { project_state.flush_pending_check(); }
+	bool completion_check_pending() const { return project_state.completion_check_pending(); }
+	const VerseProjectState::CheckRequest &completion_refresh_request() const { return project_state.completion_refresh_request(); }
 
 	// Every hover the editor could produce over one script, as one row per word and run of
 	// columns that answer alike. The editor's own hover path is unreachable from a test --
@@ -282,20 +294,6 @@ public:
 	// flushes the check itself. tools/probe_complete.py consumes it.
 	godot::TypedArray<godot::Dictionary> probe_complete(
 		const godot::String &p_path, const godot::PackedInt32Array &p_positions);
-
-	// The classes a `.` at p_receiver_end reaches a member of, nearest first, or empty when the
-	// buffer does not say which. Text and the analysis snapshot only: this is what completion has
-	// to answer from before any analysis of the buffer in front of the author exists.
-	godot::PackedStringArray receiver_classes_from_text(const godot::String &p_source, const godot::String &p_path, int64_t p_receiver_end) const;
-
-	// Fills r_result with what a string literal at p_marker can be completed to -- a node path, a
-	// res:// path, an input action or a signal name -- decided by the call the literal is an
-	// argument to. Leaves it untouched when the literal is not one of those.
-	void complete_in_string(const godot::String &p_code, const godot::String &p_path, int64_t p_marker, godot::Object *p_owner, godot::Dictionary &r_result) const;
-
-	// The signals reachable on the receiver ending at p_receiver_end: the class's own Verse-spelled
-	// ones, or Godot's for a mirrored class.
-	void collect_signal_names(const godot::String &p_source, const godot::String &p_path, int64_t p_receiver_end, godot::Array &r_options) const;
 
 	// Scripts that read their validity and export list out of the analysis, so a result landing
 	// in _frame reaches them. Borrowed: a script adds itself on construction and removes itself
@@ -385,31 +383,9 @@ private:
 	// poll is what pairs a warning set with the diagnostics reported out of the same one.
 	mutable godot::Dictionary script_warnings_by_path;
 
-	// The completion buffer the last vh_complete_symbol answered for, with its position, mode, the
-	// analysis_epoch it was answered at, and the answer. Godot re-asks on every keystroke while the
-	// popup is open, and each ask costs a whole-project analysis; normalizing the half-typed
-	// identifier out of the buffer is what makes the whole of one prefix the same question, and the
-	// epoch is what makes it safe to answer from cache rather than merely cheap.
-	mutable godot::String completion_cache_source;
-	mutable int32_t completion_cache_line = -1;
-	mutable int32_t completion_cache_column = -1;
-	mutable int32_t completion_cache_mode = -1;
-	mutable uint64_t completion_cache_epoch = 0;
-	mutable godot::TypedArray<godot::Dictionary> completion_cache_options;
-
-	// The same, for the argument hint. Kept apart because the two are asked about different
-	// positions in one buffer -- the callee for the hint, the cursor for the options -- and the
-	// host answers both off a single analysis, so caching them together would throw one away.
-	mutable godot::String signature_cache_source;
-	mutable int32_t signature_cache_line = -1;
-	mutable int32_t signature_cache_column = -1;
-	mutable uint64_t signature_cache_epoch = 0;
-	mutable godot::Dictionary signature_cache;
-
-	// Asks the open script editor to complete again, if it is still showing the file the landed
-	// completion analysis was for and the caret is still inside the same identifier. That second
-	// _complete_code finds the host describing the buffer and replaces the partial list in place.
-	void refresh_completion_if_current() const;
+	// Completion's whole state and behaviour: see verse_completion.h. Mutable for the same reason
+	// project_state and debugger are.
+	mutable VerseCompletion completion{ *this };
 
 	// Re-registers every loaded script's documentation, which is the only way a class described
 	// too early gets described again: Godot builds its script docs once per session, on a loader
