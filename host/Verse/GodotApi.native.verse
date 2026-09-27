@@ -5,50 +5,6 @@ using {/Verse.org/Native}
 # in the handful of native primitives in Godot.native.verse. That is what keeps a mirrored class
 # per Godot class from needing a C++ shadow per Godot class.
 
-# --- Variant tags ------------------------------------------------------------
-
-# Godot's Variant::Type, spelled as constants rather than a Verse enum because the tag is a lane
-# of `variant` and a native struct's fields are the primitives VNI marshals.
-TagNil:int = 0
-TagBool:int = 1
-TagInt:int = 2
-TagFloat:int = 3
-TagString:int = 4
-TagVector2:int = 5
-TagVector2i:int = 6
-TagRect2:int = 7
-TagRect2i:int = 8
-TagVector3:int = 9
-TagVector3i:int = 10
-TagTransform2D:int = 11
-TagVector4:int = 12
-TagVector4i:int = 13
-TagPlane:int = 14
-TagQuaternion:int = 15
-TagAabb:int = 16
-TagBasis:int = 17
-TagTransform3D:int = 18
-TagProjection:int = 19
-TagColor:int = 20
-TagStringName:int = 21
-TagNodePath:int = 22
-TagRid:int = 23
-TagObject:int = 24
-TagCallable:int = 25
-TagSignal:int = 26
-TagDictionary:int = 27
-TagArray:int = 28
-TagPackedByteArray:int = 29
-TagPackedInt32Array:int = 30
-TagPackedInt64Array:int = 31
-TagPackedFloat32Array:int = 32
-TagPackedFloat64Array:int = 33
-TagPackedStringArray:int = 34
-TagPackedVector2Array:int = 35
-TagPackedVector3Array:int = 36
-TagPackedColorArray:int = 37
-TagPackedVector4Array:int = 38
-
 # --- Global functions --------------------------------------------------------
 
 # Godot's is_instance_valid, spelled the way @GlobalScope spells it rather than as a method on
