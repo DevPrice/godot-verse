@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "HostScript.h"
+#include "HostTypeModel.h"
 #include "AutoRTFM.h"
 #include "Containers/Map.h"
 #include "Containers/UnrealString.h"
@@ -94,6 +95,18 @@
 #include <cstdio>
 #include <thread>
 
+using GodotVerse::BindingsVersePath;
+using GodotVerse::ClassifyDeclaredType;
+using GodotVerse::ClassOriginOf;
+using GodotVerse::EClassOrigin;
+using GodotVerse::EDeclaredKind;
+using GodotVerse::FDeclaredType;
+using GodotVerse::FindStructLayout;
+using GodotVerse::GodotVersePath;
+using GodotVerse::QualifiedNameOf;
+using GodotVerse::ScriptVersePath;
+using GodotVerse::UnwrapDeclaredType;
+
 namespace {
 
 /// What every generation's package name starts with; the generation number finishes it.
@@ -103,12 +116,7 @@ namespace {
 /// exports LoaderImport and publishing that same package again asserts on the flag. A generation
 /// is therefore a name no publish has used, and a name the IDE owns cannot be one.
 constexpr const char* ScriptPackageBaseName = "GodotScripts";
-constexpr const char* ScriptVersePath = "/user@localhost";
 constexpr const char* MainFunctionName = "Main(:[][]char,:[[]char][]char)";
-
-/// Where the generated Godot API lives. A class resolving under this is one of the mirrors, which
-/// is what separates a reference ClassDB already knows the name of from one the project declared.
-constexpr const char* GodotVersePath = "/Godot.org/Godot";
 
 /// A second package sharing the native package's verse path, so a script's existing
 /// `using { /Godot.org/Godot }` reaches these definitions with no extra import.
@@ -119,13 +127,12 @@ constexpr const char* AttributeSnippetPath = "GodotAttributes.verse";
 /// The generated bindings (R-INT-7): every ClassDB class the mirror does not carry, and every
 /// script class with a `class_name`, as ordinary Verse subclasses of their mirrored base.
 ///
-/// A verse path of its own rather than the mirror's, so a binding whose name collides with a
+/// At BindingsVersePath rather than the mirror's, so a binding whose name collides with a
 /// mirrored one is an ambiguity the author resolves at the use site -- `(/Godot.org/Bindings:)timer`
 /// -- rather than a redefinition reported against a generated file nobody can edit. What that costs
 /// is that the package cannot see anything `<internal>` to the mirror, which is why `CallConst`
 /// exists (docs/generated-bindings.md 10.6).
 constexpr const char* BindingsPackageBaseName = "GodotBindings";
-constexpr const char* BindingsVersePath = "/Godot.org/Bindings";
 constexpr const char* BindingsSnippetPath = "GodotBindings.verse";
 
 /// The attributes this bridge owns, as Verse source compiled in this process.
@@ -2553,8 +2560,6 @@ AUTORTFM_DISABLE bool IsClassNamedAfterItsFile(const uLang::CDefinition& Definit
     return FUtf8String(Stem) == FUtf8String(Definition.AsNameCString());
 }
 
-AUTORTFM_DISABLE FUtf8String QualifiedNameOf(const uLang::CClass& Class);
-
 /// The name an answer carries as a definition's owner: the class for a member, and for a top-level
 /// definition the file it was written in, since a snippet scope carries its path as its name. That
 /// makes it a location as much as a name -- the Godot side tests the two against each other to
@@ -2582,14 +2587,6 @@ AUTORTFM_DISABLE FUtf8String OwnerNameOf(const uLang::CDefinition& Definition)
     return OwnerNameOf(Definition, FindMirrorDefinition(Definition));
 }
 
-/// The class every mirrored Godot class derives from. A member typed as one of its subclasses
-/// holds a *reference* the scene fills in, not a value the script owns, which is the whole of why
-/// such a member is treated differently from every other below.
-AUTORTFM_DISABLE const uLang::CClass* GodotObjectClass(const uLang::CSemanticProgram& Program)
-{
-    return Program.FindDefinitionByVersePath<uLang::CClass>("/Godot.org/Godot/object");
-}
-
 /// The enumerators of an enum, comma separated in declaration order, which is how Godot's enum
 /// hint spells the choices it offers.
 AUTORTFM_DISABLE FUtf8String EnumeratorList(const uLang::CEnumeration& Enumeration)
@@ -2605,46 +2602,6 @@ AUTORTFM_DISABLE FUtf8String EnumeratorList(const uLang::CEnumeration& Enumerati
     }
     return List;
 }
-
-/// The value type behind a member's declared type, with bOutIsOption saying whether an `option`
-/// was wrapped around it.
-///
-/// A `var` member's declared type is a pointer around the value type. That is unwrapped
-/// specifically rather than through CNormalType::GetInnerType, which also unwraps an array -- and
-/// Verse's `string` is `[]char`, so that route reports every string as a char.
-AUTORTFM_DISABLE const uLang::CNormalType& UnwrapDeclaredType(const uLang::CTypeBase& Type, bool& bOutIsOption)
-{
-    using namespace uLang;
-
-    const CNormalType* Normal = &Type.GetNormalType();
-    while (Normal->GetKind() == ETypeKind::Pointer || Normal->GetKind() == ETypeKind::Reference)
-    {
-        Normal = &static_cast<const CInvariantValueType*>(Normal)->PositiveValueType()->GetNormalType();
-    }
-
-    bOutIsOption = Normal->GetKind() == ETypeKind::Option;
-    if (bOutIsOption)
-    {
-        Normal = &static_cast<const COptionType&>(*Normal).GetValueType()->GetNormalType();
-    }
-    return *Normal;
-}
-
-/// Which package declares a class, as far as a reference to it is concerned.
-///
-/// The two kinds that can be exported differ in how Godot knows the class at all: a mirrored class
-/// names one ClassDB already has, while a class the project declares is known to Godot only if it
-/// registered itself with `@global_class`. Asking the program to resolve the class's own path is
-/// what proves which it is, and the third answer matters too -- a class nested inside another
-/// resolves as neither, and has no name an inspector slot could be filtered by.
-enum class EClassOrigin : uint8
-{
-    Other,
-    Mirrored,
-    Script,
-};
-
-AUTORTFM_DISABLE EClassOrigin ClassOriginOf(const uLang::CClass& Class, const uLang::CSemanticProgram& Program);
 
 /// The nearest mirrored class in Class's own superclass chain, Class included.
 ///
@@ -2667,23 +2624,6 @@ AUTORTFM_DISABLE FUtf8String NativeClassOf(const uLang::CClass& Class, const uLa
     return FUtf8String();
 }
 
-/// The qualified name of a class the semantic program holds: `player` at its package's root,
-/// `gameplay/player` inside a module. What every ClassNameUtf8 in the ABI carries, and the inverse
-/// of the split FindGodotClass does on one.
-///
-/// A class's own name stopped being enough to find it the moment two modules could each declare a
-/// `player`, and every path built by concatenating a name onto a package path needs this instead.
-AUTORTFM_DISABLE FUtf8String QualifiedNameOf(const uLang::CClass& Class)
-{
-    // The class's whole verse path, with the package's prefix taken off -- rather than
-    // EPathMode::PackageRelative, which reaches for the package's root module and is a fatal
-    // error rather than an empty answer for a class that has no package.
-    const FUtf8String Path = FULangConversionUtils::ULangStrToFUtf8String(
-        Class.GetScopePath(UTF8CHAR('/'), uLang::EPathMode::PrefixSeparator));
-    const FUtf8String Prefix = FUtf8String(ScriptVersePath) + UTF8TEXT("/");
-    return Path.StartsWith(Prefix) ? Path.RightChop(Prefix.Len()) : FUtf8String(Class.AsNameCString());
-}
-
 /// Whether Godot has a name for this class at all: `@global_class`, and being the class its own
 /// file is named after.
 ///
@@ -2697,66 +2637,11 @@ AUTORTFM_DISABLE bool RegistersWithGodot(const uLang::CClass& Class, const uLang
     return Class.HasAttributeSubclass(GlobalClassAttribute, Program) && IsClassNamedAfterItsFile(Class);
 }
 
-/// Verse's own `variant` -- the fixed-width lanes one Godot value of unknown type crosses as.
-///
-/// Matched on the whole verse path rather than on the name, because a project may declare a struct
-/// called `variant` in a module of its own and that one is an ordinary user struct. Asked without
-/// the program, unlike ClassOriginOf, so that the two places that need it -- the description and
-/// the "is this a struct the project wrote" test -- can both reach it.
-AUTORTFM_DISABLE bool IsVariantClass(const uLang::CClass& Class)
-{
-    if (!Class.IsStruct())
-    {
-        return false;
-    }
-    const FUtf8String Path = FULangConversionUtils::ULangStrToFUtf8String(
-        Class.GetScopePath(UTF8CHAR('/'), uLang::EPathMode::PrefixSeparator));
-    return Path.Equals(FUtf8String(GodotVersePath) + UTF8TEXT("/variant"));
-}
-
-/// `rid`, by whole verse path, for exactly the reason IsVariantClass exists: a struct the host must
-/// claim explicitly or watch fall into another classification. `rid` has one int field, so left
-/// alone it reads as an ordinary *user* struct -- and a method returning one then handed Godot a
-/// one-field tuple where a RID was meant. The parameter direction worked by accident, because
-/// InstanceCall's rule that N arguments satisfy an N-field struct filled it from the single int.
-AUTORTFM_DISABLE bool IsRidClass(const uLang::CClass& Class)
-{
-    if (!Class.IsStruct())
-    {
-        return false;
-    }
-    const FUtf8String Path = FULangConversionUtils::ULangStrToFUtf8String(
-        Class.GetScopePath(UTF8CHAR('/'), uLang::EPathMode::PrefixSeparator));
-    return Path.Equals(FUtf8String(GodotVersePath) + UTF8TEXT("/rid"));
-}
-
 /// The decorated key `rid`'s one field is stored under, the way ReadStructComponents builds one.
 /// Named once because it is read in one direction and written in the other.
 AUTORTFM_DISABLE FUtf8String RidFieldKey()
 {
     return FUtf8String(UTF8TEXT("(")) + GodotVersePath + UTF8TEXT("/rid:)Id");
-}
-
-
-AUTORTFM_DISABLE EClassOrigin ClassOriginOf(const uLang::CClass& Class, const uLang::CSemanticProgram& Program)
-{
-    const FUtf8String Name = QualifiedNameOf(Class);
-    const auto ResolvesAt = [&Class, &Program, &Name](const char* ScopePath) {
-        const FUtf8String Path = FUtf8String(ScopePath) + UTF8TEXT("/") + Name;
-        return Program.FindDefinitionByVersePath<uLang::CClass>(
-                   FULangConversionUtils::FUtf8StringViewToULangStringView(Path))
-            == &Class;
-    };
-
-    if (ResolvesAt(GodotVersePath))
-    {
-        return EClassOrigin::Mirrored;
-    }
-    if (ResolvesAt(ScriptVersePath))
-    {
-        return EClassOrigin::Script;
-    }
-    return EClassOrigin::Other;
 }
 
 /// Whether an Other-origin class is one of the generated bindings' own, rather than some other
@@ -2784,32 +2669,6 @@ AUTORTFM_DISABLE bool IsBindingClass(const uLang::CClass& Class, const uLang::CS
 // that the call sites below read as they did when there were three hand-written entries.
 using FStructLayout = verse_math::layout;
 using FStructField = verse_math::field;
-
-AUTORTFM_DISABLE const FStructLayout* FindStructLayout(FUtf8StringView VerseName)
-{
-    for (const FStructLayout& Layout : verse_math::layouts)
-    {
-        if (VerseName.Equals(FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Layout.verse_name))))
-        {
-            return &Layout;
-        }
-    }
-    return nullptr;
-}
-
-/// The layout of the struct a nested field holds.
-/// The Godot type a reference wrapper class names -- `godot_array` is an Array -- or 0.
-AUTORTFM_DISABLE int32 ReferenceVariantTag(FUtf8StringView VerseName)
-{
-    for (const verse_math::reference_type& Reference : verse_math::reference_types)
-    {
-        if (VerseName.Equals(FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Reference.verse_name))))
-        {
-            return Reference.variant_tag;
-        }
-    }
-    return 0;
-}
 
 AUTORTFM_DISABLE const FStructLayout* FindStructLayoutByTag(int32 VariantTag)
 {
@@ -2868,53 +2727,137 @@ AUTORTFM_DISABLE void DescribeArrayElement(const uLang::CTypeBase* ElementType,
                                            const uLang::CSemanticProgram& Program,
                                            GodotVerse::FExportDesc& OutDesc)
 {
-    using namespace uLang;
-
     if (!ElementType)
     {
         return;
     }
-    const CNormalType& Element = ElementType->GetNormalType();
+    const FDeclaredType Element = ClassifyDeclaredType(ElementType, Program);
 
-    switch (Element.GetKind())
+    VH_EXHAUSTIVE_SWITCH_BEGIN
+    switch (Element.Kind)
     {
-    case ETypeKind::Logic:
+    case EDeclaredKind::Logic:
         OutDesc.VariantTag = VH_VARIANT_ARRAY;
         OutDesc.ElementVariantTag = VH_VARIANT_BOOL;
         OutDesc.Reject = VH_EXPORT_OK;
         return;
-    case ETypeKind::Int:
+    case EDeclaredKind::Int:
         OutDesc.VariantTag = VH_VARIANT_PACKED_INT64_ARRAY;
         OutDesc.Reject = VH_EXPORT_OK;
         return;
-    case ETypeKind::Float:
+    case EDeclaredKind::Float:
         OutDesc.VariantTag = VH_VARIANT_PACKED_FLOAT64_ARRAY;
         OutDesc.Reject = VH_EXPORT_OK;
         return;
-    case ETypeKind::Array:
-        if (static_cast<const CArrayType&>(Element).IsStringType())
-        {
-            OutDesc.VariantTag = VH_VARIANT_PACKED_STRING_ARRAY;
-            OutDesc.Reject = VH_EXPORT_OK;
-        }
+    case EDeclaredKind::String:
+        OutDesc.VariantTag = VH_VARIANT_PACKED_STRING_ARRAY;
+        OutDesc.Reject = VH_EXPORT_OK;
         return;
-    default:
-        break;
+    // Each of the mirrored structs has a packed array in Godot.
+    case EDeclaredKind::MathStruct:
+        OutDesc.VariantTag = Element.Layout->packed_array_tag;
+        OutDesc.Reject = VH_EXPORT_OK;
+        return;
+    // A reference is deliberately not here: `[]node2d` cannot hold the empty element an array editor
+    // starts a new row as, which is the same objection VH_EXPORT_OBJECT_NOT_OPTIONAL makes about a
+    // bare reference.
+    case EDeclaredKind::Reference:
+    case EDeclaredKind::Other:
+    case EDeclaredKind::Char:
+    case EDeclaredKind::Enum:
+    case EDeclaredKind::Array:
+    case EDeclaredKind::Map:
+    case EDeclaredKind::Tuple:
+    case EDeclaredKind::Option:
+    case EDeclaredKind::Variant:
+    case EDeclaredKind::Rid:
+    case EDeclaredKind::UserStruct:
+    case EDeclaredKind::Container:
+    case EDeclaredKind::TypedContainer:
+    case EDeclaredKind::OtherClass:
+        return;
+    }
+    VH_EXHAUSTIVE_SWITCH_END
+}
+
+/// A Godot object reference as the inspector sees it: a handle the consumer rebuilds an object
+/// from, and an optional one as an option around that.
+AUTORTFM_DISABLE void DescribeReferenceExport(const FDeclaredType& Declared,
+                                              const uLang::CSemanticProgram& Program,
+                                              GodotVerse::FExportDesc& OutDesc)
+{
+    const uLang::CClass& Class = *Declared.Class;
+    const EClassOrigin Origin = Declared.Origin;
+    OutDesc.Type = Declared.bIsOption ? VH_TYPE_OPTION : VH_TYPE_INT;
+    OutDesc.VariantTag = VH_VARIANT_OBJECT;
+    OutDesc.Hint = Origin == EClassOrigin::Script ? VH_EXPORT_HINT_SCRIPT_CLASS : VH_EXPORT_HINT_CLASS;
+    // Qualified for a script class, so the consumer can find the class the hint names; a
+    // mirrored one is Godot's own and has no module to qualify with.
+    OutDesc.HintString = Origin == EClassOrigin::Script
+        ? QualifiedNameOf(Class)
+        : FUtf8String(Class.AsNameCString());
+    OutDesc.NativeClass = NativeClassOf(Class, Program);
+
+    // Nothing can force a value into an inspector slot, so a member that cannot hold the empty
+    // case has a declared type the scene can always violate. The Verse spelling that compiles
+    // without an option, `node2d{}`, is a handle of 0: a reference dead from birth, and
+    // indistinguishable from one freed later.
+    if (!Declared.bIsOption)
+    {
+        OutDesc.Reject = VH_EXPORT_OBJECT_NOT_OPTIONAL;
+        return;
     }
 
-    // A mirrored struct, each of which Godot has a packed array for. A reference is deliberately not
-    // here: `[]node2d` cannot hold the empty element an array editor starts a new row as, which is
-    // the same objection VH_EXPORT_OBJECT_NOT_OPTIONAL makes about a bare reference.
-    if (const CClass* Class = Element.AsNullable<CClass>())
+    if (Origin == EClassOrigin::Script)
     {
-        const FStructLayout* Layout = ClassOriginOf(*Class, Program) == EClassOrigin::Mirrored
-            ? FindStructLayout(FUtf8StringView(Class->AsNameCString()))
-            : nullptr;
-        if (Layout)
+        // The inspector filters a slot by a Godot class name, and only a class Godot has
+        // *registered* has one. Two things are needed for that and testing one of them was a
+        // defect an author met within minutes: `@global_class`, and being the class **named
+        // after its own file**.
+        //
+        // The second is Godot's constraint rather than this bridge's preference, which is worth
+        // knowing before trying to lift it. A global class is collected per *path* --
+        // `_get_global_class_name` is a per-path virtual answering one name
+        // (`script_language_extension.h:754`), and `EditorFileSystem::_get_global_script_class`
+        // takes one `info.name` from it -- and `ScriptServer` maps that name back to the path,
+        // so `load(path)` has to yield that one class. A second global class in one file has
+        // nowhere to live.
+        //
+        // **So the member is exported anyway, filtered by the nearest mirrored Godot class.**
+        // Refusing it would be the bridge deciding an author may not export a Resource because
+        // of where they put the class, which is not its decision to make; a `Resource` picker
+        // that accepts a `.tres` of that class is worth far more than no slot at all. This is
+        // GDScript's own rule -- `_find_narrowest_native_or_global_class`, the *or* being the
+        // half this used to skip. `by-hand-findings.md` B19.
+        const bool bRegisters = RegistersWithGodot(Class, Program);
+        if (!bRegisters)
         {
-            OutDesc.VariantTag = Layout->packed_array_tag;
-            OutDesc.Reject = VH_EXPORT_OK;
+            OutDesc.Hint = VH_EXPORT_HINT_CLASS;
+            OutDesc.HintString = OutDesc.NativeClass;
+            OutDesc.Reject = OutDesc.NativeClass.IsEmpty() ? VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL
+                                                          : VH_EXPORT_OK;
+            return;
         }
+        OutDesc.Reject = VH_EXPORT_OK;
+        return;
+    }
+
+    if (Origin == EClassOrigin::Mirrored)
+    {
+        OutDesc.Reject = VH_EXPORT_OK;
+    }
+    else if (IsBindingClass(Class, Program))
+    {
+        // Its own reason rather than VH_EXPORT_UNSUPPORTED_TYPE's generic one: the inspector
+        // has no picker for a generated-binding class, but *why* differs from an unsupported
+        // value type, and NativeClassOf above has already found the native base to suggest
+        // exporting instead, when the binding's chain reaches one. Out of scope to lift this
+        // by design (docs/generated-bindings.md); support is deferred, not refused for good.
+        OutDesc.Reject = VH_EXPORT_BINDING_CLASS_UNSUPPORTED;
+    }
+    else
+    {
+        OutDesc.Reject = VH_EXPORT_UNSUPPORTED_TYPE;
     }
 }
 
@@ -2928,195 +2871,91 @@ AUTORTFM_DISABLE void DescribeArrayElement(const uLang::CTypeBase* ElementType,
 /// from those bounds and the language agree by construction, rather than because the author wrote
 /// the same two numbers twice. An enum is already a list of choices. A mirrored class is already
 /// the name of the node or resource the slot will accept.
-AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLang::CSemanticProgram& Program, GodotVerse::FExportDesc& OutDesc)
+AUTORTFM_DISABLE void DescribeExportTypeOf(const FDeclaredType& Declared,
+                                           const uLang::CSemanticProgram& Program,
+                                           GodotVerse::FExportDesc& OutDesc)
 {
     using namespace uLang;
 
     OutDesc.Reject = VH_EXPORT_UNSUPPORTED_TYPE;
-    if (!Type)
+
+    VH_EXHAUSTIVE_SWITCH_BEGIN
+    switch (Declared.Kind)
     {
+    case EDeclaredKind::Other:
         return;
-    }
 
-    bool bIsOption = false;
-    const CNormalType* Normal = &UnwrapDeclaredType(*Type, bIsOption);
-
-    if (const CClass* Class = Normal->AsNullable<CClass>())
-    {
-        const CClass* ObjectClass = GodotObjectClass(Program);
-        if (!ObjectClass || !Class->IsSubtypeOf(*ObjectClass))
-        {
-            // Not a reference, so an option around it is asking for an empty slot Godot has no way
-            // to draw -- that much is true of a struct and of a class the script wrote alike.
-            if (bIsOption)
-            {
-                OutDesc.Reject = VH_EXPORT_OPTION_NOT_OBJECT;
-                return;
-            }
-
-            // `variant` is any Godot value at all, which is a thing to *declare* rather than a
-            // shape: what crosses is whatever the variant holds, so the wire type says "anything"
-            // and the consumer turns that into Godot's NIL_IS_VARIANT. Not exportable for the
-            // reason an Array is not -- the inspector has no editor for a value with no type.
-            if (IsVariantClass(*Class))
-            {
-                OutDesc.Type = VH_TYPE_VARIANT;
-                OutDesc.VariantTag = VH_VARIANT_NIL;
-                OutDesc.Reject = VH_EXPORT_UNSUPPORTED_TYPE;
-                return;
-            }
-
-            // A RID is a scalar on this wire -- VH_TYPE_INT under its own variant tag -- rather
-            // than the one-field tuple its Verse struct looks like. Typed here so a method taking
-            // or answering one reaches Godot as a RID; not exportable, because a RID names a live
-            // entry in a server's table and nothing about it survives being written to a scene.
-            if (IsRidClass(*Class))
-            {
-                OutDesc.Type = VH_TYPE_INT;
-                OutDesc.VariantTag = VH_VARIANT_RID;
-                OutDesc.Reject = VH_EXPORT_UNSUPPORTED_TYPE;
-                return;
-            }
-
-            // A reference wrapper -- godot_array, dictionary, callable, signal_ref -- names a
-            // Godot type that crosses as an id rather than as a value. Typed here so a method
-            // taking one reports the right argument type to Godot; rejected for *export* in the
-            // same breath, because the inspector has no editor for an arbitrary Array.
-            if (const int32 ReferenceTag = ReferenceVariantTag(FUtf8StringView(Class->AsNameCString())))
-            {
-                OutDesc.Type = VH_TYPE_REF;
-                OutDesc.VariantTag = ReferenceTag;
-                OutDesc.Reject = VH_EXPORT_UNSUPPORTED_TYPE;
-                return;
-            }
-
-            // A mirrored struct is a value the inspector draws with an editor of its own: a colour
-            // picker, a pair of spinboxes. It crosses as the numbers it is made of, tagged with
-            // which Godot type to rebuild from them.
-            const FStructLayout* Layout = ClassOriginOf(*Class, Program) == EClassOrigin::Mirrored
-                ? FindStructLayout(FUtf8StringView(Class->AsNameCString()))
-                : nullptr;
-            if (Layout)
-            {
-                OutDesc.Type = VH_TYPE_TUPLE;
-                OutDesc.VariantTag = Layout->variant_tag;
-                OutDesc.Reject = VH_EXPORT_OK;
-                return;
-            }
-
-            OutDesc.Reject = VH_EXPORT_UNSUPPORTED_TYPE;
-            return;
-        }
-
-        // A reference crosses as the handle it is, which is an int the consumer rebuilds as an
-        // object; an optional one crosses as an option around that.
-        const EClassOrigin Origin = ClassOriginOf(*Class, Program);
-        OutDesc.Type = bIsOption ? VH_TYPE_OPTION : VH_TYPE_INT;
-        OutDesc.VariantTag = VH_VARIANT_OBJECT;
-        OutDesc.Hint = Origin == EClassOrigin::Script ? VH_EXPORT_HINT_SCRIPT_CLASS : VH_EXPORT_HINT_CLASS;
-        // Qualified for a script class, so the consumer can find the class the hint names; a
-        // mirrored one is Godot's own and has no module to qualify with.
-        OutDesc.HintString = Origin == EClassOrigin::Script
-            ? QualifiedNameOf(*Class)
-            : FUtf8String(Class->AsNameCString());
-        OutDesc.NativeClass = NativeClassOf(*Class, Program);
-
-        // Nothing can force a value into an inspector slot, so a member that cannot hold the empty
-        // case has a declared type the scene can always violate. The Verse spelling that compiles
-        // without an option, `node2d{}`, is a handle of 0: a reference dead from birth, and
-        // indistinguishable from one freed later.
-        if (!bIsOption)
-        {
-            OutDesc.Reject = VH_EXPORT_OBJECT_NOT_OPTIONAL;
-            return;
-        }
-
-        if (Origin == EClassOrigin::Script)
-        {
-            // The inspector filters a slot by a Godot class name, and only a class Godot has
-            // *registered* has one. Two things are needed for that and testing one of them was a
-            // defect an author met within minutes: `@global_class`, and being the class **named
-            // after its own file**.
-            //
-            // The second is Godot's constraint rather than this bridge's preference, which is worth
-            // knowing before trying to lift it. A global class is collected per *path* --
-            // `_get_global_class_name` is a per-path virtual answering one name
-            // (`script_language_extension.h:754`), and `EditorFileSystem::_get_global_script_class`
-            // takes one `info.name` from it -- and `ScriptServer` maps that name back to the path,
-            // so `load(path)` has to yield that one class. A second global class in one file has
-            // nowhere to live.
-            //
-            // **So the member is exported anyway, filtered by the nearest mirrored Godot class.**
-            // Refusing it would be the bridge deciding an author may not export a Resource because
-            // of where they put the class, which is not its decision to make; a `Resource` picker
-            // that accepts a `.tres` of that class is worth far more than no slot at all. This is
-            // GDScript's own rule -- `_find_narrowest_native_or_global_class`, the *or* being the
-            // half this used to skip. `by-hand-findings.md` B19.
-            const bool bRegisters = RegistersWithGodot(*Class, Program);
-            if (!bRegisters)
-            {
-                OutDesc.Hint = VH_EXPORT_HINT_CLASS;
-                OutDesc.HintString = OutDesc.NativeClass;
-                OutDesc.Reject = OutDesc.NativeClass.IsEmpty() ? VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL
-                                                              : VH_EXPORT_OK;
-                return;
-            }
-            OutDesc.Reject = VH_EXPORT_OK;
-            return;
-        }
-
-        if (Origin == EClassOrigin::Mirrored)
-        {
-            OutDesc.Reject = VH_EXPORT_OK;
-        }
-        else if (IsBindingClass(*Class, Program))
-        {
-            // Its own reason rather than VH_EXPORT_UNSUPPORTED_TYPE's generic one: the inspector
-            // has no picker for a generated-binding class, but *why* differs from an unsupported
-            // value type, and NativeClassOf above has already found the native base to suggest
-            // exporting instead, when the binding's chain reaches one. Out of scope to lift this
-            // by design (docs/generated-bindings.md); support is deferred, not refused for good.
-            OutDesc.Reject = VH_EXPORT_BINDING_CLASS_UNSUPPORTED;
-        }
-        else
-        {
-            OutDesc.Reject = VH_EXPORT_UNSUPPORTED_TYPE;
-        }
-        return;
-    }
-
-    if (bIsOption)
-    {
+    // An empty slot Godot has no way to draw, whatever the option holds.
+    case EDeclaredKind::Option:
         OutDesc.Reject = VH_EXPORT_OPTION_NOT_OBJECT;
         return;
-    }
 
-    if (const CEnumeration* Enumeration = Normal->AsNullable<CEnumeration>())
-    {
-        // The ordinal, which is what GDScript and C# store too -- including the trap that reordering
-        // the enumerators reinterprets every scene already saved.
+    case EDeclaredKind::Reference:
+        DescribeReferenceExport(Declared, Program, OutDesc);
+        return;
+
+    // `variant` is any Godot value at all, which is a thing to *declare* rather than a shape: what
+    // crosses is whatever the variant holds, so the wire type says "anything" and the consumer
+    // turns that into Godot's NIL_IS_VARIANT. Not exportable for the reason an Array is not -- the
+    // inspector has no editor for a value with no type.
+    case EDeclaredKind::Variant:
+        OutDesc.Type = VH_TYPE_VARIANT;
+        OutDesc.VariantTag = VH_VARIANT_NIL;
+        return;
+
+    // A RID is a scalar on this wire -- VH_TYPE_INT under its own variant tag -- rather than the
+    // one-field tuple its Verse struct looks like. Typed here so a method taking or answering one
+    // reaches Godot as a RID; not exportable, because a RID names a live entry in a server's table
+    // and nothing about it survives being written to a scene.
+    case EDeclaredKind::Rid:
+        OutDesc.Type = VH_TYPE_INT;
+        OutDesc.VariantTag = VH_VARIANT_RID;
+        return;
+
+    // A reference wrapper names a Godot type that crosses as an id rather than as a value. Typed
+    // here so a method taking one reports the right argument type to Godot; rejected for *export*
+    // in the same breath, because the inspector has no editor for an arbitrary Array.
+    case EDeclaredKind::Container:
+        OutDesc.Type = VH_TYPE_REF;
+        OutDesc.VariantTag = Declared.ContainerTag;
+        return;
+
+    // A mirrored struct is a value the inspector draws with an editor of its own: a colour picker,
+    // a pair of spinboxes. It crosses as the numbers it is made of, tagged with which Godot type
+    // to rebuild from them.
+    case EDeclaredKind::MathStruct:
+        OutDesc.Type = VH_TYPE_TUPLE;
+        OutDesc.VariantTag = Declared.Layout->variant_tag;
+        OutDesc.Reject = VH_EXPORT_OK;
+        return;
+
+    case EDeclaredKind::UserStruct:
+    case EDeclaredKind::TypedContainer:
+    case EDeclaredKind::OtherClass:
+        return;
+
+    // The ordinal, which is what GDScript and C# store too -- including the trap that reordering
+    // the enumerators reinterprets every scene already saved.
+    case EDeclaredKind::Enum:
         OutDesc.Type = VH_TYPE_INT;
         OutDesc.VariantTag = VH_VARIANT_INT;
         OutDesc.Hint = VH_EXPORT_HINT_ENUM;
-        OutDesc.HintString = EnumeratorList(*Enumeration);
+        OutDesc.HintString = EnumeratorList(*Declared.Enumeration);
         OutDesc.Reject = VH_EXPORT_OK;
         return;
-    }
 
-    switch (Normal->GetKind())
-    {
-    case ETypeKind::Logic:
+    case EDeclaredKind::Logic:
         OutDesc.Type = VH_TYPE_LOGIC;
         OutDesc.VariantTag = VH_VARIANT_BOOL;
         OutDesc.Reject = VH_EXPORT_OK;
-        break;
+        return;
 
-    case ETypeKind::Int:
+    case EDeclaredKind::Int:
     {
         OutDesc.Type = VH_TYPE_INT;
         OutDesc.VariantTag = VH_VARIANT_INT;
         OutDesc.Reject = VH_EXPORT_OK;
-        const CIntType& IntType = static_cast<const CIntType&>(*Normal);
+        const CIntType& IntType = Declared.Normal->AsChecked<CIntType>();
         OutDesc.bHasRangeMin = IntType.GetMin().IsFinite();
         OutDesc.bHasRangeMax = IntType.GetMax().IsFinite();
         OutDesc.RangeMin = OutDesc.bHasRangeMin ? (double)IntType.GetMin().GetFiniteInt() : 0.0;
@@ -3125,10 +2964,10 @@ AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLa
         {
             OutDesc.Hint = VH_EXPORT_HINT_RANGE;
         }
-        break;
+        return;
     }
 
-    case ETypeKind::Float:
+    case EDeclaredKind::Float:
     {
         OutDesc.Type = VH_TYPE_FLOAT;
         OutDesc.VariantTag = VH_VARIANT_FLOAT;
@@ -3138,7 +2977,7 @@ AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLa
         //
         // A strict bound needs no special case: `_X < 500.0` is the double below 500.0, and the
         // consumer rounds inward to its own step, which lands under 500 from either spelling.
-        const CFloatType& FloatType = static_cast<const CFloatType&>(*Normal);
+        const CFloatType& FloatType = Declared.Normal->AsChecked<CFloatType>();
         OutDesc.bHasRangeMin = FMath::IsFinite(FloatType.GetMin());
         OutDesc.bHasRangeMax = FMath::IsFinite(FloatType.GetMax());
         OutDesc.RangeMin = OutDesc.bHasRangeMin ? FloatType.GetMin() : 0.0;
@@ -3147,40 +2986,38 @@ AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLa
         {
             OutDesc.Hint = VH_EXPORT_HINT_RANGE;
         }
-        break;
+        return;
     }
 
-    case ETypeKind::Char8:
-    case ETypeKind::Char32:
+    case EDeclaredKind::Char:
         OutDesc.Type = VH_TYPE_CHAR;
-        break;
+        return;
 
-    case ETypeKind::Array:
-    {
-        const CArrayType& ArrayType = static_cast<const CArrayType&>(*Normal);
-        if (ArrayType.IsStringType())
-        {
-            OutDesc.Type = VH_TYPE_STRING;
-            OutDesc.VariantTag = VH_VARIANT_STRING;
-            OutDesc.Reject = VH_EXPORT_OK;
-            break;
-        }
+    case EDeclaredKind::String:
+        OutDesc.Type = VH_TYPE_STRING;
+        OutDesc.VariantTag = VH_VARIANT_STRING;
+        OutDesc.Reject = VH_EXPORT_OK;
+        return;
+
+    case EDeclaredKind::Array:
         OutDesc.Type = VH_TYPE_ARRAY;
-        DescribeArrayElement(ArrayType.GetElementType(), Program, OutDesc);
-        break;
-    }
+        DescribeArrayElement(Declared.Element, Program, OutDesc);
+        return;
 
-    case ETypeKind::Map:
+    case EDeclaredKind::Map:
         OutDesc.Type = VH_TYPE_MAP;
-        break;
+        return;
 
-    case ETypeKind::Tuple:
+    case EDeclaredKind::Tuple:
         OutDesc.Type = VH_TYPE_TUPLE;
-        break;
-
-    default:
-        break;
+        return;
     }
+    VH_EXHAUSTIVE_SWITCH_END
+}
+
+AUTORTFM_DISABLE void DescribeExportType(const uLang::CTypeBase* Type, const uLang::CSemanticProgram& Program, GodotVerse::FExportDesc& OutDesc)
+{
+    DescribeExportTypeOf(ClassifyDeclaredType(Type, Program), Program, OutDesc);
 }
 } // namespace
 
@@ -3194,6 +3031,9 @@ namespace {
 /// empty slot does not name one.
 struct FMemberType
 {
+    /// What ClassifyDeclaredType answered, which is what the converters switch over. A sidecar does
+    /// not carry it: ReadMemberType recovers it from the fields below (RecordedKind).
+    EDeclaredKind Kind = EDeclaredKind::Other;
     const uLang::CDataDefinition* Member = nullptr;
     /// Whether the member was declared `var`. The *pointer* above answered this until a runtime
     /// host had to: `Member->IsVar()` is null there, which read as "every member is read-only" and
@@ -3382,10 +3222,6 @@ AUTORTFM_DISABLE const GodotVerse::FDeclaredTypes* RecordedTypes(FUtf8StringView
 /// lookup that consumes it.
 AUTORTFM_DISABLE FUtf8String DecoratedNameOf(const uLang::CDefinition& Definition);
 
-/// A struct the project declares, or null for anything else -- a class, an interface, or one of
-/// Godot's sixteen math structs, which have a generated layout and are not this.
-AUTORTFM_DISABLE const uLang::CClass* UserStructClass(const uLang::CNormalType& Normal);
-
 /// Fills OutLayout from Struct's own fields, base class first.
 ///
 /// One walk, used by both directions: `DescribePayload` names Godot's arguments from it and
@@ -3402,95 +3238,118 @@ AUTORTFM_DISABLE void CollectStructFields(const uLang::CClass& Struct,
 /// pair of converters serve both field access and dispatch.
 AUTORTFM_DISABLE FMemberType DescribeType(const uLang::CTypeBase* Type, const uLang::CSemanticProgram& Program)
 {
-    FMemberType Result;
+    const FDeclaredType Declared = ClassifyDeclaredType(Type, Program);
 
-    bool bIsOption = false;
-    const uLang::CNormalType* Normal = Type ? &UnwrapDeclaredType(*Type, bIsOption) : nullptr;
-    DescribeExportType(Type, Program, Result.Described);
-    if (const uLang::CClass* Declared = Normal ? Normal->AsNullable<uLang::CClass>() : nullptr)
-    {
-        // Three things in the mirror are spelled as a class and are not a Godot *object*: the
-        // sixteen math types, which are structs; the container wrappers, which carry a reference id;
-        // and the parametric typed containers over them. Only what is left is a handle to build a
-        // wrapper from, and only for it does the option/bare distinction below mean anything.
-        const FUtf8StringView Name = FUtf8StringView(Declared->AsNameCString());
-        const bool bIsContainer = ReferenceVariantTag(Name) != 0
-            || Name.StartsWith(UTF8TEXT("typed_array"))
-            || Name.StartsWith(UTF8TEXT("typed_dictionary"));
-        const FStructLayout* const Layout = bIsOption ? nullptr : FindStructLayout(Name);
-        const uLang::CClass* const UserStruct = bIsOption ? nullptr : UserStructClass(*Normal);
-        if (IsVariantClass(*Declared) || IsRidClass(*Declared))
-        {
-            // Nothing beyond what DescribeExportType already said. `variant` is neither a shape to
-            // read fields off nor a handle to build a wrapper from, and leaving it to fall through
-            // to the reference arm below -- which is where a struct nothing else claims lands --
-            // had every `variant` parameter refused as a handle to a class Godot has never heard of.
-            //
-            // `rid` is here for the identical reason and cost the identical afternoon: taking it
-            // out of UserStructClass without claiming it here dropped it into the reference arm,
-            // and a method answering one handed Godot a null while one taking one was refused with
-            // the immortal "Cannot convert argument 2 from RID to RID".
-        }
-        else if (Layout)
-        {
-            Result.Struct = Layout;
-            Result.StructName = FUtf8String(Name);
-        }
-        else if (UserStruct)
-        {
-            // A struct the project declared. Not a reference -- it is a value, and calling it one
-            // was what sent a struct-typed parameter down the handle path to be refused there.
-            Result.UserStruct = MakeShared<FUserStructLayout>();
-            Result.UserStruct->DecoratedName = DecoratedNameOf(*UserStruct);
-            CollectStructFields(*UserStruct, Program, *Result.UserStruct);
-        }
-        else if (bIsOption || !bIsContainer)
-        {
-            Result.ReferenceClass = Declared;
-            Result.ReferenceName = FUtf8String(Name);
-            Result.ReferenceQualifiedName = QualifiedNameOf(*Declared);
-            Result.ReferenceOrigin = ClassOriginOf(*Declared, Program);
-            Result.bReferenceIsOption = bIsOption;
-        }
-    }
-    else if (const uLang::CEnumeration* Enumeration = Normal ? Normal->AsNullable<uLang::CEnumeration>() : nullptr)
-    {
-        for (const uLang::TSRef<uLang::CEnumerator>& Enumerator : Enumeration->GetDefinitionsOfKind<uLang::CEnumerator>())
+    FMemberType Result;
+    Result.Kind = Declared.Kind;
+    DescribeExportTypeOf(Declared, Program, Result.Described);
+
+    // A handle to build a wrapper from. An option around any class but `variant` and `rid` is
+    // described as one, whatever the class is, because that is where the option/bare distinction
+    // the converters read lives.
+    const auto DescribeReference = [&Result, &Declared](bool bIsOption) {
+        Result.ReferenceClass = Declared.Class;
+        Result.ReferenceName = FUtf8String(Declared.Class->AsNameCString());
+        Result.ReferenceQualifiedName = QualifiedNameOf(*Declared.Class);
+        Result.ReferenceOrigin = Declared.Origin;
+        Result.bReferenceIsOption = bIsOption;
+    };
+    const auto DescribeEnumeration = [&Result](const uLang::CEnumeration& Enumeration) {
+        for (const uLang::TSRef<uLang::CEnumerator>& Enumerator : Enumeration.GetDefinitionsOfKind<uLang::CEnumerator>())
         {
             (void)Enumerator;
             ++Result.EnumeratorCount;
         }
         Result.EnumerationName = FUtf8String(UTF8TEXT("("))
             + FULangConversionUtils::ULangStrToFUtf8String(
-                  Enumeration->_EnclosingScope.GetScopePath('/', uLang::CScope::EPathMode::PrefixSeparator))
-            + UTF8TEXT(":)") + FUtf8String(Enumeration->AsNameCString());
-    }
-    return Result;
-}
+                  Enumeration._EnclosingScope.GetScopePath('/', uLang::CScope::EPathMode::PrefixSeparator))
+            + UTF8TEXT(":)") + FUtf8String(Enumeration.AsNameCString());
+    };
 
-AUTORTFM_DISABLE const uLang::CClass* UserStructClass(const uLang::CNormalType& Normal)
-{
-    const uLang::CClass* const Class = Normal.AsNullable<uLang::CClass>();
-    if (!Class || !Class->IsStruct())
+    VH_EXHAUSTIVE_SWITCH_BEGIN
+    switch (Declared.Kind)
     {
-        return nullptr;
+    case EDeclaredKind::Reference:
+        DescribeReference(Declared.bIsOption);
+        break;
+    // Not a Godot object, and still a class the converters build a wrapper for: a `signal(t)`
+    // member's payload is read off the class recorded here.
+    case EDeclaredKind::OtherClass:
+        DescribeReference(false);
+        break;
+
+    case EDeclaredKind::MathStruct:
+        Result.Struct = Declared.Layout;
+        Result.StructName = FUtf8String(Declared.Class->AsNameCString());
+        break;
+
+    // A struct the project declared. Not a reference -- it is a value, and calling it one was what
+    // sent a struct-typed parameter down the handle path to be refused there.
+    case EDeclaredKind::UserStruct:
+        Result.UserStruct = MakeShared<FUserStructLayout>();
+        Result.UserStruct->DecoratedName = DecoratedNameOf(*Declared.Class);
+        CollectStructFields(*Declared.Class, Program, *Result.UserStruct);
+        break;
+
+    case EDeclaredKind::Enum:
+        DescribeEnumeration(*Declared.Enumeration);
+        break;
+
+    case EDeclaredKind::Option:
+        VH_EXHAUSTIVE_SWITCH_BEGIN
+        switch (Declared.OptionOf)
+        {
+        case EDeclaredKind::MathStruct:
+        case EDeclaredKind::UserStruct:
+        case EDeclaredKind::Container:
+        case EDeclaredKind::TypedContainer:
+        case EDeclaredKind::OtherClass:
+            DescribeReference(true);
+            break;
+        case EDeclaredKind::Enum:
+            DescribeEnumeration(*Declared.Enumeration);
+            break;
+        // `variant` and `rid` are neither a shape nor a handle, optional or not: leaving either to
+        // the reference arm had every parameter of it refused as a handle to a class Godot has
+        // never heard of ("Cannot convert argument 2 from RID to RID").
+        case EDeclaredKind::Variant:
+        case EDeclaredKind::Rid:
+        case EDeclaredKind::Reference:
+        case EDeclaredKind::Option:
+        case EDeclaredKind::Other:
+        case EDeclaredKind::Logic:
+        case EDeclaredKind::Int:
+        case EDeclaredKind::Float:
+        case EDeclaredKind::Char:
+        case EDeclaredKind::String:
+        case EDeclaredKind::Array:
+        case EDeclaredKind::Map:
+        case EDeclaredKind::Tuple:
+            break;
+        }
+        VH_EXHAUSTIVE_SWITCH_END
+        break;
+
+    // Nothing beyond what the export description already says: `variant` and `rid` are neither a
+    // shape to read fields off nor a handle to build a wrapper from, and a container's id is the
+    // whole of its value.
+    case EDeclaredKind::Variant:
+    case EDeclaredKind::Rid:
+    case EDeclaredKind::Container:
+    case EDeclaredKind::TypedContainer:
+    case EDeclaredKind::Other:
+    case EDeclaredKind::Logic:
+    case EDeclaredKind::Int:
+    case EDeclaredKind::Float:
+    case EDeclaredKind::Char:
+    case EDeclaredKind::String:
+    case EDeclaredKind::Array:
+    case EDeclaredKind::Map:
+    case EDeclaredKind::Tuple:
+        break;
     }
-    // `variant` is a struct too, and the one struct in the mirror that is not a *shape*: it has 22
-    // lanes and a script never fills them positionally. Left to DescribeExportType, which types it
-    // as VH_TYPE_VARIANT; treated as a user struct it asked Godot for 22 arguments per parameter.
-    if (IsVariantClass(*Class))
-    {
-        return nullptr;
-    }
-    // `rid` for the same reason and a different shape: one int field, so it is the struct most
-    // likely to pass for a user's own, and as one it crosses as a tuple instead of as a RID.
-    if (IsRidClass(*Class))
-    {
-        return nullptr;
-    }
-    // FindStructLayout is what tells Godot's sixteen apart from a project's own: they are structs
-    // too, and they cross as the packed components a Vector2 is made of rather than field by field.
-    return FindStructLayout(FUtf8StringView(Class->AsNameCString())) ? nullptr : Class;
+    VH_EXHAUSTIVE_SWITCH_END
+    return Result;
 }
 
 AUTORTFM_DISABLE void CollectStructFields(const uLang::CClass& Struct,
@@ -3934,11 +3793,14 @@ AUTORTFM_DISABLE bool ValueToWire(Verse::FRunningContext Context,
                                   GodotVerse::FFieldStorage& OutStorage,
                                   vh_value& OutValue)
 {
+    VH_EXHAUSTIVE_SWITCH_BEGIN
+    switch (Declared.Kind)
+    {
     // `variant` first, because none of the tests below would recognise one: it is a VNativeStruct
     // boxing the 22 lanes, which is neither an option, nor a logic, nor a VValueObject. The
     // declaration is the only thing that says so, which is the general rule this function is built
     // on arriving at its widest case.
-    if (Declared.Described.Type == VH_TYPE_VARIANT)
+    case EDeclaredKind::Variant:
     {
         // DynamicCast before FNativeConverter, whose own FromVValue is a StaticCast: the declared
         // type says what this should be and a value that is not one must decline rather than
@@ -3961,10 +3823,31 @@ AUTORTFM_DISABLE bool ValueToWire(Verse::FRunningContext Context,
     // A `rid` is a struct whose description says VH_TYPE_INT, so it has to be unwrapped here:
     // nothing below recognises it, and the plain int arm would find a VValueObject where it wants
     // an int. Same discovery `MakeVariant` uses -- one ReadRidStruct, not two that can disagree.
-    if (Declared.Described.Type == VH_TYPE_INT && Declared.Described.VariantTag == VH_VARIANT_RID)
-    {
+    case EDeclaredKind::Rid:
         return ReadRidStruct(Context, Value, OutValue);
+
+    // Everything else is read off the value, going back to the declaration only where the value
+    // cannot say -- an empty option, an empty array, a struct's field order.
+    case EDeclaredKind::Reference:
+    case EDeclaredKind::OtherClass:
+    case EDeclaredKind::Option:
+    case EDeclaredKind::Container:
+    case EDeclaredKind::TypedContainer:
+    case EDeclaredKind::MathStruct:
+    case EDeclaredKind::UserStruct:
+    case EDeclaredKind::Other:
+    case EDeclaredKind::Logic:
+    case EDeclaredKind::Int:
+    case EDeclaredKind::Float:
+    case EDeclaredKind::Char:
+    case EDeclaredKind::String:
+    case EDeclaredKind::Enum:
+    case EDeclaredKind::Array:
+    case EDeclaredKind::Map:
+    case EDeclaredKind::Tuple:
+        break;
     }
+    VH_EXHAUSTIVE_SWITCH_END
 
     // A reference, before the logic test rather than after it, because Verse's two spellings
     // collide: `true` is an option around `false`, and an empty option *is* `false`. A set
@@ -5215,19 +5098,37 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
         return true;
     }
 
+    // An enum parameter takes its ordinal, bounded by the enum the author declared rather than
+    // clamped into it -- an ordinal with no enumerator is a caller that disagrees with the script
+    // about the enum, which is worth reporting rather than silently reinterpreting.
+    const auto EnumeratorFromWire = [&Value, &Declared, &OutValue]() {
+        if (Value.Type != VH_TYPE_INT || Value.Int < 0 || Value.Int >= Declared.EnumeratorCount)
+        {
+            return false;
+        }
+        Verse::VEnumeration* const Enumeration = FindVEnumeration(FUtf8StringView(Declared.EnumerationName));
+        if (!Enumeration || Value.Int >= Enumeration->NumEnumerators)
+        {
+            return false;
+        }
+        OutValue = Verse::VValue(Enumeration->GetEnumeratorChecked((int32)Value.Int));
+        return true;
+    };
+
+    VH_EXHAUSTIVE_SWITCH_BEGIN
+    switch (Declared.Kind)
+    {
     // `variant`: any Godot value at all, so nothing about the wire value has to be checked -- the
     // lanes take whatever arrived, including Godot's own null, which is the nil tag. Boxed by
     // FNativeConverter, which is what VNI's generated glue calls for a native struct parameter.
-    if (Desc.Type == VH_TYPE_VARIANT)
-    {
+    case EDeclaredKind::Variant:
         OutValue = Verse::FNativeConverter::ToVValue(Context, GodotVerse::VariantFromWire(Value));
         return true;
-    }
 
     // A reference wrapper: the id is the whole of the value, and the Verse object exists to hold
     // it and to release it when collected. Built through the UObject path rather than as a VM cell
     // for exactly that reason -- a cell has no destructor, and an id nobody releases is a leak.
-    if (Desc.Type == VH_TYPE_REF)
+    case EDeclaredKind::Container:
     {
         const int64 Id = Value.Type == VH_TYPE_REF ? Value.Ref : (Value.Type == VH_TYPE_INT ? Value.Int : 0);
         UObject* const Wrapper = NewReferenceWrapper(FindReferenceClass(Desc.VariantTag), Id);
@@ -5239,14 +5140,10 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
         return true;
     }
 
-    // A struct the project declares, arriving as one argument per field. The mirrored math types
-    // below take the same tuple lane and a different builder: theirs is a flat run of scalars laid
-    // out by a generated table, and this one is a field list read off the semantic program, so its
-    // fields go through this very function and can be anything a field can be.
     // The mirror image of ValueToWire's arm: a RID arrives as a plain int under its own variant
-    // tag, and the `rid` struct it becomes has to be built here. Before the scalar arms below,
-    // which would otherwise hand the declaration a bare int and typecheck it against a struct.
-    if (Desc.Type == VH_TYPE_INT && Desc.VariantTag == VH_VARIANT_RID)
+    // tag, and the `rid` struct it becomes has to be built here, where the scalar arms below would
+    // hand the declaration a bare int and typecheck it against a struct.
+    case EDeclaredKind::Rid:
     {
         if (Value.Type != VH_TYPE_INT)
         {
@@ -5261,8 +5158,16 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
         return true;
     }
 
-    if (Declared.UserStruct.IsValid())
+    // A struct the project declares, arriving as one argument per field. The mirrored math types
+    // below take the same tuple lane and a different builder: theirs is a flat run of scalars laid
+    // out by a generated table, and this one is a field list read off the semantic program, so its
+    // fields go through this very function and can be anything a field can be.
+    case EDeclaredKind::UserStruct:
     {
+        if (!Declared.UserStruct.IsValid())
+        {
+            break;
+        }
         const FUserStructLayout& Layout = *Declared.UserStruct;
         if (Value.Type != VH_TYPE_TUPLE || Value.Seq.Count != Layout.FieldKeys.Num())
         {
@@ -5308,8 +5213,12 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
         return true;
     }
 
-    if (Declared.Struct != nullptr)
+    case EDeclaredKind::MathStruct:
     {
+        if (Declared.Struct == nullptr)
+        {
+            break;
+        }
         Verse::VClass* const StructClass =
             FindMirroredVClass(Context, FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Declared.Struct->verse_name)));
         if (!StructClass || Value.Type != VH_TYPE_TUPLE)
@@ -5325,7 +5234,7 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
         return true;
     }
 
-    if (Desc.Type == VH_TYPE_ARRAY)
+    case EDeclaredKind::Array:
     {
         // A Godot Array or packed array arrives as a reference id, because that is what every
         // container is on this wire now. A Verse array is a value, so the contents have to be read
@@ -5360,23 +5269,31 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
         return true;
     }
 
-    // An enum parameter takes its ordinal, bounded by the enum the author declared rather than
-    // clamped into it -- an ordinal with no enumerator is a caller that disagrees with the script
-    // about the enum, which is worth reporting rather than silently reinterpreting.
-    if (Declared.EnumeratorCount > 0)
-    {
-        if (Value.Type != VH_TYPE_INT || Value.Int < 0 || Value.Int >= Declared.EnumeratorCount)
+    // An option around an enum is given the enumerator bare, as it always has been.
+    case EDeclaredKind::Enum:
+    case EDeclaredKind::Option:
+        if (Declared.EnumeratorCount > 0)
         {
-            return false;
+            return EnumeratorFromWire();
         }
-        Verse::VEnumeration* const Enumeration = FindVEnumeration(FUtf8StringView(Declared.EnumerationName));
-        if (!Enumeration || Value.Int >= Enumeration->NumEnumerators)
-        {
-            return false;
-        }
-        OutValue = Verse::VValue(Enumeration->GetEnumeratorChecked((int32)Value.Int));
-        return true;
+        break;
+
+    // Reference and OtherClass were answered by the handle test above; the rest are read by the
+    // wire value's own type below.
+    case EDeclaredKind::Reference:
+    case EDeclaredKind::OtherClass:
+    case EDeclaredKind::TypedContainer:
+    case EDeclaredKind::Other:
+    case EDeclaredKind::Logic:
+    case EDeclaredKind::Int:
+    case EDeclaredKind::Float:
+    case EDeclaredKind::Char:
+    case EDeclaredKind::String:
+    case EDeclaredKind::Map:
+    case EDeclaredKind::Tuple:
+        break;
     }
+    VH_EXHAUSTIVE_SWITCH_END
 
     switch (Value.Type)
     {
@@ -6173,19 +6090,43 @@ AUTORTFM_DISABLE bool PayloadArgCrosses(const FMemberType& Arg)
     return false;
 }
 
-/// A user struct a payload decomposes into arguments, or null for anything else.
+/// A struct a payload decomposes into arguments, or null for anything else.
 ///
-/// "User" because the sixteen mirrored math types are structs too and are *not* decomposed: a
-/// vector2 payload is one Vector2 argument, which is the whole of what Godot wants, and
-/// FindStructLayout is what tells the two apart.
-AUTORTFM_DISABLE const uLang::CClass* PayloadStructClass(const uLang::CNormalType& Normal)
+/// The sixteen mirrored math types are structs too and are *not* decomposed: a vector2 payload is
+/// one Vector2 argument, which is the whole of what Godot wants.
+AUTORTFM_DISABLE const uLang::CClass* PayloadStructClass(const FDeclaredType& Payload)
 {
-    const uLang::CClass* const Class = Normal.AsNullable<uLang::CClass>();
-    if (!Class || !Class->IsStruct())
+    VH_EXHAUSTIVE_SWITCH_BEGIN
+    switch (Payload.Kind)
     {
+    case EDeclaredKind::UserStruct:
+        return Payload.Class;
+    // Decomposed field by field, as they were before a classifier told them apart from a project's
+    // own struct: `signal(rid)` delivers its `Id` as an int, and `signal(variant)` its 22 lanes.
+    // Every other describer claims both.
+    case EDeclaredKind::Variant:
+    case EDeclaredKind::Rid:
+        return Payload.Class;
+    case EDeclaredKind::MathStruct:
+    case EDeclaredKind::Option:
+    case EDeclaredKind::Reference:
+    case EDeclaredKind::OtherClass:
+    case EDeclaredKind::Container:
+    case EDeclaredKind::TypedContainer:
+    case EDeclaredKind::Other:
+    case EDeclaredKind::Logic:
+    case EDeclaredKind::Int:
+    case EDeclaredKind::Float:
+    case EDeclaredKind::Char:
+    case EDeclaredKind::String:
+    case EDeclaredKind::Enum:
+    case EDeclaredKind::Array:
+    case EDeclaredKind::Map:
+    case EDeclaredKind::Tuple:
         return nullptr;
     }
-    return FindStructLayout(FUtf8StringView(Class->AsNameCString())) ? nullptr : Class;
+    VH_EXHAUSTIVE_SWITCH_END
+    return nullptr;
 }
 
 /// What a payload becomes on Godot's side (phase-4-design 6.2), and why it cannot become anything.
@@ -6215,15 +6156,14 @@ AUTORTFM_DISABLE void DescribePayload(const uLang::CTypeBase* Payload,
         Arg.Type = MoveTemp(Type);
     };
 
-    bool bIsOption = false;
-    const uLang::CNormalType& Normal = UnwrapDeclaredType(*Payload, bIsOption);
+    const FDeclaredType Declared = ClassifyDeclaredType(Payload, Program);
 
     // The payload as one value, for the direction that has to reassemble it. A tuple has no
     // description of its own -- DescribeType would answer "nothing" for it -- so Kind and Args are
     // what the tuple case is rebuilt from and this is only read for Bare and Struct.
     OutShape.Whole = DescribeType(Payload, Program);
 
-    if (const uLang::CTupleType* Tuple = Normal.AsNullable<uLang::CTupleType>())
+    if (const uLang::CTupleType* Tuple = Declared.Normal->AsNullable<uLang::CTupleType>())
     {
         OutShape.Kind = EPayloadShape::Tuple;
         for (const uLang::CTypeBase* Element : Tuple->GetElements())
@@ -6232,7 +6172,7 @@ AUTORTFM_DISABLE void DescribePayload(const uLang::CTypeBase* Payload,
             AddArg(SignalArgName(Described, OutShape.Args.Num(), true), FUtf8String(), MoveTemp(Described));
         }
     }
-    else if (const uLang::CClass* const Struct = bIsOption ? nullptr : PayloadStructClass(Normal))
+    else if (const uLang::CClass* const Struct = PayloadStructClass(Declared))
     {
         OutShape.Kind = EPayloadShape::Struct;
         OutShape.StructClass = Struct;
@@ -9659,8 +9599,110 @@ namespace {
 AUTORTFM_DISABLE TSharedPtr<FJsonObject> WriteMemberType(const FMemberType& Type);
 AUTORTFM_DISABLE FMemberType ReadMemberType(const TSharedPtr<FJsonObject>& Object);
 
+/// The kind a description read back out of a sidecar is, recovered from the fields it carries.
+///
+/// The sidecar has no field for the kind -- its format is shared with the interpreter -- and does
+/// not need one: DescribeType fills a different combination of fields for every kind but one, and
+/// the order of the tests is the order those combinations overlap in. The one is TypedContainer,
+/// which describes exactly as Other does and reads back as Other (RecordsAs).
+AUTORTFM_DISABLE EDeclaredKind RecordedKind(const FMemberType& Type)
+{
+    const GodotVerse::FExportDesc& Described = Type.Described;
+    if (Described.Reject == VH_EXPORT_OPTION_NOT_OBJECT)
+    {
+        return EDeclaredKind::Option;
+    }
+    if (Described.VariantTag == VH_VARIANT_OBJECT)
+    {
+        return EDeclaredKind::Reference;
+    }
+    if (!Type.ReferenceName.IsEmpty())
+    {
+        return EDeclaredKind::OtherClass;
+    }
+    if (Type.UserStruct.IsValid())
+    {
+        return EDeclaredKind::UserStruct;
+    }
+    if (!Type.StructName.IsEmpty())
+    {
+        return EDeclaredKind::MathStruct;
+    }
+    if (Described.Hint == VH_EXPORT_HINT_ENUM)
+    {
+        return EDeclaredKind::Enum;
+    }
+
+    VH_EXHAUSTIVE_SWITCH_BEGIN
+    switch (Described.Type)
+    {
+    case VH_TYPE_VARIANT:
+        return EDeclaredKind::Variant;
+    case VH_TYPE_REF:
+        return EDeclaredKind::Container;
+    case VH_TYPE_INT:
+        return Described.VariantTag == VH_VARIANT_RID ? EDeclaredKind::Rid : EDeclaredKind::Int;
+    case VH_TYPE_LOGIC:
+        return EDeclaredKind::Logic;
+    case VH_TYPE_FLOAT:
+        return EDeclaredKind::Float;
+    case VH_TYPE_CHAR:
+        return EDeclaredKind::Char;
+    case VH_TYPE_STRING:
+        return EDeclaredKind::String;
+    case VH_TYPE_ARRAY:
+        return EDeclaredKind::Array;
+    case VH_TYPE_MAP:
+        return EDeclaredKind::Map;
+    case VH_TYPE_TUPLE:
+        return EDeclaredKind::Tuple;
+    case VH_TYPE_VOID:
+    case VH_TYPE_OPTION:
+        return EDeclaredKind::Other;
+    }
+    VH_EXHAUSTIVE_SWITCH_END
+    return EDeclaredKind::Other;
+}
+
+/// What RecordedKind answers for a description of Kind, so the cook can check the round trip.
+AUTORTFM_DISABLE EDeclaredKind RecordsAs(EDeclaredKind Kind)
+{
+    VH_EXHAUSTIVE_SWITCH_BEGIN
+    switch (Kind)
+    {
+    // Every converter treats the two alike, so nothing is lost.
+    case EDeclaredKind::TypedContainer:
+        return EDeclaredKind::Other;
+    case EDeclaredKind::Other:
+    case EDeclaredKind::Logic:
+    case EDeclaredKind::Int:
+    case EDeclaredKind::Float:
+    case EDeclaredKind::Char:
+    case EDeclaredKind::String:
+    case EDeclaredKind::Enum:
+    case EDeclaredKind::Array:
+    case EDeclaredKind::Map:
+    case EDeclaredKind::Tuple:
+    case EDeclaredKind::Option:
+    case EDeclaredKind::Variant:
+    case EDeclaredKind::Rid:
+    case EDeclaredKind::MathStruct:
+    case EDeclaredKind::UserStruct:
+    case EDeclaredKind::Container:
+    case EDeclaredKind::Reference:
+    case EDeclaredKind::OtherClass:
+        return Kind;
+    }
+    VH_EXHAUSTIVE_SWITCH_END
+    return Kind;
+}
+
 AUTORTFM_DISABLE TSharedPtr<FJsonObject> WriteMemberType(const FMemberType& Type)
 {
+    ensureMsgf(RecordedKind(Type) == RecordsAs(Type.Kind),
+               TEXT("A declared type of kind %d reads back out of the sidecar as kind %d."),
+               (int32)Type.Kind, (int32)RecordedKind(Type));
+
     TSharedPtr<FJsonObject> Object = MakeShared<FJsonObject>();
     Object->SetObjectField(TEXT("described"), GodotVerse::WriteExportDesc(Type.Described));
     if (Type.bIsVar)
@@ -9774,6 +9816,7 @@ AUTORTFM_DISABLE FMemberType ReadMemberType(const TSharedPtr<FJsonObject>& Objec
             }
         }
     }
+    Type.Kind = RecordedKind(Type);
     return Type;
 }
 
@@ -10816,6 +10859,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InstanceToString(FInstance* Instance,
     // back into Godot's own representation. Wrong rather than refused at the declaration, and
     // harmless, which is why it is not worth a diagnostic of its own.
     FMemberType StringType;
+    StringType.Kind = EDeclaredKind::String;
     StringType.Described.Type = VH_TYPE_STRING;
 
     int32 Status = VH_OK;
@@ -11179,69 +11223,117 @@ AUTORTFM_DISABLE Verse::VValue NewRidValue(Verse::FRunningContext Context, int64
     return Verse::VValue(Struct);
 }
 
-AUTORTFM_DISABLE bool GodotVerse::ReadSelfDescribingValue(Verse::FRunningContext Context,
-                                                          Verse::VValue Value,
-                                                          FFieldStorage& OutStorage,
-                                                          vh_value& OutValue)
+namespace {
+
+/// The kind a Verse value says it is, for a caller that has no declaration to ask. Only the kinds a
+/// value can name itself as are answered; everything else is Other.
+///
+/// **The order is load-bearing and not obvious.** `true` is an option around `false`, so a cell
+/// holding a Godot object reads as a logic if it is asked before the object test; and a string is a
+/// `VArrayBase` of Char8/Char32, so it has to be settled before anything that treats an array as an
+/// array. A math struct and a `rid` are told apart by the class the value names.
+AUTORTFM_DISABLE EDeclaredKind SelfDescribedKind(Verse::VValue Value)
 {
-    // Before the logic test, for the reason ValueToWire puts it there: `true` is an option around
-    // `false`, so the object case has to be settled before anything reads the cell as a logic.
     if (UObject* const Wrapper = Value.ExtractUObject())
     {
-        if (const verse::vh_object* const Shadow = Cast<verse::vh_object>(Wrapper))
+        if (Cast<verse::vh_object>(Wrapper))
         {
-            OutValue.Type = VH_TYPE_INT;
-            OutValue.VariantTag = VH_VARIANT_OBJECT;
-            OutValue.Int = Shadow->Handle.Get();
-            return true;
+            return EDeclaredKind::Reference;
         }
     }
-
     if (Value.IsInt())
     {
-        OutValue.Type = VH_TYPE_INT;
-        OutValue.VariantTag = VH_VARIANT_INT;
-        OutValue.Int = Value.AsInt().AsInt64();
-        return true;
+        return EDeclaredKind::Int;
     }
     if (Value.IsFloat())
     {
-        OutValue.Type = VH_TYPE_FLOAT;
-        OutValue.VariantTag = VH_VARIANT_FLOAT;
-        OutValue.Float = Value.AsFloat().AsDouble();
-        return true;
+        return EDeclaredKind::Float;
     }
     if (const Verse::VArrayBase* const Array = Value.DynamicCast<Verse::VArrayBase>())
     {
         const Verse::EArrayType ArrayType = Array->GetArrayType();
         if (ArrayType == Verse::EArrayType::Char8 || ArrayType == Verse::EArrayType::Char32)
         {
-            OutStorage.Text = FUtf8String(Array->AsStringView());
-            OutValue.Type = VH_TYPE_STRING;
-            OutValue.VariantTag = VH_VARIANT_STRING;
-            OutValue.String.Utf8 = reinterpret_cast<const char*>(*OutStorage.Text);
-            OutValue.String.Len = OutStorage.Text.Len();
-            return true;
+            return EDeclaredKind::String;
         }
     }
-    if (ReadMathStruct(Context, Value, OutStorage, OutValue))
+    if (Verse::VValueObject* const Struct = Value.DynamicCast<Verse::VValueObject>())
     {
-        return true;
-    }
-    // After the math structs and before the logic test, which is where every other struct-shaped
-    // arm goes. A `rid` is as self-describing as a `vector2` -- it names its own class -- and only
-    // its encoding differs.
-    if (ReadRidStruct(Context, Value, OutValue))
-    {
-        return true;
+        const FUtf8StringView Name = Struct->GetClass().GetBaseName().AsStringView();
+        if (FindStructLayout(Name))
+        {
+            return EDeclaredKind::MathStruct;
+        }
+        if (Name.Equals(FUtf8StringView(UTF8TEXT("rid"))))
+        {
+            return EDeclaredKind::Rid;
+        }
     }
     if (Value.IsLogic())
     {
+        return EDeclaredKind::Logic;
+    }
+    return EDeclaredKind::Other;
+}
+
+} // namespace
+
+AUTORTFM_DISABLE bool GodotVerse::ReadSelfDescribingValue(Verse::FRunningContext Context,
+                                                          Verse::VValue Value,
+                                                          FFieldStorage& OutStorage,
+                                                          vh_value& OutValue)
+{
+    VH_EXHAUSTIVE_SWITCH_BEGIN
+    switch (SelfDescribedKind(Value))
+    {
+    case EDeclaredKind::Reference:
+        OutValue.Type = VH_TYPE_INT;
+        OutValue.VariantTag = VH_VARIANT_OBJECT;
+        OutValue.Int = Cast<verse::vh_object>(Value.ExtractUObject())->Handle.Get();
+        return true;
+    case EDeclaredKind::Int:
+        OutValue.Type = VH_TYPE_INT;
+        OutValue.VariantTag = VH_VARIANT_INT;
+        OutValue.Int = Value.AsInt().AsInt64();
+        return true;
+    case EDeclaredKind::Float:
+        OutValue.Type = VH_TYPE_FLOAT;
+        OutValue.VariantTag = VH_VARIANT_FLOAT;
+        OutValue.Float = Value.AsFloat().AsDouble();
+        return true;
+    case EDeclaredKind::String:
+        OutStorage.Text = FUtf8String(Value.DynamicCast<Verse::VArrayBase>()->AsStringView());
+        OutValue.Type = VH_TYPE_STRING;
+        OutValue.VariantTag = VH_VARIANT_STRING;
+        OutValue.String.Utf8 = reinterpret_cast<const char*>(*OutStorage.Text);
+        OutValue.String.Len = OutStorage.Text.Len();
+        return true;
+    case EDeclaredKind::MathStruct:
+        return ReadMathStruct(Context, Value, OutStorage, OutValue);
+    // A `rid` is as self-describing as a `vector2` -- it names its own class -- and only its
+    // encoding differs.
+    case EDeclaredKind::Rid:
+        return ReadRidStruct(Context, Value, OutValue);
+    case EDeclaredKind::Logic:
         OutValue.Type = VH_TYPE_LOGIC;
         OutValue.VariantTag = VH_VARIANT_BOOL;
         OutValue.Logic = Value.AsBool() ? 1 : 0;
         return true;
+    case EDeclaredKind::Other:
+    case EDeclaredKind::Char:
+    case EDeclaredKind::Enum:
+    case EDeclaredKind::Array:
+    case EDeclaredKind::Map:
+    case EDeclaredKind::Tuple:
+    case EDeclaredKind::Option:
+    case EDeclaredKind::Variant:
+    case EDeclaredKind::UserStruct:
+    case EDeclaredKind::Container:
+    case EDeclaredKind::TypedContainer:
+    case EDeclaredKind::OtherClass:
+        return false;
     }
+    VH_EXHAUSTIVE_SWITCH_END
     return false;
 }
 

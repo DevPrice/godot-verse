@@ -316,6 +316,7 @@ Adding an override you do not implement changes behaviour.
 
 `Private/` is the ABI implementation. `VerseHost.cpp` is the entry surface; `HostRuntime`,
 `HostScript` and `HostEventLoop` are compile/analyse/run, class shape, and the task pump;
+`HostTypeModel` is what kind of type a declaration names and which package declares a class;
 `HostDebug` is the `Verse::FDebugger` and the profiler's accumulators, and nothing else in the host
 knows either exists; `HostFatal` records a fatal error before the process ends; `GodotBindings`
 and `GodotClasses` are the native Verse surface. The cooked
@@ -338,23 +339,18 @@ thing to check against any plan that would have the host answer a typed object.
 
 **A `variant` crosses the script-call wire as `VH_TYPE_VARIANT` (ABI 8.6), which is a *declaration*
 type and never a payload.** A `vh_value` still carries whatever the variant holds; the type only
-tells the consumer "this argument or result accepts anything". Two traps sit under it. The
-conversion belongs to `GodotBindings.cpp` and is exported from there (`VariantFromWire`,
-`VariantToWire`) — never write a second one, because the lane rules for the 16 math types have to
-agree exactly in both directions. And `variant` is a **struct**, so leaving it out of one
-classification in `HostScript.cpp`'s `DescribeType` silently drops it into another: as a user struct
-it asks Godot for 22 arguments, one per lane, and as neither that nor a variant it becomes a
-*reference* and is refused as a handle to a class Godot has never heard of. Both say the same
-useless sentence, *"Cannot convert argument 2 from int to Nil"*.
+tells the consumer "this argument or result accepts anything". The conversion belongs to
+`GodotBindings.cpp` and is exported from there (`VariantFromWire`, `VariantToWire`) — never write a
+second one, because the lane rules for the 16 math types have to agree exactly in both directions.
 
-**`rid` is the second instance of that trap and it cost the same afternoon.** It is a struct of one
-int, so it is the likeliest of all of them to pass for a project's own: as a user struct a method
-answering one handed Godot a one-field tuple, and once it was taken out of `UserStructClass` without
-being claimed in `DescribeType` it fell into the reference arm and produced *"Cannot convert argument
-2 from RID to RID"*. **A struct the mirror declares must be claimed in `DescribeExportType`,
-`DescribeType` and `UserStructClass` together, or two of the three will quietly disagree.** `rid`
-also needs its own arms in `ValueToWire` and `WireToValue`, because it is the one mirrored struct
-that crosses as a *scalar* — `VH_TYPE_INT` under `VH_VARIANT_RID` — rather than as components.
+**What kind of type a declaration names is one closed enum, `EDeclaredKind`, answered by one
+classifier, `ClassifyDeclaredType` (`host/Private/HostTypeModel.{h,cpp}`)**, and every describer
+and converter of a declared type switches over it inside `VH_EXHAUSTIVE_SWITCH_BEGIN`, so a new
+kind — or a new uLang `ETypeKind` — fails the build at each one that has not decided what to do
+with it. The classifier's comment says which overlap each early test settles; `variant` and `rid`
+are the two that cost an afternoon each, and that history is in git and
+`docs/architecture-review.md` item 1. A sidecar carries no kind: `RecordedKind` recovers it, and the
+cook `ensure`s the round trip.
 
 `vh_object`, not `object`: `object` is the generated mirror of Godot's own `Object` class and derives
 from `vh_object`. Verse cannot reopen a class, so Object's methods could not be added to the
