@@ -2214,6 +2214,17 @@ func begin() -> void:
 		_check_eq("@export_node_path filters by class",
 				hinted.get("Target", {}).get("hint"), PROPERTY_HINT_NODE_PATH_VALID_TYPES)
 		_check_eq("by the class named", hinted.get("Target", {}).get("hint_string"), "Node2D")
+		# The inspector builds its node picker only for a NodePath, so the `string` member is one to
+		# Godot, as GDScript's `@export_node_path` is, and a write and a read both cross as one.
+		_check_eq("and is a NodePath to Godot, whose inspector draws a picker only for one",
+				hinted.get("Target", {}).get("type"), TYPE_NODE_PATH)
+		var holder := Node2D.new()
+		holder.set_script(hints_script)
+		holder.set("Target", NodePath("Mark"))
+		var read_back: Variant = holder.get("Target")
+		_check_eq("a NodePath written to it reads back as the same NodePath",
+				[typeof(read_back), str(read_back)], [TYPE_NODE_PATH, "Mark"])
+		holder.free()
 
 		# The five are additive: an export that needed no attribute still gets what its type
 		# implied, which is the half of R-EXP-1 that was already done.

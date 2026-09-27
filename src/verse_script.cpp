@@ -256,7 +256,21 @@ vh_instance *VerseScript::make_instance(int64_t p_object_id) const {
 
 Variant VerseScript::instance_field(vh_instance *p_instance, const StringName &p_name) const {
 	VerseRuntime *runtime = get_runtime();
-	return runtime != nullptr ? runtime->instance_field(p_instance, String(p_name)) : Variant();
+	return runtime != nullptr ? as_declared_type(p_name, runtime->instance_field(p_instance, String(p_name))) : Variant();
+}
+
+Variant VerseScript::as_declared_type(const StringName &p_name, const Variant &p_value) const {
+	if (p_value.get_type() != Variant::STRING) {
+		return p_value;
+	}
+	refresh_exports();
+	for (int64_t i = 0; i < exports_cache.size(); i++) {
+		const Dictionary property = exports_cache[i];
+		if ((int64_t)property["type"] == Variant::NODE_PATH && StringName(property["name"]) == p_name) {
+			return NodePath(String(p_value));
+		}
+	}
+	return p_value;
 }
 
 bool VerseScript::set_instance_field(vh_instance *p_instance, const StringName &p_name, const Variant &p_value) const {
@@ -791,7 +805,7 @@ bool VerseScript::_has_property_default_value(const StringName &p_property) cons
 Variant VerseScript::_get_property_default_value(const StringName &p_property) const {
 	VerseRuntime *runtime = get_runtime();
 	if (has_own_class && runtime != nullptr) {
-		const Variant value = runtime->class_default_field(verse_class_name(), String(p_property));
+		const Variant value = as_declared_type(p_property, runtime->class_default_field(verse_class_name(), String(p_property)));
 		last_good_defaults[p_property] = value;
 		return value;
 	}
@@ -1055,6 +1069,13 @@ Dictionary property_for(const Dictionary &p_entry, Variant::Type p_type) {
 			// Variant::get_type_name's callers spell it: the element's Variant type, then a colon.
 			if ((int64_t)p_entry["element_variant_tag"] != VH_VARIANT_NIL) {
 				property["hint"] = (int64_t)PROPERTY_HINT_TYPE_STRING;
+			// Declared as a NodePath, which is what GDScript's `@export_node_path` is: the inspector
+			// builds its node picker only for TYPE_NODE_PATH, whatever the hint, and draws a `string`
+			// as a text field. The member stays a `string` in Verse -- a NodePath crosses into one
+			// already -- and VerseScript::as_declared_type turns what comes back out into a NodePath.
+			if (p_type == Variant::STRING) {
+				property["type"] = (int64_t)Variant::NODE_PATH;
+			}
 				property["hint_string"] = String::num_int64((int64_t)p_entry["element_variant_tag"]) + String(":");
 			} else {
 				property["hint"] = (int64_t)PROPERTY_HINT_NONE;

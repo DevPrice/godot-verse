@@ -41,7 +41,7 @@ hints := class(node2d):
     @export_flags("Fire,Water,Earth")
     var Elements<public>:int = 0
 
-    # A NodePath, which is a `string` on this wire. The argument is the class a picked node must be.
+    # A NodePath to Godot and a `string` in Verse. The argument is the class a picked node must be.
     @export
     @export_node_path("Node2D")
     var Target<public>:string = ""

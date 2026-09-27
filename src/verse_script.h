@@ -126,6 +126,9 @@ public:
 	// this class declares nothing under.
 	const VerseMethodInfo *find_method(const godot::StringName &p_name) const;
 	godot::Variant instance_field(vh_instance *p_instance, const godot::StringName &p_name) const;
+	// A value read out of the host as the type this script declared its property as: a `string`
+	// exported with `@export_node_path` is a NodePath to Godot and comes back as a String.
+	godot::Variant as_declared_type(const godot::StringName &p_name, const godot::Variant &p_value) const;
 	bool set_instance_field(vh_instance *p_instance, const godot::StringName &p_name, const godot::Variant &p_value) const;
 	bool set_instance_field_instance(vh_instance *p_instance, const godot::StringName &p_name, vh_instance *p_value) const;
 	// What a Verse `ToString` extension method answers for this instance; false when the class

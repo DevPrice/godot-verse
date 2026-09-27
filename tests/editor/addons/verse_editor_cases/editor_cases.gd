@@ -1583,16 +1583,8 @@ func _inspector_hints() -> void:
 	]:
 		check_eq(row[2], properties[row[0]].get_class() if properties.has(row[0]) else "no control", row[1])
 	check("R-EXP-8 (6): Mismatched is absent from the inspector", not properties.has("Mismatched"))
-	var target_type := TYPE_NIL
-	for row in root.get_property_list():
-		if row["name"] == "Target":
-			target_type = row["type"]
 	var target_control: String = properties["Target"].get_class() if properties.has("Target") else "no control"
-	var picker_defect := target_control == "EditorPropertyText" and target_type == TYPE_STRING
-	if picker_defect:
-		skip("R-EXP-8 (5): and Target as a node picker", NODE_PATH_DEFECT)
-	else:
-		check_eq("R-EXP-8 (5): and Target as a node picker", target_control, "EditorPropertyNodePath")
+	check_eq("R-EXP-8 (5): and Target as a node picker", target_control, "EditorPropertyNodePath")
 
 	var portrait := await _browse(properties.get("Portrait"), "Edit", "EditorFileDialog")
 	check("R-EXP-8 (1): Portrait's browse button opens a file dialog", portrait != null)
@@ -1609,6 +1601,8 @@ func _inspector_hints() -> void:
 	var boxes := find_all(properties["Elements"], "CheckBox") if properties.has("Elements") else []
 	check_eq("R-EXP-8 (4): Elements is three checkboxes named Fire, Water and Earth",
 			boxes.map(func(box: CheckBox) -> String: return box.text), ["Fire", "Water", "Earth"])
+		# The dialog's tree fills a frame or more after it is shown.
+		await wait_until(func() -> bool: return _tree_item_in(picker, "Mark") != null and _tree_item_in(picker, "Bystander") != null, 5000)
 	if boxes.size() == 3:
 		for index in [0, 2]:
 			boxes[index].button_pressed = true
@@ -1616,11 +1610,6 @@ func _inspector_hints() -> void:
 			await frames(1)
 		check_eq("R-EXP-8 (4): ticking Fire then Earth stores 5", root.get("Elements"), 5)
 
-	if picker_defect:
-		for name in ["R-EXP-8 (5): Target's button opens a node picker", "R-EXP-8 (5): which offers the Node2D child",
-				"R-EXP-8 (5): and refuses the plain Node"]:
-			skip(name, NODE_PATH_DEFECT)
-		return
 	var picker := await _browse(properties.get("Target"), "Assign Node", "SceneTreeDialog")
 	check("R-EXP-8 (5): Target's button opens a node picker", picker != null)
 	if picker != null:
@@ -1836,9 +1825,6 @@ func _collect_signal_rows(item: TreeItem, rows: Dictionary) -> void:
 			rows[text] = child.get_children().map(func(row: TreeItem) -> String: return row.get_text(0))
 		_collect_signal_rows(child, rows)
 
-	# The last row is not a signal of signals.verse: it is the dialog's own spelling for a payload
-	# the fixture has no signal for, and its `position` is the name that meets node2d's inherited
-	# Position, which a stub has to step around.
 
 func _row_named(rows: Dictionary, prefix: String) -> String:
 	for text in rows:
@@ -1850,12 +1836,10 @@ func _row_named(rows: Dictionary, prefix: String) -> String:
 # B3: "Connecting a signal with Make Function checked writes a stub that does not compile." Godot's
 # Connect dialog emits EditorNode's script_add_function_request with the arguments it builds
 # (connections_dialog.cpp:651-655, "name: Type"), which is what reaches _make_function through
+	# The last row is not a signal of signals.verse: it is the dialog's own spelling for a payload
+	# the fixture has no signal for, and its `position` is the name that meets node2d's inherited
+	# Position, which a stub has to step around.
 # ScriptTextEditor::add_callback; Godot then saves the script, and the analysis of that save says
-		# ScriptEditor saves the stub itself only while the file on disk is the one it last read:
-		# after this case's own ResourceSaver restore it asks to reload instead and saves nothing.
-		if not FileAccess.get_file_as_string(SIGNALS).contains(row[1]):
-			script.source_code = code.text
-			ResourceSaver.save(script)
 # whether the stub compiles.
 func _make_function() -> void:
 	_mark("B3: the stub Make Function writes")
@@ -1863,13 +1847,15 @@ func _make_function() -> void:
 	var root := EditorInterface.get_edited_scene_root()
 	var editor_node: Node = EditorInterface.get_base_control().get_parent()
 	if root == null or root.get_script() != script or editor_node == null or not editor_node.is_class("EditorNode"):
-		if row[1] == "_on_made_up":
-			check_eq("B3: the dialog's `name: Type` pairs become PascalCase parameters of their Verse types, a clash with a member suffixed",
-					stub.get_slice(")", 0), "\t_on_made_up<public>(Ratio:float, PositionValue:vector2, Node:?node")
 		check("B3: the node dock's scene is still open under EditorNode", false)
 		return
 	var code := await code_edit_for(script)
 	if code == null:
+		# ScriptEditor saves the stub itself only while the file on disk is the one it last read:
+		# after this case's own ResourceSaver restore it asks to reload instead and saves nothing.
+		if not FileAccess.get_file_as_string(SIGNALS).contains(row[1]):
+			script.source_code = code.text
+			ResourceSaver.save(script)
 		check("B3: signals.verse opens in the script editor", false)
 		return
 	var original := code.text
@@ -1877,6 +1863,9 @@ func _make_function() -> void:
 			["Own", "_on_signals_own", "a signal with an int payload"],
 			["Touched", "_on_signals_touched", "a signal with a class payload"],
 			["Reported", "_on_signals_reported", "a signal with int, String and Vector2 payloads"],
+		if row[1] == "_on_made_up":
+			check_eq("B3: the dialog's `name: Type` pairs become PascalCase parameters of their Verse types, a clash with a member suffixed",
+					stub.get_slice(")", 0), "\t_on_made_up<public>(Ratio:float, PositionValue:vector2, Node:?node")
 			["Carried", "_on_signals_carried", "a signal with a Variant payload"],
 			["Rendered", "_on_signals_rendered", "a signal with a RID payload"],
 			[PackedStringArray(["ratio: float", "position: Vector2", "node: Node"]), "_on_made_up",
