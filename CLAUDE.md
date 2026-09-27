@@ -293,7 +293,7 @@ compiler-side entry points answer `VH_ERR_UNSUPPORTED` in a runtime host.
 | `verse_script_language.{h,cpp}` | the `ScriptLanguage`: `_validate`, `_complete_code`/`_lookup_code`, `_frame` (which pumps `vh_tick`, drives `VerseProjectState`, `VerseDebugger` and `VerseProfiler`), and every virtual godot-cpp requires a declaration for on this class itself, each a one-line delegation to the owning object |
 | `verse_debugger.{h,cpp}` | R-DIAG-4's whole state and behaviour, owned by `VerseScriptLanguage` as a mutable `VerseDebugger debugger` member: which frame stopped and why, `should_break`/`break_here` (the ABI callbacks' consumer half), the `_debug_get_*` bodies the language's virtuals delegate to, and `res_path_for_source` — the debugger's own; nothing in the profiler resolves a source path today |
 | `verse_profiler.{h,cpp}` | the profiler, owned by `VerseScriptLanguage` as a `VerseProfiler profiler` member: `profiling_active`, the `ProfilingInfo` stride trap and the `_profiling_*` bodies the language's virtuals delegate to |
-| `verse_api_lookup.{h,cpp}` | every lookup keyed by a mirrored Godot or Verse name: `verse_godot_class_for`/`verse_godot_class_name` (shared with `verse_script.cpp` and `verse_runtime.cpp`), `godot_classdb_class_for` (B28's ClassDB-first rule over a math type's non-membership), `mirrored_class`'s reverse of the first, and the method/global/enum/statics/singleton/primitive-doc tables `_lookup_code` resolves a symbol against. One linear scan over `verse_api::classes` per question rather than the six this and three more in `verse_syntax_highlighter.cpp` used to keep separately; `verse_bindings_gen.cpp` keeps its own binary search over the same table, sorted for its per-generation roster cost, and says why beside it |
+| `verse_api_lookup.{h,cpp}` | every lookup keyed by a mirrored Godot or Verse name: `verse_godot_class_for`/`verse_godot_class_name` (shared with `verse_script.cpp` and `verse_runtime.cpp`), `godot_classdb_class_for` (B28's ClassDB-first rule over a math type's non-membership), `mirrored_class`'s reverse of the first, and the method/global/enum/statics/singleton/primitive-doc tables `_lookup_code` resolves a symbol against. One linear scan over `verse_api::classes` per question rather than the six this and three more in `verse_syntax_highlighter.cpp` used to keep separately; `verse_bindings_gen.cpp` keeps its own binary search over the same table, sorted for its per-generation roster cost, and says why beside it. `verse_godot_class_for` and `mirrored_class` are thin wrappers over `verse_api_lookup_core.h`'s `verse_api_godot_name_for`/`verse_api_verse_name_for` -- the class-name scan alone, with no godot::String and no ClassDB, which is what lets `verse_api_lookup_test` exercise it (docs/architecture-review.md item 3 step 5); the rest of this file calls ClassDB or otherwise needs a running Godot and stays untested below the integration layer |
 | `verse_completion.{h,cpp}` | `_complete_code` and `probe_complete`'s whole bodies, and the completion/signature caches, owned by a `VerseCompletion completion` member; `completing_in_comment`/`completing_in_string` are free functions here too, shared with `verse_hover.cpp`'s `_lookup_code` |
 | `verse_hover.{h,cpp}` | `_lookup_code` and `probe_hover`'s whole bodies, `publish_api_method` and the `api_doc_carrier`/`api_doc_pages` it fills, owned by a `VerseHover hover` member. `ensure_script_doc_published` stays a `VerseScriptLanguage` method instead of moving here, and is public for it: both it and `republish_script_docs`, which stays private and unmoved, walk `live_scripts` directly, and only the first is a hover helper |
 | `verse_diagnostic_prose.{h,cpp}` | `src/`'s godot::String face of `include/verse_diagnostics.h`: `verse_diagnostic(verse_diag::VGnnnn, {{"name", value}})` for any registry row, the three `*_rejection_message` wrappers and their warning `string_code`s (`export_rejection_code`, `signal_rejection_code`, `rpc_rejection_code`), and `verse_formatted_diagnostic`/`verse_flattened_diagnostics`, the shape one diagnostic and one analysis' diagnostics are logged and compared as |
@@ -474,6 +474,7 @@ reviewed files of `docs/web-vm/spec/` alone. Keep it that way — do not bring V
     python tools/build_doc_markup_test.py # doc-markup converter test binary
     python tools/build_signature_test.py  # signature parser test binary
     python tools/build_bindings_test.py   # naming-rule differential test, against tools/gen_verse_api.py's vectors
+    python tools/build_api_lookup_test.py # class-name lookup round trip, verse_api_lookup_core.h's godot-cpp-free half
     python tools/build_gd_convert_test.py # GDScript converter test binary
     python tools/build_bench.py           # host benchmark (timings, not pass/fail)
     python tools/build_verse_probe.py     # the Verse probe (asks the compiler a question)
@@ -540,7 +541,7 @@ exception with its own throwaway profile per run, because it has to pin a langua
 before the editor's first launch; it builds that profile with the same `godot_env.py` functions.
 
 **units** — lexer, class-declaration scanner, module map, doc-markup converter, signature parser,
-the naming-rule differential test, the GDScript converter, generator, `vm/`'s own cases
+the naming-rule differential test, the class-name lookup round trip, the GDScript converter, generator, `vm/`'s own cases
 (`verse_vm_test`) and `tools/check_host_constructions.py`'s scan of `host/Private`. No Godot, no UE. Every `build_*_test.py` compiles through `tools/unit_build.py`:
 MSVC on Windows, `$CXX`, g++ or clang++ elsewhere, and the binary is named `.exe` everywhere because
 that is what `run_tests.py` runs. The converter's goldens are whole files
@@ -554,6 +555,13 @@ property types, the predicate rule) -- and runs each through the matching C++ fu
 differential test `docs/generated-bindings.md` §4 promised and §10.9 found never built: the C++ side
 has no JSON parser, so it cannot read `extension_api.json` itself, and the flat vectors file is what
 stands in for one.
+
+**`verse_api_lookup_test`** (docs/architecture-review.md item 3 step 5) sweeps every row of
+`verse_api::classes` through `verse_api_lookup_core.h`'s `verse_api_godot_name_for` and
+`verse_api_verse_name_for` -- the godot-cpp-free half of `src/verse_api_lookup.cpp`'s
+`verse_godot_class_for` and `mirrored_class` -- both directions, plus the sixteen math types and
+`rid` (B28: in `verse_api::classes`, not in ClassDB) and a name in neither table. The rest of
+`verse_api_lookup.cpp` calls `ClassDB` or otherwise needs a running Godot and has no unit test.
 
 **abi** — `host_smoke`, the whole C ABI with no Godot, plus a `verse_cook` case that cooks
 `tests/host_smoke`'s fixtures and asserts the packages, the container, the sidecar and the
@@ -811,6 +819,7 @@ The binaries still run standalone, which is what to reach for when bisecting one
     bin/verse_doc_markup_test.exe
     bin/verse_signature_test.exe
     bin/verse_bindings_test.exe [naming_vectors.txt path]  # defaults to tests/verse_bindings/naming_vectors.txt
+    bin/verse_api_lookup_test.exe
     bin/verse_gd_convert_test.exe
     python tests/verse_api_gen/test_gen_verse_api.py
     python tests/test_records/test_test_records.py

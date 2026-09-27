@@ -252,6 +252,7 @@ def run_units(results: Results, do_build: bool) -> None:
         ("verse_doc_markup_test.exe", "build_doc_markup_test.py"),
         ("verse_signature_test.exe", "build_signature_test.py"),
         ("verse_bindings_test.exe", "build_bindings_test.py"),
+        ("verse_api_lookup_test.exe", "build_api_lookup_test.py"),
         ("verse_diagnostics_test.exe", "build_diagnostics_test.py"),
         ("verse_vm_test.exe", "build_vm_test.py"),
         ("verse_gd_convert_test.exe", "build_gd_convert_test.py"),

@@ -11,12 +11,7 @@
 using namespace godot;
 
 const char *verse_godot_class_for(const String &p_verse_class) {
-	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
-		if (p_verse_class == verse_api::classes[i].verse_name) {
-			return verse_api::classes[i].godot_name;
-		}
-	}
-	return nullptr;
+	return verse_api_godot_name_for(std::string(p_verse_class.utf8().get_data()));
 }
 
 StringName verse_godot_class_name(const String &p_verse_class, int32_t p_class_kind) {
@@ -198,12 +193,7 @@ bool is_godot_package_file(const String &p_path) {
 }
 
 const char *mirrored_class(const String &p_godot_class) {
-	for (size_t i = 0; i < std::size(verse_api::classes); i++) {
-		if (p_godot_class == verse_api::classes[i].godot_name) {
-			return verse_api::classes[i].verse_name;
-		}
-	}
-	return nullptr;
+	return verse_api_verse_name_for(std::string(p_godot_class.utf8().get_data()));
 }
 
 String godot_class_for(const std::string &p_verse_class) {

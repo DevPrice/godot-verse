@@ -1,6 +1,7 @@
 #pragma once
 
 #include "verse_api_classes.h"
+#include "verse_api_lookup_core.h"
 
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/string_name.hpp>
