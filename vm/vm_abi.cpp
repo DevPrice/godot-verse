@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -198,6 +199,16 @@ int32_t vh_init(const vh_init_desc *Desc) {
 	runtime->on_runtime_error = desc.OnRuntimeError;
 	runtime->runtime_error_ctx = desc.RuntimeErrorCtx;
 	runtime->gc_stress = gc_stress_requested();
+
+	const bool says_layout = desc.AbiVersion % 1000 >= 3 && size_t(Desc->StructSize) >= offsetof(vh_init_desc, LayoutDigest) + sizeof(uint32_t);
+	if (says_layout && desc.LayoutDigest != VH_LAYOUT_DIGEST) {
+		char digests[64];
+		std::snprintf(digests, sizeof(digests), "godot-verse 0x%08x, this runtime 0x%08x", unsigned(desc.LayoutDigest), unsigned(VH_LAYOUT_DIGEST));
+		runtime->report_error(std::string("godot-verse and the Verse runtime were built with different layouts of the ABI's array structs (") + digests +
+				"), so every list either hands the other would be misread. Rebuild both from one include/verse_host_abi.h.");
+		delete runtime;
+		return VH_ERR_ABI;
+	}
 
 	std::string error;
 	int32_t status = VH_ERR_INIT;

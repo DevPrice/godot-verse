@@ -575,6 +575,7 @@ int main(int argc, char** argv)
 	vh_init_desc Desc{};
 	Desc.StructSize = sizeof(Desc);
 	Desc.AbiVersion = VH_ABI_VERSION;
+	Desc.LayoutDigest = VH_LAYOUT_DIGEST;
 	Desc.EngineDirUtf8 = EngineDirUtf8;
 	Desc.Godot.StructSize = sizeof(Desc.Godot);
 	Desc.Godot.Ctx = nullptr;

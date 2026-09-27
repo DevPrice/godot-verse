@@ -524,6 +524,7 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 					DisplayServer::get_singleton() != nullptr && DisplayServer::get_singleton()->get_name() != "headless"
 			? 1
 			: 0;
+	init_desc.LayoutDigest = VH_LAYOUT_DIGEST;
 
 #ifdef VERSE_VM_STATIC
 	// vm/ cannot read a `.pck` itself (vm/vm_file_reader.h) -- that is the one thing it needs from

@@ -43,7 +43,7 @@ extern "C" {
  * different toolchains and nothing links them.
  */
 #define VH_ABI_VERSION_MAJOR 12
-#define VH_ABI_VERSION_MINOR 2
+#define VH_ABI_VERSION_MINOR 3
 #define VH_ABI_VERSION ((VH_ABI_VERSION_MAJOR * 1000) + VH_ABI_VERSION_MINOR)
 
 typedef int32_t vh_bool;
@@ -579,6 +579,15 @@ typedef struct vh_init_desc
 	 * game with a display; never for an editor, whose own window stays up, or a headless run, where
 	 * nobody could dismiss it. */
 	vh_bool ShowFatalDialog;
+
+	/* Added at ABI v12.3: VH_LAYOUT_DIGEST as the consumer compiled it. A host refuses a descriptor
+	 * whose digest differs from its own with VH_ERR_ABI and an error diagnostic naming both, because
+	 * the structs it hands back as arrays would be indexed with another stride.
+	 *
+	 * Read only when AbiVersion's minor is at least 3 as well as when StructSize covers it: on a
+	 * 64-bit target this field sits in what was ShowFatalDialog's trailing padding, so a 12.1 or
+	 * 12.2 descriptor's StructSize already reaches it. */
+	uint32_t LayoutDigest;
 } vh_init_desc;
 
 #if defined(_WIN32)
@@ -2156,6 +2165,12 @@ typedef int32_t (*vh_profiling_read_fn)(vh_bool, const vh_profile_row**, int32_t
 	X(DebugStackValues, vh_debug_stack_values, vh_debug_stack_values_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
 	X(ProfilingSetEnabled, vh_profiling_set_enabled, vh_profiling_set_enabled_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY) \
 	X(ProfilingRead, vh_profiling_read, vh_profiling_read_fn, VH_ENTRY_REQUIRED, VH_ENTRY_ANY)
+
+/* The array-handed structs' layout, pinned, and VH_LAYOUT_DIGEST. tools/gen_abi_layout.py defines
+ * VH_LAYOUT_MEASURING while it measures, so a stale file cannot stop it writing a fresh one. */
+#ifndef VH_LAYOUT_MEASURING
+#	include "verse_host_abi_layout.h"
+#endif
 
 #ifdef __cplusplus
 }

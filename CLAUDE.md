@@ -211,7 +211,7 @@ emits — and note that its editor half has never been run.
 `include/verse_host_abi.h` is the only thing that crosses. Plain C — the two sides cannot share a
 C++ ABI. It is staged into the host's `Public/` by `build_host.py`, so both compile the same file.
 
-**`VH_ABI_VERSION` is 12.2.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
+**`VH_ABI_VERSION` is 12.3.** It is `MAJOR * 1000 + MINOR`, with the policy at the top of the header:
 a major bump is a layout or meaning change and both sides must be rebuilt; a minor bump adds
 something an older consumer can ignore behind a `StructSize` check. A change to the header means
 bumping it and rebuilding **both** sides — the mismatch surfaces at `vh_init`, not at compile time.
@@ -226,6 +226,16 @@ as corruption rather than as a refusal. 9.0 added `IsNamed` there for that reaso
 analysis-only program behind it, so the three position entry points answer `VH_ERR_STATE` after
 a build until a consumer asks for an analysis. An older consumer would have read that as "no
 such symbol" and drawn nothing, silently.
+**12.3 is where a layout mismatch is refused by name**: `vh_init_desc` grew `LayoutDigest`, the
+`VH_LAYOUT_DIGEST` the consumer compiled, and a host whose own differs answers `VH_ERR_ABI` with a
+sentence naming both. The digest is over the sizes and offsets `include/verse_host_abi_layout.h`
+pins with `static_assert`s for every struct handed over as an array — fifteen of them, in three
+layouts (64-bit; 32-bit with 8-byte `int64` alignment; i386 System V) — so a layout change without
+a major bump fails in whichever build compiles first, and two binaries that each compiled cleanly
+are refused rather than read as corruption. **A host reads the field only when `AbiVersion`'s
+minor is at least 3**, not on `StructSize` alone: on 64-bit it sits in `ShowFatalDialog`'s trailing
+padding, so an older descriptor's size already covers it. `tools/gen_abi_layout.py` rewrites the
+pins from clang's own layout dump after a struct changes.
 **12.2 is where `@export` learned to name a generated-binding class as its own reason.**
 `vh_export_reject` grew `VH_EXPORT_BINDING_CLASS_UNSUPPORTED`, appended rather than folding that
 case into `VH_EXPORT_UNSUPPORTED_TYPE`, so an older consumer reads it as the generic sentence
@@ -729,6 +739,7 @@ the editor and `export_check.gd` as an autoload in an export.
 | `src/verse_api_classes.h` | `tools/gen_verse_api.py` | same |
 | `host/Private/GodotMathLayout.gen.h` | `tools/gen_verse_api.py` | same — the math types' field trees, so the host builds one the way the Verse struct declares it |
 | `include/verse_host_variant_tags.gen.h` | `tools/gen_verse_api.py` | `VARIANT_LANES` — `vh_variant_tag` itself, which `verse_host_abi.h` includes, and `VH_VARIANT_TAGS(X)`: each tag's Godot `Variant::Type`, its lane family and a math type's component count, plus one X-macro per family. Its numbers are pinned in `VH_VARIANT_TAG_ABI`, and generation fails if Godot's would move one. `build_host.py` stages it beside the ABI header |
+| `include/verse_host_abi_layout.h` | `tools/gen_abi_layout.py` | clang's record layout of `verse_host_abi.h` for every CI target — the size and offsets of each array-handed struct as `static_assert`s, and `VH_LAYOUT_DIGEST` over them. Needs emsdk's clang, so it is not in CI's generated check; `--check` reports a stale file. Staged by `build_host.py` too |
 | `src/verse_api_skipped.h` | `tools/gen_verse_api.py` | same — every Godot member the mirror does not carry under its own name, and why, which is what `_validate` turns into a sentence (R-SCN-2) |
 | `host/Private/GodotClassNames.gen.h` | `tools/gen_verse_api.py` | same — every Godot class and the mirrored Verse class an object of it crosses as, which is what R-SCN-6's cast is built on. Every class, not only the emitted ones: a `--classes-file` build still has to make a handle cross as *something*, so each row names its nearest emitted ancestor |
 | `docs/nonatomic-methods.md` | `tools/gen_verse_api.py` | same — R-AUD-3's list. Written by the pass that writes the mirror, so it cannot drift |

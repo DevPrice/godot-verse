@@ -30,6 +30,7 @@
 #include <map>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 namespace {
@@ -1650,6 +1651,7 @@ void BootCases(Cases &r_cases) {
 	vh_init_desc desc = {};
 	desc.StructSize = sizeof(desc);
 	desc.AbiVersion = VH_ABI_VERSION;
+	desc.LayoutDigest = VH_LAYOUT_DIGEST;
 	desc.Godot.StructSize = int32_t(offsetof(vh_godot_api, IsValid));
 	desc.OnDiagnostic = &CaptureDiagnostic;
 	desc.CookedDirUtf8 = "mem/Cooked";
@@ -1660,6 +1662,17 @@ void BootCases(Cases &r_cases) {
 	desc.AbiVersion = (VH_ABI_VERSION_MAJOR + 1) * 1000;
 	r_cases.check("abi: another major is VH_ERR_ABI", vh_init(&desc) == VH_ERR_ABI);
 	desc.AbiVersion = VH_ABI_VERSION;
+	desc.LayoutDigest = VH_LAYOUT_DIGEST ^ 1u;
+	g_diagnostic.clear();
+	r_cases.check("abi: another layout digest is VH_ERR_ABI, with a sentence naming both digests",
+			vh_init(&desc) == VH_ERR_ABI && g_diagnostic.find("different layouts") != std::string::npos &&
+					g_diagnostic.find("this runtime 0x") != std::string::npos);
+	desc.AbiVersion = VH_ABI_VERSION_MAJOR * 1000 + 2;
+	r_cases.check("abi: a descriptor from before 12.3 carries no digest, and none is read", vh_init(&desc) == VH_OK);
+	vh_shutdown();
+	desc.AbiVersion = VH_ABI_VERSION;
+	desc.LayoutDigest = VH_LAYOUT_DIGEST;
+	r_cases.check("abi: the digest is a compile-time constant", std::integral_constant<uint32_t, VH_LAYOUT_DIGEST>::value == vh_layout_digest());
 	desc.StructSize = int32_t(offsetof(vh_init_desc, CookedDirUtf8));
 	g_diagnostic.clear();
 	r_cases.check("abi: a descriptor too short to carry CookedDirUtf8 is refused with a sentence, not read past",
