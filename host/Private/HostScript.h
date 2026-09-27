@@ -9,6 +9,21 @@
 #include "VerseString.h"
 #include "verse_host_abi.h"
 
+// architecture-review.md item 1 step 1: wraps a switch meant to be exhaustive over an ABI enum, so
+// a case missed for a new enumerator fails the build. Scoped to the switch itself rather than
+// promoted for the module: -Wswitch is off by default here, and the module also links VNI's
+// generated glue and reaches engine headers (Stats/StatsSystemTypes.h, PixelFormat.h,
+// AutomationTest.h) whose own default-less switches this bridge does not own and cannot edit.
+#if defined(__clang__)
+#define VH_EXHAUSTIVE_SWITCH_BEGIN \
+	_Pragma("clang diagnostic push") \
+	_Pragma("clang diagnostic error \"-Wswitch\"")
+#define VH_EXHAUSTIVE_SWITCH_END _Pragma("clang diagnostic pop")
+#else
+#define VH_EXHAUSTIVE_SWITCH_BEGIN
+#define VH_EXHAUSTIVE_SWITCH_END
+#endif
+
 struct FVerseValue;
 
 namespace Verse {
