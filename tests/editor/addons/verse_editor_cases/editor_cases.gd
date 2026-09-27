@@ -785,11 +785,7 @@ func _docs_after_play() -> void:
 		check("hover_probe.verse opens in the script editor", false)
 		return
 	var blocked := await _tooltip(code, "Blocked", "\tBlocked<public>")
-	if blocked[1] == "No description available.":
-		skip("a member keeps its comment after a Play and an edit behind it",
-				"known defect: after B27's Plays and the unfinished calls it types behind them, every member of hover_probe.verse hovers with no description")
-	else:
-		check("a member keeps its comment after a Play and an edit behind it", blocked[1].begins_with("The other two comment forms"))
+	check("a member keeps its comment after a Play and an edit behind it", blocked[1].begins_with("The other two comment forms"))
 
 
 func _settled_hint(code: CodeEdit, script: Script) -> String:
