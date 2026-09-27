@@ -30,11 +30,14 @@ to just `Foo.cpp`, because that line number is the *host's*, not the fixture's, 
 shifts it. A `.verse` location (a diagnostic naming the fixture's own file and line) is left alone:
 that line number is content the fixture is testing, not host-internal detail.
 
-Three fixtures are `known_defect`, not a plain golden: `vm_natives_probe.verse`,
-`vm_objects_wideint_probe.verse` and `vm_values_false_probe.verse` each end the process in a host
-**fatal error** -- a Verse runtime diagnostic raised from inside closed AutoRTFM code (a delegate
-lambda in `VerseHost.cpp` called without `AutoRTFM::Open`, per two of the three; the third is a
-VM-internal assertion) rather than anything about the *language*. Because it is a host defect and
+Two fixtures are `known_defect`, not a plain golden: `vm_objects_wideint_probe.verse` and
+`vm_values_false_probe.verse` each end the process in a host **fatal error** -- a VM-internal
+assertion over an interpreter invariant, not the language fact the fixture's own header claims. A
+third, `vm_natives_probe.verse`, used to be one too: `Warn(...)` raised a Verse runtime diagnostic
+from inside closed AutoRTFM code, because the delegate lambdas `VerseHost.cpp` bound for
+`RaiseVerseRuntimeError`'s reporting inherited its `AUTORTFM_DISABLE` and so had no closed clone at
+all -- fixed by moving them to ordinary functions, each opening explicitly around the Godot call it
+makes. Because a `known_defect` is a host defect and
 not a fact worth pinning a full callstack transcript to, the golden for each is truncated at the
 first fatal line's own message -- everything the process printed before the crash is kept and
 compared as usual, but the callstack after it is neither recorded nor checked. Printed as a skip
@@ -145,16 +148,7 @@ FIXTURES: list[Fixture] = [
     Fixture("vm_modules_var_reject.verse", "vm_modules_var_reject"),
     Fixture("vm_modules_varfield_probe.verse", "vm_modules_varfield_probe"),
     Fixture("vm_natives_edges_probe.verse", "vm_natives_edges_probe"),
-    # Measured: B03_Warn's Warn(...) call ends the process in a UE fatal error --
-    # "Could not find function ADDRESS 'TBaseFunctorDelegateInstance<...>::Execute' where 'call'." --
-    # because RaiseVerseRuntimeWarning calls a delegate lambda in VerseHost.cpp:324 from inside
-    # AutoRTFM's closed-code path without an AutoRTFM::Open around it. A host defect, not a language
-    # fact; see Fixture.known_defect.
-    Fixture("vm_natives_probe.verse", "vm_natives_probe",
-            known_defect="Warn(...) raises a Verse runtime diagnostic from closed AutoRTFM code -- "
-                         "a delegate lambda in VerseHost.cpp:324 is called without AutoRTFM::Open, "
-                         "so AutoRTFM::FunctionMapLookupExhaustive cannot find it and the host "
-                         "fatal-errors instead of the diagnostic reaching the ABI"),
+    Fixture("vm_natives_probe.verse", "vm_natives_probe"),
     Fixture("vm_natives_reach_reject.verse", "vm_natives_reach_reject"),
     Fixture("vm_objects_global_probe.verse", "vm_objects_global_probe"),
     Fixture("vm_objects_probe.verse", "vm_objects_probe"),

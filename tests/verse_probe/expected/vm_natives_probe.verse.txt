@@ -84,12 +84,100 @@ Floor[Inf] fails
 Round[NaN] fails
 [probe] call A05_FloatToInt: status 0, void
 Round[1e19] = 0
-[probe] call A06_RoundHuge: status 0LogOutputDevice: Warning: 
-
-Verse VM Call Stack:
-	[native] (/Verse.org/Verse:)Warn(:[]char)
-	<repo>\tests\verse_probe\vm_natives_probe.verse (/user@localhost/vm_natives_probe:)B03_Warn:93
-
-LogWindows: Error: appError called: Fatal error: [File:.\Runtime/AutoRTFM/Private/FunctionMap.cpp] [Line: <line>] 
-Could not find function <addr> 'TBaseFunctorDelegateInstance<FString (Verse::ERuntimeDiagnostic, const FText &, const FString &),FDefaultDelegateUserPolicy,`lambda at Programs\VerseHost\Private\VerseHost.cpp'>::Execute' where 'call'.
-[probe_contract] exit code: 3
+[probe] call A06_RoundHuge: status 0, void
+Round[-1e19] = 0
+[probe] call A07_RoundHugeNeg: status 0, void
+[probe] runtime error: ErrRuntime_IntegerBoundsExceeded: A value does not fall inside the representable range of a Verse integer. (The value 10000000000000000000.000000 cannot be converted to an integer because it does not fall inside the representable range of a Verse integer.)
+[probe]   (/Verse.org/Verse:)Floor(:float)  [native]:0
+[probe]   (/user@localhost/vm_natives_probe:)A08_FloorHuge  <repo>\tests\verse_probe\vm_natives_probe.verse:69
+[probe] call A08_FloorHuge: status 6, void
+[probe] runtime error: ErrRuntime_IntegerOverflow: Integer overflow encountered. (Integer overflow encountered.)
+[probe]   (/Verse.org/Verse:)Quotient(:int,:int)  [native]:0
+[probe]   (/user@localhost/vm_natives_probe:)A09_QuotientOverflow  <repo>\tests\verse_probe\vm_natives_probe.verse:73
+[probe] call A09_QuotientOverflow: status 6, void
+[probe] runtime error: ErrRuntime_GeneratedNativeInternal: An internal runtime error occurred in (generated) native code that was called from Verse. There is no other information available. (Value exceeds the range of a 64 bit integer.)
+[probe]   (/Verse.org/Verse:)Mod(:int,:int)  [native]:0
+[probe]   (/user@localhost/vm_natives_probe:)A10_ModBig  <repo>\tests\verse_probe\vm_natives_probe.verse:77
+[probe] call A10_ModBig: status 6, void
+ToString('a') = [a]
+ToString(0u00e9) = [Ã©], length 2
+ToString(0u1f600) length 4
+Join = [a, b, c], empty = [], one = [a]
+ToString(0.0078125) = 0.007812, ToString(0.0234375) = 0.023438, ToString(2.5e-7) = 0.000000
+ToString(-1.5) = -1.500000, ToString(5e-324) = 0.000000
+[probe] call B01_Strings: status 0, void
+[probe] runtime error: ErrorRequested: A runtime error was explicitly raised from user code. (User Message: 'boom')
+[probe]   (/Verse.org/Verse:)Err(:[]char)  [native]:0
+[probe]   (/user@localhost/vm_natives_probe:)B02_Err  <repo>\tests\verse_probe\vm_natives_probe.verse:90
+[probe] call B02_Err: status 6, void
+after Warn
+[probe] call B03_Warn: status 0, void
+[probe] runtime error: ErrorRequested: A runtime error was explicitly raised from user code. (User Message: '')
+[probe]   (/Verse.org/Verse:)Err(:[]char)  [native]:0
+[probe]   (/user@localhost/vm_natives_probe:)B04_ErrEmpty  <repo>\tests\verse_probe\vm_natives_probe.verse:97
+[probe] call B04_ErrEmpty: status 6, void
+epoch 1 = 1790475313.379000, same within call: yes
+[probe] call C01_Epoch: status 0, void
+epoch 2 = 1790475313.379000
+[probe] call C02_EpochAgain: status 0, void
+GetRandomInt(5, 5) = 5
+GetRandomInt(3, 1) in [1,3]: yes
+GetRandomFloat(2.0, 2.0) = 2.000000
+GetRandomFloat(-Inf, Inf) = Inf
+GetRandomFloat(0.0, NaN) = 0.000000
+GetRandomFloat(NaN, 1.0) = NaN
+[probe] call C03_Random: status 0, void
+random under failure kept 0
+[probe] call C04_RandomRollback: status 0, void
+concat key 1 => 10
+concat key 0 => 11
+concat key 2 => 12
+[probe] call D01_Maps: status 0, void
+three waiters started
+[probe] call E01_StartWaiters: status 0, void
+waiter 1 got 7
+waiter 2 got 7
+waiter 3 got 7
+signal returned
+second signal returned (no waiters)
+[probe] call E02_Signal: status 0, void
+callback order 1: 4 2 3 5 1 
+callback order 2: 5 2 1 3 4 
+after cancelling C: 2 1 4 5 
+second Cancel of the same subscription returned
+[probe] call E03_SubscribeOrder: status 0, void
+[probe] call AsSub: status 0, void
+task started
+[probe] call F01_StartTask: status 0, void
+phases: Active 1 Completed 0 Canceling 0 Canceled 0 Unsettled 1 Settled 0 Uninterrupted 1 Interrupted 0
+[probe] call F02_QueryTask: status 0, void
+signalled worker
+[probe] call F03_Complete: status 0, void
+phases: Active 0 Completed 1 Canceling 0 Canceled 0 Unsettled 0 Settled 1 Uninterrupted 1 Interrupted 0
+[probe] call F04_QueryAgain: status 0, void
+Await on completed task answered 105
+[probe] call F05_AwaitCompleted: status 0, void
+after Cancel: Canceled 1 Interrupted 1 Settled 1
+[probe] call F06_Cancel: status 0, void
+CanCallerAccessEpicInternal() = true
+[probe] call G01_EpicInternal: status 0, void
+Localize(Hello) = [Hello]
+Localize(Count(1234567)) = [n=1,234,567]
+Localize(Count(-5)) = [n=-5]
+Localize(Ratio(1234.5678)) = [f=1,234.568]
+Localize(Named("x")) = [s=x]
+[probe] call H01_Localize: status 0, void
+Localize(Join(...)) = [HelloHellos=yHellon=3]
+Localize(Join(empty)) = []
+[probe] call H02_JoinMessages: status 0, void
+ToDiagnostic(42) = [42]
+ToDiagnostic(1.5) = [1.5]
+ToDiagnostic("s") = ["s"]
+ToDiagnostic of an int array = [(1, 2)]
+ToDiagnostic(true) = [true]
+ToDiagnostic of an option = [option{1}]
+[probe] call I01_Diagnostic: status 0, void
+Linear(0.3) = 0.300000, Ease(0.25) = 0.408511, EaseIn(0.5) = 0.315357, EaseOut(0.5) = 0.684643, EaseInOut(0.25) = 0.129162
+CubicBezier(0.42,0,0.58,1)(0.25) = 0.129162, out of range X gives identity: 0.300000
+[probe] call J01_Easing: status 0, void
+[probe_contract] exit code: 0

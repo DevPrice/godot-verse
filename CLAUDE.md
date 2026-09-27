@@ -532,11 +532,14 @@ lookup answers differently run to run) -- both measured nondeterministic across 
 same unchanged binary, with the reason recorded in `tools/run_probe_contracts.py`'s own manifest
 rather than papered over with a looser check.
 
-Three more are `known_defect`: `vm_natives_probe.verse`, `vm_objects_wideint_probe.verse` and
-`vm_values_false_probe.verse` each end the process in a UE **fatal error** -- two are a Verse runtime
-diagnostic raised from inside closed AutoRTFM code (a delegate lambda in `VerseHost.cpp` called
-without `AutoRTFM::Open`), the third a VM-internal assertion -- which is a host defect, not a fact
-about the language. Their golden is truncated at the first fatal line's own message; the callstack
+Two more are `known_defect`: `vm_objects_wideint_probe.verse` and `vm_values_false_probe.verse` each
+end the process in a UE **fatal error**, a VM-internal assertion in both cases -- which is a host
+defect, not a fact about the language. `vm_natives_probe.verse` used to be a third: `Warn(...)` raised
+a Verse runtime diagnostic from inside closed AutoRTFM code, because the delegate lambdas
+`VerseHost.cpp` bound for reporting a runtime error inherited its `AUTORTFM_DISABLE` from being
+written inline in `InitHost` and so had no closed clone at all -- fixed by moving them to ordinary
+functions that each open explicitly around the one Godot call they make. Each remaining fixture's
+golden is truncated at the first fatal line's own message; the callstack
 after it is the host's line numbers and addresses, not the fixture's answer, so it is neither
 recorded nor checked. A match still prints, but as a skip (`known defect: ...`) rather than `ok`, so
 it stays visible in every run rather than blending into the passes; a host fix that stops one

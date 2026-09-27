@@ -180,6 +180,54 @@ VH_ATTR int32_t GodotVerse::InitCookerAfterEngineBoot(const vh_init_desc& Desc)
 
 namespace {
 
+/// FVerseRuntimeErrorDelegates::OnVerseRuntimeError's handler, and FVerseRuntimeErrorDelegates::
+/// RuntimeErrorTextProvider's below it -- both kept as ordinary namespace-scope functions rather
+/// than lambdas written inline in InitHost's body, because a lambda literal inherits the
+/// AUTORTFM_DISABLE of the function it is lexically nested in. Every Godot callback goes through
+/// AutoRTFM::Open (CLAUDE.md "Transactions, effects and raising"), and both of these are one: for a
+/// VerseVM build RaiseVerseRuntimeError opens before ever broadcasting or calling into either, but
+/// RaiseVerseRuntimeWarning does neither -- it has no transactional work to undo -- so both are also
+/// reached directly from closed code whenever a script calls Warn(...). AutoRTFM only clones a
+/// function for closed calling when every call it makes is itself clonable, and
+/// GodotVerse::ReportRuntimeError ends in a raw call through Host.OnRuntimeError into
+/// godot_verse.dll (this one), and SolarisProvider.Execute is an indirect delegate dispatch AutoRTFM
+/// cannot trace (the other), neither of which it can ever prove safe -- so inheriting
+/// AUTORTFM_DISABLE left each with no closed clone at all, and invoking either from Warn's closed
+/// context was "Could not find function ... where 'call'" (vm_natives_probe.verse's known_defect).
+void ReportVerseRuntimeError(const Verse::ERuntimeDiagnostic Diagnostic, const FText& MessageText, const FString& RuntimeErrorText)
+{
+    AutoRTFM::Open([&] {
+        // UE terminates the active content scope immediately after this delegate returns, which
+        // cancels that scope's suspended work -- since Phase 5 the raising instance's and nobody
+        // else's. Noted here because this is the last moment the task group can be asked what is
+        // about to be cancelled.
+        GodotVerse::NoteRuntimeErrorRaised();
+
+        const FUtf8String Message(Verse::AsFormattedString(Diagnostic, MessageText));
+
+        FString Callstack;
+        if (GPendingRuntimeError.IsSet() && GPendingRuntimeError->Text.Equals(RuntimeErrorText, ESearchCase::CaseSensitive))
+        {
+            Callstack = GPendingRuntimeError->Callstack;
+        }
+        GPendingRuntimeError.Reset();
+        GodotVerse::ReportRuntimeError(FUtf8StringView(Message), Callstack);
+    });
+}
+
+/// SolarisProvider is bound as a static delegate's payload rather than captured, since a plain
+/// function has no closure to capture into.
+FString ProvideRuntimeErrorText(const Verse::ERuntimeDiagnostic Diagnostic, const FText& MessageText,
+                                const FString& Callstack, FVerseRuntimeErrorTextProvider SolarisProvider)
+{
+    return AutoRTFM::Open([&]() -> FString {
+        FString Text = SolarisProvider.IsBound() ? SolarisProvider.Execute(Diagnostic, MessageText, Callstack)
+                                                 : Verse::AsFormattedString(Diagnostic, MessageText);
+        GPendingRuntimeError.Emplace(FPendingRuntimeError{Text, Callstack});
+        return Text;
+    });
+}
+
 VH_ATTR int32_t InitHost(const vh_init_desc* Desc, bool bEngineAlreadyBooted)
 {
     // Majors must match exactly and minors need not, which is the policy written at the top of
@@ -215,7 +263,7 @@ VH_ATTR int32_t InitHost(const vh_init_desc* Desc, bool bEngineAlreadyBooted)
                 static_cast<uint32>(Desc->LayoutDigest), static_cast<uint32>(VH_LAYOUT_DIGEST));
             vh_diagnostic Diagnostic{};
             Diagnostic.Severity = VH_SEVERITY_ERROR;
-            Diagnostic.MessageUtf8 = reinterpret_cast<const char*>(Message.GetData());
+            Diagnostic.MessageUtf8 = reinterpret_cast<const char*>(*Message);
             Diagnostic.MessageLen = Message.Len();
             Desc->OnDiagnostic(Desc->DiagnosticCtx, &Diagnostic);
         }
@@ -265,25 +313,9 @@ VH_ATTR int32_t InitHost(const vh_init_desc* Desc, bool bEngineAlreadyBooted)
     //
     // So the provider, bound below once Solaris has started, records the callstack beside the text
     // it returned, and the reporter takes that callstack only when the text it was handed is that
-    // same text -- which is what keeps a stack from being attached to a different raise.
-    FVerseRuntimeErrorDelegates::OnVerseRuntimeError.AddLambda(
-        [](const Verse::ERuntimeDiagnostic Diagnostic, const FText& MessageText, const FString& RuntimeErrorText) {
-            // UE terminates the active content scope immediately after this delegate returns,
-            // which cancels that scope's suspended work -- since Phase 5 the raising instance's
-            // and nobody else's. Noted here because this is the last moment the task group can be
-            // asked what is about to be cancelled.
-            GodotVerse::NoteRuntimeErrorRaised();
-
-            const FUtf8String Message(Verse::AsFormattedString(Diagnostic, MessageText));
-
-            FString Callstack;
-            if (GPendingRuntimeError.IsSet() && GPendingRuntimeError->Text.Equals(RuntimeErrorText, ESearchCase::CaseSensitive))
-            {
-                Callstack = GPendingRuntimeError->Callstack;
-            }
-            GPendingRuntimeError.Reset();
-            GodotVerse::ReportRuntimeError(FUtf8StringView(Message), Callstack);
-        });
+    // same text -- which is what keeps a stack from being attached to a different raise. Both are
+    // free functions above, not lambdas here -- see their own comment for why.
+    FVerseRuntimeErrorDelegates::OnVerseRuntimeError.AddStatic(&ReportVerseRuntimeError);
 
     // We are loaded by godot.exe, so the engine directory cannot be derived from the running
     // process. GForeignEngineDir is the documented override for exactly this case.
@@ -350,15 +382,10 @@ VH_ATTR int32_t InitHost(const vh_init_desc* Desc, bool bEngineAlreadyBooted)
     //
     // Solaris's provider is wrapped rather than replaced, because its text is also what its own
     // OnVerseRuntimeError handler logs: the stack is taken from the VM's rendering, which reaches
-    // the provider in both hosts, and the text returned is still Solaris's.
+    // the provider in both hosts, and the text returned is still Solaris's. A free function bound
+    // with the old provider as its payload -- see ProvideRuntimeErrorText's own comment for why.
     const FVerseRuntimeErrorTextProvider SolarisProvider = FVerseRuntimeErrorDelegates::RuntimeErrorTextProvider;
-    FVerseRuntimeErrorDelegates::RuntimeErrorTextProvider.BindLambda(
-        [SolarisProvider](const Verse::ERuntimeDiagnostic Diagnostic, const FText& MessageText, const FString& Callstack) {
-            FString Text = SolarisProvider.IsBound() ? SolarisProvider.Execute(Diagnostic, MessageText, Callstack)
-                                                     : Verse::AsFormattedString(Diagnostic, MessageText);
-            GPendingRuntimeError.Emplace(FPendingRuntimeError{Text, Callstack});
-            return Text;
-        });
+    FVerseRuntimeErrorDelegates::RuntimeErrorTextProvider.BindStatic(&ProvideRuntimeErrorText, SolarisProvider);
 
     if (Desc->EnableDebugger)
     {
