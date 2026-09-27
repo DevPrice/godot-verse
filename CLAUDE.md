@@ -677,7 +677,7 @@ fails the run by the step's name rather than hanging. **A case that presses Play
 `play_scene`**, which refuses unless `main_run_args` carries `--headless` — Godot forwards none of
 its own command line to the game. A new group of cases is a function in `editor_cases.gd` awaited from
 `run()`; `run_tests.py` needs no edit. It loads the host, so it runs under the host token like
-integration. (Observed at 2026-09: 18 cases, about 15 s including the import pass.)
+integration. (Observed at 2026-09: 157 cases, 148 passed and 9 skipped, about 35 s including the import pass.)
 
 A layer whose prerequisites are absent is **skipped and said to be skipped**, never counted as a
 pass; `--fail-on-skip` makes a skip fail the run, which is what CI passes.
