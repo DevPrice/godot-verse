@@ -5,6 +5,7 @@
 #include "HostMarshal.h"
 #include "HostScriptState.h"
 #include "HostTypeModel.h"
+#include "HostVerseEntry.h"
 #include "verse_diagnostics.h"
 #include "AutoRTFM.h"
 #include "Containers/Map.h"
@@ -113,6 +114,8 @@ using GodotVerse::DescribeExportType;
 using GodotVerse::DescribeType;
 using GodotVerse::EClassOrigin;
 using GodotVerse::EDeclaredKind;
+using GodotVerse::EnterVerse;
+using GodotVerse::FVerseEntry;
 using GodotVerse::DecoratedNameOf;
 using GodotVerse::ExtensionMethodDecoratedName;
 using GodotVerse::FDeclaredType;
@@ -994,30 +997,22 @@ AUTORTFM_DISABLE void RefreshProjectScope()
     GProjectScopeGuard.Emplace(GProjectScope.ToSharedRef());
 }
 
-/// Counts one entry into the VM, and replaces a terminated project scope at the outermost one.
-struct FVerseEntry
+} // namespace
+
+AUTORTFM_DISABLE GodotVerse::FVerseEntry::FVerseEntry()
 {
-    AUTORTFM_DISABLE FVerseEntry()
+    if (GVerseEntryDepth++ == 0)
     {
-        if (GVerseEntryDepth++ == 0)
-        {
-            RefreshProjectScope();
-        }
+        RefreshProjectScope();
     }
-    AUTORTFM_DISABLE ~FVerseEntry() { --GVerseEntryDepth; }
-
-    FVerseEntry(const FVerseEntry&) = delete;
-    FVerseEntry& operator=(const FVerseEntry&) = delete;
-};
-
-/// Every entry into the VM goes through here rather than calling Context.EnterVM directly, so that
-/// a seventh entry point cannot be added that forgets the scope handling above.
-template <typename TBody>
-AUTORTFM_DISABLE void EnterVerse(Verse::FRunningContext& Context, TBody&& Body)
-{
-    FVerseEntry Entry;
-    Context.EnterVM(Forward<TBody>(Body));
 }
+
+AUTORTFM_DISABLE GodotVerse::FVerseEntry::~FVerseEntry()
+{
+    --GVerseEntryDepth;
+}
+
+namespace {
 
 /// A diagnostic captured on the worker, owning its strings so it outlives the analysis that
 /// produced it and can be replayed on the game thread.
