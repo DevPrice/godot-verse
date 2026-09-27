@@ -135,6 +135,7 @@ static const char* SeverityName(int32_t Severity)
 
 static int DiagnosticCount = 0;
 static int DiagnosticErrorCount = 0;
+static std::string LastDiagnosticErrorMessage;
 static int RuntimeErrorCount = 0;
 static std::string LastRuntimeErrorPath;
 static int LastRuntimeErrorLine = 0;
@@ -292,6 +293,7 @@ static void SmokeOnDiagnostic(void*, const vh_diagnostic* Diagnostic)
 	if (Diagnostic->Severity == VH_SEVERITY_ERROR)
 	{
 		++DiagnosticErrorCount;
+		LastDiagnosticErrorMessage.assign(Diagnostic->MessageUtf8, Diagnostic->MessageLen);
 	}
 	fprintf(stderr, "%.*s:%d:%d: %s: %.*s\n",
 		Diagnostic->FilePathLen, Diagnostic->FilePathUtf8,
@@ -595,6 +597,25 @@ int main(int argc, char** argv)
 	Desc.OnRuntimeError = &SmokeOnRuntimeError;
 	Desc.RuntimeErrorCtx = nullptr;
 	Desc.EnableDebugger = 0;
+
+	// A layout digest mismatch must be refused before vh_init ever touches Host state -- vh_init
+	// gets one attempt per process, so this has to run before the real call below and must not
+	// spend it. InitHost's check is above where Host.bInitialized is read or written, so a refusal
+	// here leaves the real vh_init on the next line the process's first attempt still.
+	{
+		vh_init_desc BadDesc = Desc;
+		BadDesc.LayoutDigest = Desc.LayoutDigest ^ 1;
+		DiagnosticErrorCount = 0;
+		LastDiagnosticErrorMessage.clear();
+		const int32_t BadStatus = Host.Init(&BadDesc);
+		const bool NamedBothDigests = LastDiagnosticErrorMessage.find("godot-verse") != std::string::npos
+			&& LastDiagnosticErrorMessage.find("Verse host") != std::string::npos;
+		if (!Step("a layout digest mismatch is refused",
+				  BadStatus == VH_ERR_ABI && DiagnosticErrorCount > 0 && NamedBothDigests))
+		{
+			return 1;
+		}
+	}
 
 	if (!Step("vh_init", Host.Init(&Desc) == VH_OK))
 	{
