@@ -240,7 +240,8 @@ public:
 	double get_frame_budget_ms() const;
 
 	// Attaches the Verse debugger when Godot's is active and detaches it when it stops being.
-	// Called once per frame from _frame, which is also where every other per-frame decision is.
+	// Called once per frame from _frame, and before every instance is made, which is the one entry
+	// into Verse that comes before the first frame.
 	void sync_debugger_attachment() { debugger.sync_attachment(); }
 
 	// The build-and-analysis pump's public face; VerseProjectState documents each.

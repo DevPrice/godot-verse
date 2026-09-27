@@ -262,6 +262,11 @@ String VerseScript::verse_class_name() const {
 
 vh_instance *VerseScript::make_instance(int64_t p_object_id) const {
 	VerseRuntime *runtime = get_runtime();
+	// Before the instance runs any Verse, not only from _frame: a main scene's nodes are made and
+	// their _Ready run before the first frame, so a breakpoint there fired never.
+	if (VerseScriptLanguage *language = VerseScriptLanguage::singleton()) {
+		language->sync_debugger_attachment();
+	}
 	return runtime != nullptr ? runtime->instantiate(verse_class_name(), p_object_id) : nullptr;
 }
 
@@ -686,14 +691,14 @@ void VerseScript::_set_source_code(const String &p_code) {
 // editor -- so a swap that hands back an instance of the same retiring class is loss with no gain.
 // A failed compile publishes no generation, which is exactly when there is nothing to adopt.
 Error VerseScript::_reload(bool p_keep_state) {
+	reloading = true;
 	const Error status = compile();
+	reloading = false;
 	if (status == OK) {
 		reload_instances();
 	}
 	return status;
-	reloading = true;
 }
-	reloading = false;
 
 bool VerseScript::_has_method(const StringName &p_method) const {
 	return is_compiled() && find_method(p_method) != nullptr;
@@ -1064,11 +1069,6 @@ Dictionary property_for(const Dictionary &p_entry, Variant::Type p_type) {
 			property["hint_string"] = p_entry["hint_string"];
 			break;
 		case VH_EXPORT_HINT_NODE_PATH:
-			property["hint"] = (int64_t)PROPERTY_HINT_NODE_PATH_VALID_TYPES;
-			property["hint_string"] = p_entry["hint_string"];
-			break;
-		case VH_EXPORT_HINT_ENUM:
-			// The enumerators, comma separated in declaration order, which is what Godot's enum hint
 			// Declared as a NodePath, which is what GDScript's `@export_node_path` is: the inspector
 			// builds its node picker only for TYPE_NODE_PATH, whatever the hint, and draws a `string`
 			// as a text field. The member stays a `string` in Verse -- a NodePath crosses into one
@@ -1076,6 +1076,11 @@ Dictionary property_for(const Dictionary &p_entry, Variant::Type p_type) {
 			if (p_type == Variant::STRING) {
 				property["type"] = (int64_t)Variant::NODE_PATH;
 			}
+			property["hint"] = (int64_t)PROPERTY_HINT_NODE_PATH_VALID_TYPES;
+			property["hint_string"] = p_entry["hint_string"];
+			break;
+		case VH_EXPORT_HINT_ENUM:
+			// The enumerators, comma separated in declaration order, which is what Godot's enum hint
 			// wants and what the stored ordinal indexes into. Spelled as the author wrote them: the
 			// names are what the dropdown shows and nothing resolves them back.
 			property["hint"] = (int64_t)PROPERTY_HINT_ENUM;

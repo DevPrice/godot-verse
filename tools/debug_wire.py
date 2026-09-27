@@ -370,12 +370,11 @@ def drive(cases: Cases, wire: Wire, lines: dict[str, int]) -> None:
     stop.resume("continue")
 
     stop = arrive(60)
-    if stop is not None and where(stop)[:2] == (VERSE, lines["ready"]):
-        cases.check("a breakpoint in the main scene's _Ready stops", True)
+    ready = where(stop)[:2] if stop is not None else None
+    cases.check_eq("a breakpoint in the main scene's _Ready stops", ready, (VERSE, lines["ready"]))
+    if ready == (VERSE, lines["ready"]):
         stop.resume("continue")
         stop = arrive(60)
-    else:
-        cases.skip("a breakpoint in the main scene's _Ready stops", READY_DEFECT)
     if not cases.check("a --breakpoints breakpoint stops a Verse script", stop is not None
                        and stop.reason == "Breakpoint", "no debug_enter arrived" if stop is None else stop.reason):
         return

@@ -185,7 +185,9 @@ void VerseDebugger::break_here() {
 void VerseDebugger::sync_attachment() {
 	VerseRuntime *runtime = get_runtime();
 	EngineDebugger *debugger = EngineDebugger::get_singleton();
-	if (runtime == nullptr || debugger == nullptr) {
+	// Not before the host is up: debug_set_enabled answers false for no host, which would read as
+	// the socket debugger holding the slot and settle the question for the session.
+	if (runtime == nullptr || debugger == nullptr || !runtime->is_host_loaded()) {
 		return;
 	}
 	const bool wanted = debugger->is_active();

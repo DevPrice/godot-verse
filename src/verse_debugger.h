@@ -54,7 +54,7 @@ public:
 	void break_here();
 
 	// Attaches the Verse debugger when Godot's is active and detaches it when it stops being.
-	// Called once per frame from _frame, which is also where every other per-frame decision is.
+	// Called once per frame from _frame and before each instance is made; cheap when nothing moved.
 	void sync_attachment();
 
 private:
