@@ -22,35 +22,35 @@
 [probe]   SubscribeScored  params=0 result=0  virtual=
 [probe]   AsAwaitable  params=0 result=0  virtual=
 [probe]   Answer  params=0 result=0  virtual=
-[probe] :0:0: error 0: The signal `Bare` was registered but could not be connected, so awaiting it would never resume.
-[probe] :0:0: error 0: The signal `Scored` was registered but could not be connected, so awaiting it would never resume.
-[probe] :0:0: error 0: The signal `Struck` was registered but could not be connected, so awaiting it would never resume.
-[probe] :0:0: error 0: The signal `Reported` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Bare` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Scored` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Struck` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Reported` was registered but could not be connected, so awaiting it would never resume.
 [probe] call EmitBare: status 0, void
-[probe] :0:0: error 0: The signal `Bare` was registered but could not be connected, so awaiting it would never resume.
-[probe] :0:0: error 0: The signal `Scored` was registered but could not be connected, so awaiting it would never resume.
-[probe] :0:0: error 0: The signal `Struck` was registered but could not be connected, so awaiting it would never resume.
-[probe] :0:0: error 0: The signal `Reported` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Bare` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Scored` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Struck` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Reported` was registered but could not be connected, so awaiting it would never resume.
 [probe] call EmitScored: status 0, void
-[probe] :0:0: error 0: The signal `Bare` was registered but could not be connected, so awaiting it would never resume.
-[probe] :0:0: error 0: The signal `Scored` was registered but could not be connected, so awaiting it would never resume.
-[probe] :0:0: error 0: The signal `Struck` was registered but could not be connected, so awaiting it would never resume.
-[probe] :0:0: error 0: The signal `Reported` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Bare` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Scored` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Struck` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Reported` was registered but could not be connected, so awaiting it would never resume.
 [probe] call EmitReported: status 0, void
-[probe] :0:0: error 0: The signal `Bare` was registered but could not be connected, so awaiting it would never resume.
-[probe] :0:0: error 0: The signal `Scored` was registered but could not be connected, so awaiting it would never resume.
-[probe] :0:0: error 0: The signal `Struck` was registered but could not be connected, so awaiting it would never resume.
-[probe] :0:0: error 0: The signal `Reported` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Bare` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Scored` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Struck` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Reported` was registered but could not be connected, so awaiting it would never resume.
 [probe] call SubscribeScored: status 0, void
-[probe] :0:0: error 0: The signal `Bare` was registered but could not be connected, so awaiting it would never resume.
-[probe] :0:0: error 0: The signal `Scored` was registered but could not be connected, so awaiting it would never resume.
-[probe] :0:0: error 0: The signal `Struck` was registered but could not be connected, so awaiting it would never resume.
-[probe] :0:0: error 0: The signal `Reported` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Bare` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Scored` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Struck` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Reported` was registered but could not be connected, so awaiting it would never resume.
 [probe] call AsAwaitable: status 0, void
-[probe] :0:0: error 0: The signal `Bare` was registered but could not be connected, so awaiting it would never resume.
-[probe] :0:0: error 0: The signal `Scored` was registered but could not be connected, so awaiting it would never resume.
-[probe] :0:0: error 0: The signal `Struck` was registered but could not be connected, so awaiting it would never resume.
-[probe] :0:0: error 0: The signal `Reported` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Bare` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Scored` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Struck` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: VG2113: The signal `Reported` was registered but could not be connected, so awaiting it would never resume.
 export_signal_probe compiled
 [probe] call Answer: status 0, void
 [probe_contract] exit code: 0
