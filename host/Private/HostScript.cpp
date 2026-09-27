@@ -6275,8 +6275,13 @@ AUTORTFM_DISABLE void DescribePayload(const uLang::CTypeBase* Payload,
 /// generic "names nothing", which described the symptom and not one cause.
 AUTORTFM_DISABLE FUtf8String SignalRejectReason(int32 Reject, const FUtf8String& Detail)
 {
-    switch (Reject)
+    VH_EXHAUSTIVE_SWITCH_BEGIN
+    switch (static_cast<vh_signal_reject>(Reject))
     {
+    // Never actually rejected, so never actually asked for; kept alongside the rest so a new
+    // vh_signal_reject enumerator fails here rather than answering the generic sentence below.
+    case VH_SIGNAL_OK:
+        return UTF8TEXT("the declaration was refused.");
     case VH_SIGNAL_IS_VAR:
         return UTF8TEXT("a `signal` member must not be `var`.");
     // Retired: GetClassSignalsLive no longer tests access. Kept while the enumerator is, so a
@@ -6292,9 +6297,9 @@ AUTORTFM_DISABLE FUtf8String SignalRejectReason(int32 Reject, const FUtf8String&
             + UTF8TEXT("` is itself a struct, and a payload decomposes one level only.");
     case VH_SIGNAL_NEEDS_ATTRIBUTE:
         return UTF8TEXT("it carries no `@export_signal`, so Godot was never told about it.");
-    default:
-        return UTF8TEXT("the declaration was refused.");
     }
+    VH_EXHAUSTIVE_SWITCH_END
+    return UTF8TEXT("the declaration was refused.");
 }
 
 /// The UObject a class-typed member holds, or null.
