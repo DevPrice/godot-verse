@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -117,9 +118,50 @@ public:
 	// in the middle of the editor's work stops the pump and every `@tool` instance until it lands.
 	void queue_check(const godot::String &p_path, const godot::String &p_source);
 
-	// Queues p_path's buffer for analysis in the slot p_is_completion picks: see
-	// has_pending_completion_check.
-	void request_check(const godot::String &p_path, const godot::String &p_normalized_source, bool p_is_completion = false);
+	// The analysis pump, beside the build. At most one analysis runs, which is the host's rule, and
+	// at most one buffer waits per kind, the newest. A COMPLETION buffer is the author's text with
+	// the half-typed identifier replaced by the placeholder; an ORDINARY one is the text itself.
+	//
+	//   state      trigger                                          effect
+	//   any        request_check(COMPLETION)                        completion_refresh := the buffer, and
+	//                                                               then the next two rows
+	//   any        request_check, the buffer is the one in flight   nothing queued
+	//   any        request_check otherwise                          that kind's slot := the buffer
+	//   IDLE       start_pending_check: a slot filled, host up and  ANALYZING the completion slot if it is
+	//              not busy, vh_check_project_begin accepts         filled, else the ordinary; slot emptied
+	//   ANALYZING  start_pending_check                              nothing: the host refuses a begin until
+	//                                                               the last one is reaped
+	//   ANALYZING  poll_check, the host reports it finished         IDLE, after the landing below
+	//   any        flush_pending_check, host with a compiler        one slot analysed synchronously,
+	//                                                               completion first: the buffer and its
+	//                                                               diagnostics recorded, analysis_epoch
+	//                                                               alone advances, nothing is told
+	//   any        flush_pending_check, no host or no compiler      both slots emptied
+	//   any        build_project publishes a generation             both epochs advance; one ORDINARY
+	//                                                               request queued for the text just read
+	//
+	// A landing records the buffer as analysed and advances analysis_epoch. ORDINARY then advances
+	// description_epoch, records the diagnostics, refreshes the file's script warnings, re-arms the
+	// documentation republish and tells every live script; COMPLETION draws none of that, because it
+	// describes a line nobody has finished writing, and arms the completion refresh when it was
+	// for completion_refresh's buffer.
+	//
+	// Two slots rather than one, and the second is not a luxury: confirming a completion changes
+	// the text, so _validate runs on the editor's idle timer a moment after _complete_code queued
+	// the buffer the argument hint is waiting on. Sharing a slot let that validate displace it --
+	// and nothing re-asks, because only a COMPLETION landing arms the refresh, so the hint stayed
+	// blank until the next keystroke. Which of the two won was a race against how busy the host
+	// was, which is what made it intermittent (B27).
+	enum class CheckKind {
+		ORDINARY,
+		COMPLETION,
+	};
+	struct CheckRequest {
+		godot::String path;
+		godot::String source;
+	};
+
+	void request_check(const godot::String &p_path, const godot::String &p_normalized_source, CheckKind p_kind = CheckKind::ORDINARY);
 	void start_pending_check();
 
 	// Runs the queued analysis here and now instead of leaving it for _frame.
@@ -166,10 +208,8 @@ public:
 	bool binding_roster_incomplete() const { return !incomplete_bindings.empty(); }
 	const std::vector<std::string> &incomplete_binding_classes() const { return incomplete_bindings; }
 
-	godot::Dictionary diagnostics_by_path;
-	// The compiler's warnings, keyed and shaped the same way and recorded by the same analysis.
-	// Kept apart from the errors because diagnostics_for is what decides a script's validity.
-	godot::Dictionary compiler_warnings_by_path;
+	// Every error the last analysis or build filed, by res:// path.
+	const godot::Dictionary &all_diagnostics() const { return diagnostics_by_path; }
 
 	// The text the host currently holds for each script, keyed by res:// path. A validate whose
 	// buffer already matches it needs no re-analysis: the host's last analysis answered for
@@ -177,42 +217,22 @@ public:
 	// on save, while a whole-project semantic analysis costs ~750 ms whether anything changed or
 	// not. Nothing on the editor's thread waits for one any more, but it blocks the VM for its
 	// whole length, so without this every tab switch costs a `@tool` script that long not running.
-	godot::Dictionary analyzed_source_by_path;
+	const godot::Dictionary &analyzed_sources() const { return analyzed_source_by_path; }
 
-	// res:// path for each absolute path the host reports diagnostics against.
-	godot::Dictionary path_by_globalized;
+	// res:// path for each absolute path the host reports diagnostics against, as of the last build.
+	const godot::Dictionary &res_path_by_globalized() const { return path_by_globalized; }
 
-	// The buffers waiting for an analysis, and the one an analysis is running for. Only one runs
-	// at a time, and a newer buffer replaces a waiting one of its own kind rather than queueing
-	// behind it.
-	//
-	// Two slots rather than one, and the second is not a luxury: confirming a completion changes
-	// the text, so _validate runs on the editor's idle timer a moment after _complete_code queued
-	// the buffer the argument hint is waiting on. Sharing a slot let that validate displace it --
-	// and nothing re-asks, because poll_check refreshes the popup only when the analysis that
-	// landed was the completion one, so the hint stayed blank until the next keystroke. Which of
-	// the two won was a race against how busy the host was, which is what made it intermittent.
-	bool has_pending_check = false;
-	godot::String pending_check_path;
-	godot::String pending_check_source;
-	bool has_pending_completion_check = false;
-	godot::String pending_completion_path;
-	godot::String pending_completion_source;
-	godot::String in_flight_path;
-	godot::String in_flight_source;
+	// Whether a completion buffer is waiting for an analysis. probe_complete asks, because a caret
+	// whose first answer queued one is the caret worth asking twice.
+	bool completion_check_pending() const { return pending_completion.has_value(); }
 
-	// Whether the buffer in flight is a completion buffer rather than the author's own text -- the
-	// half-typed identifier replaced by the placeholder. Its diagnostics describe a line nobody has
-	// finished writing, so poll_check drops them instead of drawing them; what it keeps is the
-	// record that the host now holds this text, which is the whole reason the analysis was asked
-	// for.
-	bool in_flight_is_completion = false;
+	// Armed by a completion landing for the buffer completion last asked about, and taken by the
+	// _frame that asks the editor to complete again. Answers whether it was armed.
+	bool take_completion_refresh();
 
-	// The completion buffer whose analysis is worth re-asking completion for once it lands, and
-	// the file it belongs to. Empty when nothing is waiting on one.
-	godot::String completion_refresh_path;
-	godot::String completion_refresh_source;
-	bool completion_refresh_pending = false;
+	// The completion buffer last asked about and the file it belongs to, empty until one is. Never
+	// cleared: refresh_completion_if_current compares the editor's caret against it.
+	const CheckRequest &completion_refresh_request() const { return completion_refresh; }
 
 private:
 	VerseScriptLanguage &language;
@@ -224,6 +244,30 @@ private:
 
 	// The table's every "finishes" row.
 	void finish_build(godot::Error p_status, bool p_withheld);
+
+	struct InFlightCheck {
+		CheckKind kind = CheckKind::ORDINARY;
+		CheckRequest request;
+	};
+	std::optional<CheckRequest> pending_ordinary;
+	std::optional<CheckRequest> pending_completion;
+	// Empty is IDLE.
+	std::optional<InFlightCheck> in_flight;
+
+	CheckRequest completion_refresh;
+	bool completion_refresh_armed = false;
+
+	// The analysis in flight, or a default one -- ORDINARY, empty path and text -- when IDLE. What
+	// request_check compares a buffer against, and what poll_check would land if the host reported
+	// a finish nothing began, which vh_check_project_poll's contract rules out.
+	InFlightCheck in_flight_or_default() const { return in_flight.value_or(InFlightCheck()); }
+
+	godot::Dictionary diagnostics_by_path;
+	// The compiler's warnings, keyed and shaped the same way and recorded by the same analysis.
+	// Kept apart from the errors because diagnostics_for is what decides a script's validity.
+	godot::Dictionary compiler_warnings_by_path;
+	godot::Dictionary analyzed_source_by_path;
+	godot::Dictionary path_by_globalized;
 
 	// Two counters that answer "has the analyzed program changed since this cache was filled".
 	// They are not one counter because they answer different questions. analysis_epoch tracks

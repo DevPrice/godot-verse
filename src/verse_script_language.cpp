@@ -780,13 +780,13 @@ Dictionary VerseScriptLanguage::_validate(const String &p_script, const String &
 	// paid anyway and the extra sections are free. A clean file gets the warning below instead.
 	PackedStringArray broken_elsewhere;
 	TypedArray<Dictionary> elsewhere;
-	const Array other_paths = project_state.diagnostics_by_path.keys();
+	const Array other_paths = project_state.all_diagnostics().keys();
 	for (int64_t i = 0; i < other_paths.size(); i++) {
 		const String other_path = other_paths[i];
 		if (other_path == p_path) {
 			continue;
 		}
-		const TypedArray<Dictionary> filed = TypedArray<Dictionary>(project_state.diagnostics_by_path[other_path]);
+		const TypedArray<Dictionary> filed = TypedArray<Dictionary>(project_state.all_diagnostics()[other_path]);
 		if (filed.is_empty()) {
 			continue;
 		}
@@ -796,8 +796,8 @@ Dictionary VerseScriptLanguage::_validate(const String &p_script, const String &
 		// line before the editor displays it (see diagnostics_fitted_to above). No entry means no
 		// analysis has read that file yet; pass its diagnostics through rather than fit them to the
 		// wrong buffer.
-		if (project_state.analyzed_source_by_path.has(other_path)) {
-			elsewhere.append_array(diagnostics_fitted_to(filed, String(project_state.analyzed_source_by_path[other_path])));
+		if (project_state.analyzed_sources().has(other_path)) {
+			elsewhere.append_array(diagnostics_fitted_to(filed, String(project_state.analyzed_sources()[other_path])));
 		} else {
 			elsewhere.append_array(filed);
 		}
@@ -2340,7 +2340,7 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 					// The host has never analysed this buffer, and since ABI v7 it will not do it
 					// here. Queue it and draw no hint; the analysis lands in a later _frame, which
 					// asks the editor to complete again and arrives back here with an answer.
-					project_state.request_check(p_path, source, true);
+					project_state.request_check(p_path, source, VerseProjectState::CheckKind::COMPLETION);
 				} else {
 					signature_cache = answer;
 					signature_cache_source = source;
@@ -2434,7 +2434,7 @@ Dictionary VerseScriptLanguage::_complete_code(const String &p_code, const Strin
 				// Queue the completion buffer and answer now with whatever is free. This is the
 				// whole of the change ABI v7 bought: the analysis still costs ~1.3 s, but it is the
 				// host's thread that spends it rather than the keystroke.
-				project_state.request_check(p_path, source, true);
+				project_state.request_check(p_path, source, VerseProjectState::CheckKind::COMPLETION);
 			} else {
 				completion_cache_options = answer;
 				completion_cache_source = source;
@@ -2713,7 +2713,7 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	// loci below an inserted row are all shifted, so the jump lands confidently on the wrong
 	// line. This is the same predicate check_buffer uses to decide a re-analysis is unnecessary.
 	const String normalized = verse_newline_normalized(before + p_code.substr(marker + 1));
-	if (!project_state.analyzed_source_by_path.has(p_path) || String(project_state.analyzed_source_by_path[p_path]) != normalized) {
+	if (!project_state.analyzed_sources().has(p_path) || String(project_state.analyzed_sources()[p_path]) != normalized) {
 		return refuse_or_mirrored_class();
 	}
 
@@ -2792,7 +2792,7 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 		if (p_definition_path == globalized) {
 			return normalized;
 		}
-		const String res_path = project_state.path_by_globalized.get(p_definition_path, String());
+		const String res_path = project_state.res_path_by_globalized().get(p_definition_path, String());
 		return verse_newline_normalized(FileAccess::get_file_as_string(
 				res_path.is_empty() ? p_definition_path : res_path));
 	};
@@ -2831,7 +2831,7 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	// Godot's results are a location, eight class members and the two locals (B31).
 	const bool names_a_type = kind == VH_LOOKUP_CLASS || kind == VH_LOOKUP_ENUM || kind == VH_LOOKUP_MODULE;
 	if (names_a_type && String(result["doc_type"]).is_empty() &&
-			(own_path == globalized || project_state.path_by_globalized.has(own_path))) {
+			(own_path == globalized || project_state.res_path_by_globalized().has(own_path))) {
 		result["doc_type"] = String(verse_scan_type_keyword(
 				source_at(own_path).utf8().get_data(), found_name.utf8().get_data()).c_str());
 	}
@@ -2860,7 +2860,7 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 		// for a class under a `.vmodule`, and only the file-named class registers one. The name
 		// comes from the file the definition was written in, because at its own declaration a
 		// class's owner is the module or the snippet around it and never spells the class.
-		const String own_res_path = own_path == globalized ? p_path : String(project_state.path_by_globalized.get(own_path, String()));
+		const String own_res_path = own_path == globalized ? p_path : String(project_state.res_path_by_globalized().get(own_path, String()));
 		const String own_qualified = own_res_path.is_empty() ? String() : qualified_class_name(own_res_path);
 		if (own_qualified.get_file() == found_name && script_class_names().has(own_qualified)) {
 			ensure_script_doc_published(own_qualified);
@@ -3081,7 +3081,7 @@ Dictionary VerseScriptLanguage::_lookup_code(const String &p_code, const String 
 	// cross-file definition we cannot name gets no location at all rather than a jump to that
 	// line of the wrong file.
 	const bool same_file = target_path == globalized;
-	const String target_res_path = same_file ? p_path : String(project_state.path_by_globalized.get(target_path, String()));
+	const String target_res_path = same_file ? p_path : String(project_state.res_path_by_globalized().get(target_path, String()));
 	if (target_res_path.is_empty()) {
 		return hide_if_empty();
 	}
@@ -3367,7 +3367,7 @@ TypedArray<Dictionary> VerseScriptLanguage::probe_complete(
 		//
 		// The completion slot alone: _complete_code queues nothing else, and the ordinary one may
 		// still hold the buffer the build queued if some earlier caret's flush took this one.
-		const bool queued = project_state.has_pending_completion_check;
+		const bool queued = project_state.completion_check_pending();
 		if (queued) {
 			project_state.flush_pending_check();
 			const Dictionary second = _complete_code(code, p_path, nullptr);
@@ -3862,8 +3862,7 @@ void VerseScriptLanguage::_frame() {
 
 		// After the error list and before the import, for the same reason: this asks the editor to
 		// run _complete_code again, and that has to see the buffer everything else has settled on.
-		if (project_state.completion_refresh_pending) {
-			project_state.completion_refresh_pending = false;
+		if (project_state.take_completion_refresh()) {
 			refresh_completion_if_current();
 		}
 
@@ -4267,7 +4266,7 @@ void VerseScriptLanguage::unregister_script(VerseScript *p_script) {
 // here ever is, and the selected index survives unless the head of the list actually changed.
 void VerseScriptLanguage::refresh_completion_if_current() const {
 #ifdef TOOLS_ENABLED
-	if (project_state.completion_refresh_path.is_empty()) {
+	if (project_state.completion_refresh_request().path.is_empty()) {
 		return;
 	}
 
@@ -4280,7 +4279,7 @@ void VerseScriptLanguage::refresh_completion_if_current() const {
 	// Only the file the analysis was for. The author may have switched tabs while it ran, and
 	// asking some other script to complete would open a popup nobody asked for.
 	const Ref<Script> script = script_editor->get_current_script();
-	if (script.is_null() || script->get_path() != project_state.completion_refresh_path) {
+	if (script.is_null() || script->get_path() != project_state.completion_refresh_request().path) {
 		return;
 	}
 
@@ -4292,7 +4291,7 @@ void VerseScriptLanguage::refresh_completion_if_current() const {
 
 	// The caret has to still be inside the identifier the question was about. Anywhere else and
 	// the answer that just landed is not the answer to what is being typed now.
-	if (completion_placeholder_buffer(code_edit) != project_state.completion_refresh_source) {
+	if (completion_placeholder_buffer(code_edit) != project_state.completion_refresh_request().source) {
 		return;
 	}
 
@@ -5029,7 +5028,7 @@ static String identifier_at_span(const String &p_source, const Dictionary &p_dia
 void VerseScriptLanguage::explain_skipped_members(const String &p_path, const TypedArray<Dictionary> &p_errors) const {
 	// The text the analysis read, which is what the compiler's spans are measured against. A file
 	// no analysis has seen has none, and nothing here can be said about it.
-	const String source = project_state.analyzed_source_by_path.has(p_path) ? String(project_state.analyzed_source_by_path[p_path]) : String();
+	const String source = project_state.analyzed_sources().has(p_path) ? String(project_state.analyzed_sources()[p_path]) : String();
 	for (int64_t i = 0; i < p_errors.size(); i++) {
 		Dictionary error = p_errors[i];
 		if ((int64_t)error.get("code", 0) != UNKNOWN_IDENTIFIER_CODE) {
@@ -5063,7 +5062,7 @@ void VerseScriptLanguage::note_missing_imports(const String &p_path, const Typed
 		return;
 	}
 
-	const String source = project_state.analyzed_source_by_path.has(p_path) ? String(project_state.analyzed_source_by_path[p_path]) : String();
+	const String source = project_state.analyzed_sources().has(p_path) ? String(project_state.analyzed_sources()[p_path]) : String();
 
 	for (int64_t i = 0; i < p_errors.size(); i++) {
 		Dictionary error = p_errors[i];

@@ -9,6 +9,7 @@
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -278,19 +279,19 @@ void VerseProjectState::queue_check(const String &p_path, const String &p_source
 	request_check(p_path, verse_newline_normalized(p_source));
 }
 
-void VerseProjectState::request_check(const String &p_path, const String &p_normalized_source, bool p_is_completion) {
+void VerseProjectState::request_check(const String &p_path, const String &p_normalized_source, CheckKind p_kind) {
 	// Recorded ahead of the in-flight test below, because the analysis already running may be the
 	// very one this is asking for -- the editor asks for the options and the argument hint about
 	// one keystroke, and the second ask must not lose the first's claim on the result.
-	if (p_is_completion) {
-		completion_refresh_path = p_path;
-		completion_refresh_source = p_normalized_source;
+	if (p_kind == CheckKind::COMPLETION) {
+		completion_refresh = CheckRequest{ p_path, p_normalized_source };
 	}
 
 	// The analysis in flight is already for this exact text. Godot validates the same unchanged
 	// buffer several times over while one runs, and queueing behind it would buy the same answer
 	// a second time -- putting a whole extra analysis between a save and the result it settles on.
-	if (p_path == in_flight_path && p_normalized_source == in_flight_source) {
+	const CheckRequest running = in_flight_or_default().request;
+	if (p_path == running.path && p_normalized_source == running.source) {
 		return;
 	}
 
@@ -298,15 +299,8 @@ void VerseProjectState::request_check(const String &p_path, const String &p_norm
 	// every intermediate state is worth less than the one the author is looking at now. Across the
 	// two kinds nothing displaces anything, because a completion buffer and the author's own text
 	// are different questions with different consumers -- which is what the second slot is for.
-	if (p_is_completion) {
-		pending_completion_path = p_path;
-		pending_completion_source = p_normalized_source;
-		has_pending_completion_check = true;
-	} else {
-		pending_check_path = p_path;
-		pending_check_source = p_normalized_source;
-		has_pending_check = true;
-	}
+	std::optional<CheckRequest> &slot = p_kind == CheckKind::COMPLETION ? pending_completion : pending_ordinary;
+	slot = CheckRequest{ p_path, p_normalized_source };
 
 	// Queued, not started. Nothing that describes a class joins the analysis thread any more --
 	// since ABI v7 they answer from the snapshot the last one left -- but an analysis still blocks
@@ -317,7 +311,7 @@ void VerseProjectState::request_check(const String &p_path, const String &p_norm
 }
 
 void VerseProjectState::start_pending_check() {
-	if (!has_pending_check && !has_pending_completion_check) {
+	if (!pending_ordinary && !pending_completion) {
 		return;
 	}
 
@@ -330,56 +324,45 @@ void VerseProjectState::start_pending_check() {
 	// on it and are drawing nothing meanwhile, where the author's own buffer feeds a gutter that is
 	// still showing the last analysis' diagnostics. Each kind holds only its newest buffer, so
 	// preferring one delays the other by a single analysis and can never queue a third.
-	const bool completion = has_pending_completion_check;
-	const String path = completion ? pending_completion_path : pending_check_path;
-	const String source = completion ? pending_completion_source : pending_check_source;
+	const CheckKind kind = pending_completion ? CheckKind::COMPLETION : CheckKind::ORDINARY;
+	std::optional<CheckRequest> &slot = kind == CheckKind::COMPLETION ? pending_completion : pending_ordinary;
+	const CheckRequest request = *slot;
 
-	const String globalized = ProjectSettings::get_singleton()->globalize_path(path);
-	if (runtime->begin_check_project(globalized, source) != OK) {
+	const String globalized = ProjectSettings::get_singleton()->globalize_path(request.path);
+	if (runtime->begin_check_project(globalized, request.source) != OK) {
 		return;
 	}
 
 	// The host has taken this text, so it is what the next result answers for.
-	in_flight_path = path;
-	in_flight_source = source;
-	in_flight_is_completion = completion;
-	if (completion) {
-		has_pending_completion_check = false;
-	} else {
-		has_pending_check = false;
-	}
+	in_flight = InFlightCheck{ kind, request };
+	slot.reset();
 }
 
 void VerseProjectState::flush_pending_check() {
-	if (!has_pending_check && !has_pending_completion_check) {
+	if (!pending_ordinary && !pending_completion) {
 		return;
 	}
 
 	VerseRuntime *runtime = get_runtime();
 	if (runtime == nullptr || !runtime->is_host_loaded() || !runtime->host_has_compiler()) {
-		has_pending_check = false;
-		has_pending_completion_check = false;
+		pending_ordinary.reset();
+		pending_completion.reset();
 		return;
 	}
 
 	// The completion slot first, in the order start_pending_check prefers them and for the same
 	// reason. One flush runs one analysis and leaves the other slot for _frame; probe_complete is
 	// what makes that enough, because it flushes once per caret and each caret queues one buffer.
-	const bool completion = has_pending_completion_check;
-	const String path = completion ? pending_completion_path : pending_check_path;
-	const String source = completion ? pending_completion_source : pending_check_source;
-	if (completion) {
-		has_pending_completion_check = false;
-	} else {
-		has_pending_check = false;
-	}
+	std::optional<CheckRequest> &slot = pending_completion ? pending_completion : pending_ordinary;
+	const CheckRequest request = *slot;
+	slot.reset();
 
 	// The synchronous entry point, which is what makes this a flush rather than a second queue: it
 	// blocks on whatever the background thread is doing and then analyses.
 	Dictionary errors_by_globalized;
-	runtime->check_project(ProjectSettings::get_singleton()->globalize_path(path), source, &errors_by_globalized);
+	runtime->check_project(ProjectSettings::get_singleton()->globalize_path(request.path), request.source, &errors_by_globalized);
 
-	analyzed_source_by_path[path] = source;
+	analyzed_source_by_path[request.path] = request.source;
 	// The snapshot the host now holds changed, whether or not this buffer was a completion one --
 	// see analysis_epoch. This never touches description_epoch: a probe_hover/probe_complete flush
 	// has no live scripts of its own to describe, which matches poll_check never doing so here
@@ -396,17 +379,19 @@ void VerseProjectState::poll_check() {
 
 	Dictionary errors_by_globalized;
 	if (runtime->poll_check_project(&errors_by_globalized)) {
+		const InFlightCheck landed = in_flight_or_default();
+
 		// Only now does the host hold this text, so only now may a validate answer from cache.
 		// Recorded for a completion buffer too, and that is the point: the entry says which text
 		// the host is describing, so `_validate` comparing the author's real buffer against it
 		// queues the ordinary analysis that puts the diagnostics back, and a hover declines in the
 		// meantime rather than trusting loci measured against a spliced-in placeholder.
-		analyzed_source_by_path[in_flight_path] = in_flight_source;
+		analyzed_source_by_path[landed.request.path] = landed.request.source;
 		// The whole-project snapshot the host holds moved, whichever buffer produced it -- see
 		// analysis_epoch.
 		analysis_epoch.advance();
 
-		if (in_flight_is_completion) {
+		if (landed.kind == CheckKind::COMPLETION) {
 			// Everything below describes the author's file to the author. This analysis was of a
 			// line they are halfway through typing -- the placeholder resolves to nothing, so its
 			// diagnostics are an unknown identifier they did not write -- and drawing that would
@@ -414,8 +399,8 @@ void VerseProjectState::poll_check() {
 			// behind, which vh_complete_symbol reads on the way back through. description_epoch does
 			// not move here either, for the same reason: a script's exports and documentation must
 			// not be re-derived from a line nobody finished writing.
-			completion_refresh_pending = completion_refresh_path == in_flight_path
-					&& completion_refresh_source == in_flight_source;
+			completion_refresh_armed = completion_refresh.path == landed.request.path
+					&& completion_refresh.source == landed.request.source;
 		} else {
 			// The program every script may honestly describe itself against moved, ahead of the
 			// per-script loop below so each one's own comparison against description_epoch_value()
@@ -425,7 +410,7 @@ void VerseProjectState::poll_check() {
 			description_epoch.advance();
 
 			language.editor_refresh_pending = record_diagnostics(errors_by_globalized) || language.editor_refresh_pending;
-			language.refresh_script_warnings(in_flight_path);
+			language.refresh_script_warnings(landed.request.path);
 
 			// The program the last attempt was made against is gone, so the answer may have
 			// changed. _frame is what acts on it, for the reason the refresh below is deferred.
@@ -441,10 +426,14 @@ void VerseProjectState::poll_check() {
 			}
 		}
 
-		in_flight_path = String();
-		in_flight_source = String();
-		in_flight_is_completion = false;
+		in_flight.reset();
 	}
+}
+
+bool VerseProjectState::take_completion_refresh() {
+	const bool armed = completion_refresh_armed;
+	completion_refresh_armed = false;
+	return armed;
 }
 
 bool VerseProjectState::record_diagnostics(const Dictionary &p_diagnostics_by_globalized) {
