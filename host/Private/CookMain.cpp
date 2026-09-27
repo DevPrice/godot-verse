@@ -66,7 +66,8 @@ void OnDiagnostic(void* /*Ctx*/, const vh_diagnostic* Diagnostic)
     }
 
     const TCHAR* Severity = TEXT("error");
-    switch (Diagnostic->Severity)
+    VH_EXHAUSTIVE_SWITCH_BEGIN
+    switch (static_cast<vh_severity>(Diagnostic->Severity))
     {
     case VH_SEVERITY_WARNING:
         Severity = TEXT("warning");
@@ -74,9 +75,10 @@ void OnDiagnostic(void* /*Ctx*/, const vh_diagnostic* Diagnostic)
     case VH_SEVERITY_INFO:
         Severity = TEXT("info");
         break;
-    default:
+    case VH_SEVERITY_ERROR:
         break;
     }
+    VH_EXHAUSTIVE_SWITCH_END
 
     Say(FString::Printf(TEXT("%s%s: %s"), *Where, Severity, *Message));
 }
