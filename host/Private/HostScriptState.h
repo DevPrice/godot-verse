@@ -6,8 +6,14 @@
 #include "Containers/StringView.h"
 #include "Containers/UnrealString.h"
 #include "Containers/Utf8String.h"
+#include "HostTypeModel.h"
 
 class UClass;
+class UObject;
+
+namespace Verse {
+struct VFunction;
+}
 
 namespace uLang {
 class CClass;
@@ -44,5 +50,27 @@ AUTORTFM_DISABLE UClass* FindGodotClass(FUtf8StringView ClassName);
 /// The binding class of this name. Never module-qualified: the bindings package is generated as one
 /// snippet with no modules in it.
 AUTORTFM_DISABLE UClass* FindBindingClass(FUtf8StringView ClassName);
+
+/// What a script class declares one of its members as, up the script chain: out of the current
+/// program in a host that has one, and out of the cook's recorded tables in a runtime host.
+AUTORTFM_DISABLE FMemberType DescribeMemberType(FUtf8StringView ClassName, FUtf8StringView FieldName);
+
+/// The payload shapes the cook recorded for a script class's signal members, by member name, or
+/// null for a class with no recorded tables. What a runtime host has instead of a program.
+AUTORTFM_DISABLE const TMap<FUtf8String, FPayloadShape>* RecordedSignalShapes(FUtf8StringView ClassName);
+
+/// The UObject a class-typed member holds, or null.
+///
+/// The read half of WriteFieldOf, narrowed to the one case signal binding needs: a `signal`
+/// member's own object, so the host can write the id into it.
+AUTORTFM_DISABLE UObject* PeekFieldObject(UObject* Object, FUtf8StringView FieldName);
+
+/// The decorated name of a bound Verse method, found by asking the object for each method its
+/// class declares and comparing the function that comes back.
+///
+/// There is no reading the semantic program's spelling back off a VFunction -- the bytecode has
+/// erased it -- so the comparison is the lookup, which is the same thing InstanceHasFunction does
+/// to tell an override from an inherited body. Once per Subscribe, never per emission.
+AUTORTFM_DISABLE bool DescribeBoundFunction(Verse::VFunction* Function, int64& OutHandle, FUtf8String& OutDecorated);
 
 } // namespace GodotVerse
