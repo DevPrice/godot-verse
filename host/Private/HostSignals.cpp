@@ -177,11 +177,19 @@ AUTORTFM_DISABLE std::string SignalRejectReason(const FUtf8String& Name, int32 R
 
 /// Defined below, beside the await it was factored out of. Declared here because an
 /// `@export_signal` member's connection is made at bind time rather than at a wait.
-AUTORTFM_DISABLE int64 ConnectDelivery(int64 OwnerHandle,
-                                       const FUtf8String& Name,
-                                       FCallbackTarget Target,
-                                       int32 ConnectFlags,
-                                       int64& OutCallableRef);
+AUTORTFM_DISABLE GodotVerse::TResult<int64> ConnectDelivery(int64 OwnerHandle,
+                                                            const FUtf8String& Name,
+                                                            FCallbackTarget Target,
+                                                            int32 ConnectFlags,
+                                                            int64& OutCallableRef);
+
+/// Whether a reason is worth VH_UNREPORTED where a native drops it for a bare 0. CallbackMissing
+/// is not: a consumer without Godot's callbacks -- tests/verse_probe, host_smoke -- takes these
+/// paths on purpose, and the line would land in every probe transcript the contract layer compares.
+bool WorthReporting(GodotVerse::EHostFailure Failure)
+{
+    return Failure != GodotVerse::EHostFailure::CallbackMissing;
+}
 
 } // namespace
 
@@ -191,7 +199,12 @@ AUTORTFM_DISABLE void GodotVerse::BindSignals(UObject* Instance,
                                               TArray<int64>& OutEventBindings)
 {
     TArray<GodotVerse::FSignalDesc> Signals;
-    if (!GodotVerse::GetClassSignals(ClassName, Signals) || Signals.IsEmpty())
+    if (!GodotVerse::GetClassSignals(ClassName, Signals))
+    {
+        VH_UNREPORTED("BindSignals: the class being instantiated has no snapshot row");
+        return;
+    }
+    if (Signals.IsEmpty())
     {
         return;
     }
@@ -200,6 +213,7 @@ AUTORTFM_DISABLE void GodotVerse::BindSignals(UObject* Instance,
     const TMap<FUtf8String, FPayloadShape>* const Recorded = Program ? nullptr : RecordedSignalShapes(ClassName);
     if (!Program && !Recorded)
     {
+        VH_UNREPORTED("BindSignals: no semantic program and no recorded payloads for the class");
         return;
     }
 
@@ -452,6 +466,7 @@ AUTORTFM_DISABLE int64 GodotVerse::SubscribeSignal(int64 SignalId, const FVerseV
     const int64 CallableRef = MakeCallableFor(Callback);
     if (CallableRef == 0)
     {
+        VH_UNREPORTED("SubscribeSignal: MakeCallableFor answered no Callable");
         return 0;
     }
 
@@ -467,6 +482,7 @@ AUTORTFM_DISABLE int64 GodotVerse::SubscribeSignal(int64 SignalId, const FVerseV
     if (Status != VH_CALL_OK)
     {
         Host.Godot.ReleaseRef(Host.Godot.Ctx, CallableRef);
+        VH_UNREPORTED("SubscribeSignal: Godot refused the connection");
         return 0;
     }
 
@@ -601,20 +617,20 @@ AUTORTFM_DISABLE verse::event* FindEventField(Verse::FRunningContext Context, UO
 /// per-argument type to convert against and the whole list crosses as the container Godot itself
 /// would have put them in. Ownership of the fresh reference passes to the wrapper, whose
 /// BeginDestroy releases it when Verse drops the value.
-AUTORTFM_DISABLE bool ArgumentArrayValue(Verse::FRunningContext Context,
-                                         const vh_value* Args,
-                                         int32 ArgCount,
-                                         Verse::VValue& OutValue)
+AUTORTFM_DISABLE GodotVerse::TResult<void> ArgumentArrayValue(Verse::FRunningContext Context,
+                                                              const vh_value* Args,
+                                                              int32 ArgCount,
+                                                              Verse::VValue& OutValue)
 {
     GodotVerse::FHostState& Host = GodotVerse::GetHost();
     if (!Host.Godot.NewRef || !Host.Godot.RefSet)
     {
-        return false;
+        return GodotVerse::EHostFailure::CallbackMissing;
     }
     const int64 Ref = Host.Godot.NewRef(Host.Godot.Ctx, VH_VARIANT_ARRAY);
     if (Ref == 0)
     {
-        return false;
+        return GodotVerse::EHostFailure::CallbackFailed;
     }
     for (int32 Index = 0; Index < ArgCount; ++Index)
     {
@@ -630,27 +646,30 @@ AUTORTFM_DISABLE bool ArgumentArrayValue(Verse::FRunningContext Context,
         {
             Host.Godot.ReleaseRef(Host.Godot.Ctx, Ref);
         }
-        return false;
+        return Wrapper.GetFailure();
     }
     OutValue = Verse::VValue(Wrapper.GetValue());
-    return true;
+    return GodotVerse::TResult<void>::Ok();
 }
 
 /// Puts an emission's arguments back together as the one value the payload's type names.
 ///
 /// The exact inverse of what DescribePayload took apart, and it has to be: `Await` answers `t`,
 /// and `t` is what the declaration said rather than the argument list Godot carried.
-AUTORTFM_DISABLE bool PayloadValue(Verse::FRunningContext Context,
-                                   const FPayloadShape& Shape,
-                                   const vh_value* Args,
-                                   int32 ArgCount,
-                                   Verse::VValue& OutValue)
+AUTORTFM_DISABLE GodotVerse::TResult<void> PayloadValue(Verse::FRunningContext Context,
+                                                        const FPayloadShape& Shape,
+                                                        const vh_value* Args,
+                                                        int32 ArgCount,
+                                                        Verse::VValue& OutValue)
 {
     switch (Shape.Kind)
     {
     case EPayloadShape::Bare:
-        return Shape.Args.Num() == 1 && ArgCount == 1
-            && WireToValue(Context, Args[0], Shape.Args[0].Type, OutValue);
+        if (Shape.Args.Num() != 1 || ArgCount != 1)
+        {
+            return GodotVerse::EHostFailure::TypeMismatch;
+        }
+        return WireToValue(Context, Args[0], Shape.Args[0].Type, OutValue);
 
     case EPayloadShape::Tuple:
     {
@@ -658,22 +677,23 @@ AUTORTFM_DISABLE bool PayloadValue(Verse::FRunningContext Context,
         // what an engine signal carrying nothing answers, and the commonest case there is.
         if (ArgCount != Shape.Args.Num())
         {
-            return false;
+            return GodotVerse::EHostFailure::TypeMismatch;
         }
         TArray<Verse::VValue> Elements;
         Elements.Reserve(ArgCount);
         for (int32 Index = 0; Index < ArgCount; ++Index)
         {
             Verse::VValue Element;
-            if (!WireToValue(Context, Args[Index], Shape.Args[Index].Type, Element))
+            const GodotVerse::TResult<void> Converted = WireToValue(Context, Args[Index], Shape.Args[Index].Type, Element);
+            if (!Converted)
             {
-                return false;
+                return Converted;
             }
             Elements.Add(Element);
         }
         const auto Init = [&Elements](uint32 Index) { return Elements[(int32)Index]; };
         OutValue = Verse::VValue(Verse::VArray::New(Context, (uint32)Elements.Num(), Init));
-        return true;
+        return GodotVerse::TResult<void>::Ok();
     }
 
     case EPayloadShape::Struct:
@@ -685,34 +705,38 @@ AUTORTFM_DISABLE bool PayloadValue(Verse::FRunningContext Context,
         Packed.Type = VH_TYPE_TUPLE;
         Packed.Seq.Items = Args;
         Packed.Seq.Count = ArgCount;
-        return WireToValue(Context, Packed, Shape.Whole, OutValue).IsOk();
+        return WireToValue(Context, Packed, Shape.Whole, OutValue);
     }
     }
-    return false;
+    return GodotVerse::EHostFailure::Unconvertible;
 }
 
 } // namespace
 
-AUTORTFM_DISABLE int32 GodotVerse::DeliverToAwaiter(int64 Token, const vh_value* Args, int32 ArgCount)
+AUTORTFM_DISABLE GodotVerse::TResult<void> GodotVerse::DeliverToAwaiter(int64 Token, const vh_value* Args, int32 ArgCount)
 {
     const FAwaiter* const Found = GAwaiters.Find(Token);
     if (!Found)
     {
         // The wait ended between Godot queueing the emission and delivering it. Not an error: a
         // cancelled task is exactly a wait that stopped waiting.
-        return VH_OK;
+        return TResult<void>::Ok();
     }
     UObject* const Waiter = Found->Waiter.Get();
     const int64 SignalId = Found->SignalId;
     const FPayloadShape* const Shape = SignalId != 0
         ? (GSignalBindings.Contains(SignalId) ? &GSignalBindings[SignalId].Payload : nullptr)
         : nullptr;
-    if (!Waiter || (SignalId != 0 && !Shape))
+    if (!Waiter)
     {
-        return VH_ERR_NOT_FOUND;
+        return EHostFailure::NotASignal;
+    }
+    if (SignalId != 0 && !Shape)
+    {
+        return EHostFailure::UnknownId;
     }
 
-    int32 Status = VH_OK;
+    TResult<void> Result = TResult<void>::Ok();
     Verse::FRunningContext Context = Verse::FRunningContextPromise{};
     const AutoRTFM::ETransactionResult TransactionResult = AutoRTFM::Transact([&] {
         AutoRTFM::Open([&] {
@@ -720,15 +744,15 @@ AUTORTFM_DISABLE int32 GodotVerse::DeliverToAwaiter(int64 Token, const vh_value*
                 verse::event* const Event = FindEventField(Context, Waiter);
                 if (!Event)
                 {
-                    Status = VH_ERR_NOT_FOUND;
+                    Result = EHostFailure::NotASignal;
                     return;
                 }
                 Verse::VValue Payload;
-                const bool bBuilt = Shape ? PayloadValue(Context, *Shape, Args, ArgCount, Payload)
-                                          : ArgumentArrayValue(Context, Args, ArgCount, Payload);
-                if (!bBuilt)
+                const TResult<void> Built = Shape ? PayloadValue(Context, *Shape, Args, ArgCount, Payload)
+                                                  : ArgumentArrayValue(Context, Args, ArgCount, Payload);
+                if (!Built)
                 {
-                    Status = VH_ERR_ARGUMENT;
+                    Result = Built;
                     return;
                 }
                 // event::Signal resumes the suspended awaits in FIFO order, under each task's own
@@ -740,28 +764,28 @@ AUTORTFM_DISABLE int32 GodotVerse::DeliverToAwaiter(int64 Token, const vh_value*
     });
     if (TransactionResult != AutoRTFM::ETransactionResult::Committed)
     {
-        return VH_ERR_RUNTIME;
+        return EHostFailure::Aborted;
     }
-    return Status;
+    return Result;
 }
 
-AUTORTFM_DISABLE int32 GodotVerse::DeliverToEvent(int64 SignalId, const vh_value* Args, int32 ArgCount)
+AUTORTFM_DISABLE GodotVerse::TResult<void> GodotVerse::DeliverToEvent(int64 SignalId, const vh_value* Args, int32 ArgCount)
 {
     const FSignalBinding* const Binding = GSignalBindings.Find(SignalId);
     if (!Binding)
     {
-        return VH_ERR_NOT_FOUND;
+        return EHostFailure::UnknownId;
     }
     UObject* const Held = Binding->Event.Get();
     if (!Held)
     {
         // The instance was released between Godot queueing the emission and delivering it, which
         // is the event-member analogue of a wait that stopped waiting.
-        return VH_OK;
+        return TResult<void>::Ok();
     }
     const FPayloadShape Shape = Binding->Payload;
 
-    int32 Status = VH_OK;
+    TResult<void> Result = TResult<void>::Ok();
     Verse::FRunningContext Context = Verse::FRunningContextPromise{};
     const AutoRTFM::ETransactionResult TransactionResult = AutoRTFM::Transact([&] {
         AutoRTFM::Open([&] {
@@ -769,13 +793,14 @@ AUTORTFM_DISABLE int32 GodotVerse::DeliverToEvent(int64 SignalId, const vh_value
                 verse::event* const Event = Cast<verse::event>(Held);
                 if (!Event)
                 {
-                    Status = VH_ERR_NOT_FOUND;
+                    Result = EHostFailure::NotASignal;
                     return;
                 }
                 Verse::VValue Payload;
-                if (!PayloadValue(Context, Shape, Args, ArgCount, Payload))
+                const TResult<void> Built = PayloadValue(Context, Shape, Args, ArgCount, Payload);
+                if (!Built)
                 {
-                    Status = VH_ERR_ARGUMENT;
+                    Result = Built;
                     return;
                 }
                 Event->Signal(FVerseValue(Payload));
@@ -784,28 +809,32 @@ AUTORTFM_DISABLE int32 GodotVerse::DeliverToEvent(int64 SignalId, const vh_value
     });
     if (TransactionResult != AutoRTFM::ETransactionResult::Committed)
     {
-        return VH_ERR_RUNTIME;
+        return EHostFailure::Aborted;
     }
-    return Status;
+    return Result;
 }
 
 namespace {
 
 /// Mints the Callable an await or a foreign subscription is delivered through, and connects it.
 ///
-/// Answers the callback id, with OutCallableRef holding the reference Godot keeps. 0 for a
+/// Answers the callback id, with OutCallableRef holding the reference Godot keeps. Fails for a
 /// connection Godot refused, having released whatever it had minted.
-AUTORTFM_DISABLE int64 ConnectDelivery(int64 OwnerHandle,
-                                       const FUtf8String& Name,
-                                       FCallbackTarget Target,
-                                       int32 ConnectFlags,
-                                       int64& OutCallableRef)
+AUTORTFM_DISABLE GodotVerse::TResult<int64> ConnectDelivery(int64 OwnerHandle,
+                                                            const FUtf8String& Name,
+                                                            FCallbackTarget Target,
+                                                            int32 ConnectFlags,
+                                                            int64& OutCallableRef)
 {
     OutCallableRef = 0;
     GodotVerse::FHostState& Host = GodotVerse::GetHost();
-    if (!Host.Godot.MakeCallable || !Host.Godot.ConnectSignal || !Host.Godot.ReleaseRef || OwnerHandle == 0)
+    if (!Host.Godot.MakeCallable || !Host.Godot.ConnectSignal || !Host.Godot.ReleaseRef)
     {
-        return 0;
+        return GodotVerse::EHostFailure::CallbackMissing;
+    }
+    if (OwnerHandle == 0)
+    {
+        return GodotVerse::EHostFailure::UnknownId;
     }
 
     const int64 CallbackId = GodotVerse::AddCallback(MoveTemp(Target));
@@ -813,7 +842,7 @@ AUTORTFM_DISABLE int64 ConnectDelivery(int64 OwnerHandle,
     if (CallableRef == 0)
     {
         GodotVerse::RemoveCallback(CallbackId);
-        return 0;
+        return GodotVerse::EHostFailure::CallbackFailed;
     }
 
     vh_value Callable{};
@@ -830,36 +859,46 @@ AUTORTFM_DISABLE int64 ConnectDelivery(int64 OwnerHandle,
     {
         Host.Godot.ReleaseRef(Host.Godot.Ctx, CallableRef);
         GodotVerse::RemoveCallback(CallbackId);
-        return 0;
+        return GodotVerse::EHostFailure::CallbackFailed;
     }
     OutCallableRef = CallableRef;
     return CallbackId;
 }
 
-/// The object and signal name a Godot Signal *value* stands for. False for a reference that is not
+/// The object and signal name a Godot Signal *value* stands for. Fails for a reference that is not
 /// a Signal, or for a consumer built before v6.0 declared the callback.
-AUTORTFM_DISABLE bool ResolveSignalRef(int64 Ref, int64& OutHandle, FUtf8String& OutName)
+AUTORTFM_DISABLE GodotVerse::TResult<void> ResolveSignalRef(int64 Ref, int64& OutHandle, FUtf8String& OutName)
 {
     GodotVerse::FHostState& Host = GodotVerse::GetHost();
     const char* NameUtf8 = nullptr;
-    if (!Host.Godot.SignalTarget
-        || Host.Godot.SignalTarget(Host.Godot.Ctx, Ref, &OutHandle, &NameUtf8) != VH_CALL_OK
-        || !NameUtf8)
+    if (!Host.Godot.SignalTarget)
     {
-        return false;
+        return GodotVerse::EHostFailure::CallbackMissing;
+    }
+    if (Host.Godot.SignalTarget(Host.Godot.Ctx, Ref, &OutHandle, &NameUtf8) != VH_CALL_OK || !NameUtf8)
+    {
+        return GodotVerse::EHostFailure::CallbackFailed;
     }
     // Copied now: the consumer owns those bytes only until its next call, and the name outlives
     // this in an awaiter row.
     OutName = FUtf8String(FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(NameUtf8)));
-    return !OutName.IsEmpty();
+    if (OutName.IsEmpty())
+    {
+        return GodotVerse::EHostFailure::CallbackFailed;
+    }
+    return GodotVerse::TResult<void>::Ok();
 }
 
 /// Registers one wait and connects what feeds it. OwnerHandle/Name say what to connect to.
-AUTORTFM_DISABLE int64 BeginAwait(UObject* Waiter, int64 SignalId, int64 OwnerHandle, const FUtf8String& Name)
+AUTORTFM_DISABLE GodotVerse::TResult<int64> BeginAwait(UObject* Waiter, int64 SignalId, int64 OwnerHandle, const FUtf8String& Name)
 {
-    if (!Waiter || OwnerHandle == 0 || Name.IsEmpty())
+    if (!Waiter)
     {
-        return 0;
+        return GodotVerse::EHostFailure::NotASignal;
+    }
+    if (OwnerHandle == 0 || Name.IsEmpty())
+    {
+        return GodotVerse::EHostFailure::UnknownId;
     }
     const int64 Token = GNextAwaitToken++;
 
@@ -871,10 +910,11 @@ AUTORTFM_DISABLE int64 BeginAwait(UObject* Waiter, int64 SignalId, int64 OwnerHa
     // One-shot: a single `Await()` resumes once, so Godot dropping the connection as it fires is
     // exactly right and saves the disconnect. `loop { X.Await() }` reconnects per iteration, which
     // is what the source says it does.
-    const int64 CallbackId = ConnectDelivery(OwnerHandle, Name, MoveTemp(Target), VH_CONNECT_ONE_SHOT, CallableRef);
-    if (CallbackId == 0)
+    const GodotVerse::TResult<int64> CallbackId =
+        ConnectDelivery(OwnerHandle, Name, MoveTemp(Target), VH_CONNECT_ONE_SHOT, CallableRef);
+    if (!CallbackId)
     {
-        return 0;
+        return CallbackId.GetFailure();
     }
 
     FAwaiter Awaiter;
@@ -883,7 +923,7 @@ AUTORTFM_DISABLE int64 BeginAwait(UObject* Waiter, int64 SignalId, int64 OwnerHa
     Awaiter.OwnerHandle = OwnerHandle;
     Awaiter.Name = Name;
     Awaiter.CallableRef = CallableRef;
-    Awaiter.CallbackId = CallbackId;
+    Awaiter.CallbackId = CallbackId.GetValue();
 
     // The active scope is the awaiting task's own: an InstanceCall pushed the instance's before the
     // spawn, and a resumption pushes the task's again (TVerseCall::Return does it itself). So the
@@ -906,6 +946,7 @@ AUTORTFM_DISABLE int64 GodotVerse::BeginSignalAwait(UObject* Signal)
     verse::vh_signal* const Shadow = Cast<verse::vh_signal>(Signal);
     if (!Shadow)
     {
+        VH_UNREPORTED("BeginSignalAwait: the object awaited is not a signal");
         return 0;
     }
     const int64 SignalId = Shadow->Id.Get();
@@ -921,7 +962,16 @@ AUTORTFM_DISABLE int64 GodotVerse::BeginSignalAwait(UObject* Signal)
         ReportVerseDiag(verse_diag::VG2103, {{"signal", DiagArg(Binding->Name)}, {"reason", Reason}});
         return 0;
     }
-    return BeginAwait(Signal, SignalId, Binding->OwnerHandle, Binding->Name);
+    const TResult<int64> Token = BeginAwait(Signal, SignalId, Binding->OwnerHandle, Binding->Name);
+    if (!Token)
+    {
+        if (WorthReporting(Token.GetFailure()))
+        {
+            VH_UNREPORTED("BeginSignalAwait: the wait could not be connected");
+        }
+        return 0;
+    }
+    return Token.GetValue();
 }
 
 AUTORTFM_DISABLE int64 GodotVerse::BeginSignalRefAwait(int64 Ref, UObject* Waiter)
@@ -933,7 +983,16 @@ AUTORTFM_DISABLE int64 GodotVerse::BeginSignalRefAwait(int64 Ref, UObject* Waite
         ReportVerseDiag(verse_diag::VG2110);
         return 0;
     }
-    return BeginAwait(Waiter, 0, OwnerHandle, Name);
+    const TResult<int64> Token = BeginAwait(Waiter, 0, OwnerHandle, Name);
+    if (!Token)
+    {
+        if (WorthReporting(Token.GetFailure()))
+        {
+            VH_UNREPORTED("BeginSignalRefAwait: the wait could not be connected");
+        }
+        return 0;
+    }
+    return Token.GetValue();
 }
 
 AUTORTFM_DISABLE void GodotVerse::EndSignalAwait(int64 Token)
@@ -1004,9 +1063,13 @@ AUTORTFM_DISABLE int64 GodotVerse::SubscribeSignalRef(int64 Ref, const FVerseVal
     Target.bArgsAsArray = true;
 
     int64 CallableRef = 0;
-    const int64 CallbackId = ConnectDelivery(OwnerHandle, Name, MoveTemp(Target), 0, CallableRef);
-    if (CallbackId == 0)
+    const TResult<int64> CallbackId = ConnectDelivery(OwnerHandle, Name, MoveTemp(Target), 0, CallableRef);
+    if (!CallbackId)
     {
+        if (WorthReporting(CallbackId.GetFailure()))
+        {
+            VH_UNREPORTED("SubscribeSignalRef: the subscription could not be connected");
+        }
         return 0;
     }
 
@@ -1039,12 +1102,12 @@ AUTORTFM_DISABLE void GodotVerse::EnsureEventConnections(const TArray<int64>& Ev
         Target.OwnerHandle = Binding->OwnerHandle;
         Target.EventSignalId = Id;
         int64 CallableRef = 0;
-        const int64 CallbackId =
+        const TResult<int64> CallbackId =
             ConnectDelivery(Binding->OwnerHandle, Binding->Name, MoveTemp(Target), 0, CallableRef);
-        if (CallbackId != 0)
+        if (CallbackId)
         {
             Binding->CallableRef = CallableRef;
-            Binding->CallbackId = CallbackId;
+            Binding->CallbackId = CallbackId.GetValue();
             continue;
         }
 

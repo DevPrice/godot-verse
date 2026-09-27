@@ -81,8 +81,9 @@ vh_complete_item ToCompleteItem(const GodotVerse::FCompleteItem& Item)
         Item.bIsNamed ? 1 : 0};
 }
 
-/// The one place a host failure becomes the vh_status a consumer acts on.
-int32_t StatusFor(GodotVerse::EHostFailure Failure)
+} // namespace
+
+int32 GodotVerse::StatusFor(GodotVerse::EHostFailure Failure)
 {
     using GodotVerse::EHostFailure;
 
@@ -105,7 +106,10 @@ int32_t StatusFor(GodotVerse::EHostFailure Failure)
     case EHostFailure::NotAFunction:
     case EHostFailure::NoSuchClass:
     case EHostFailure::UnknownId:
+    case EHostFailure::NotASignal:
         return VH_ERR_NOT_FOUND;
+    case EHostFailure::Aborted:
+        return VH_ERR_RUNTIME;
     // A value the declaration cannot take, or cannot be built as: the call was shaped wrong, which
     // is what InstanceCall already answers for a conversion that declines.
     case EHostFailure::NotPublished:
@@ -123,7 +127,7 @@ int32_t StatusFor(GodotVerse::EHostFailure Failure)
     return VH_ERR_NOT_FOUND;
 }
 
-} // namespace
+using GodotVerse::StatusFor;
 
 /// Unguarded, and it is the one entry point that must be: a consumer calls this *before* vh_init to
 /// decide whether to load the host at all, so there is no recorded thread to compare against and

@@ -5850,7 +5850,7 @@ AUTORTFM_DISABLE int32 GodotVerse::InvokeCallback(int64 CallbackId,
     const TResult<FCallbackTarget> Found = FindCallback(CallbackId);
     if (!Found)
     {
-        return VH_ERR_NOT_FOUND;
+        return StatusFor(Found.GetFailure());
     }
     const FCallbackTarget& Target = Found.GetValue();
 
@@ -5858,7 +5858,8 @@ AUTORTFM_DISABLE int32 GodotVerse::InvokeCallback(int64 CallbackId,
     // resumes inside this emission, which is where GDScript resumes a coroutine too.
     if (Target.AwaitToken != 0)
     {
-        return DeliverToAwaiter(Target.AwaitToken, Args, ArgCount);
+        const TResult<void> Delivered = DeliverToAwaiter(Target.AwaitToken, Args, ArgCount);
+        return Delivered ? VH_OK : StatusFor(Delivered.GetFailure());
     }
 
     // The permanent connection an `@export_signal` event member holds. Before the instance lookup
@@ -5866,7 +5867,8 @@ AUTORTFM_DISABLE int32 GodotVerse::InvokeCallback(int64 CallbackId,
     // calling a method, so there is no decorated name to resolve.
     if (Target.EventSignalId != 0)
     {
-        return DeliverToEvent(Target.EventSignalId, Args, ArgCount);
+        const TResult<void> Delivered = DeliverToEvent(Target.EventSignalId, Args, ArgCount);
+        return Delivered ? VH_OK : StatusFor(Delivered.GetFailure());
     }
 
     FInstance** const Bound = GInstancesByHandle.Find(Target.OwnerHandle);

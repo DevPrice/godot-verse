@@ -57,6 +57,10 @@ enum class EHostFailure : uint8
     /// No live row answers to the id: a callback, a signal binding or a wait that was never made or
     /// has already been released.
     UnknownId,
+    /// The object named as a signal, or held by a wait or a binding, carries no event to signal.
+    NotASignal,
+    /// The Verse code run for the answer failed or raised, and its transaction was aborted.
+    Aborted,
 };
 
 /// A value, or the reason there is none.
@@ -129,6 +133,11 @@ private:
 
     TOptional<EFailure> Failure;
 };
+
+/// The vh_status a consumer sees for a failure: the one place a reason becomes a status. Defined in
+/// VerseHost.cpp, beside the entry points; a unit whose answer reaches the ABI as a status of its
+/// own -- InvokeCallback's -- calls it rather than choosing one.
+int32 StatusFor(EHostFailure Failure);
 
 AUTORTFM_DISABLE void ReportUnreported(const char* Reason, const char* File, int32 Line);
 

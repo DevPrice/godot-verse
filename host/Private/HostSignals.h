@@ -5,6 +5,7 @@
 #include "AutoRTFM.h"
 #include "Containers/Array.h"
 #include "Containers/StringView.h"
+#include "HostResult.h"
 #include "verse_host_abi.h"
 
 class UObject;
@@ -64,7 +65,9 @@ AUTORTFM_DISABLE void ReleaseEventBindings(const TArray<int64>& EventBindings);
 /// in. Without that a raise in the resumed task would abort the *emitter's* transaction and drop
 /// writes that had nothing to do with it; with it, "a failure undoes the failing computation's
 /// writes" stays literally true for a task as well as for a call.
-AUTORTFM_DISABLE int32 DeliverToAwaiter(int64 Token, const vh_value* Args, int32 ArgCount);
+///
+/// A wait that already ended is success: a cancelled task is exactly a wait that stopped waiting.
+AUTORTFM_DISABLE TResult<void> DeliverToAwaiter(int64 Token, const vh_value* Args, int32 ArgCount);
 
 /// Signals an `@export_signal` member's event with an emission Godot just delivered.
 ///
@@ -77,6 +80,6 @@ AUTORTFM_DISABLE int32 DeliverToAwaiter(int64 Token, const vh_value* Args, int32
 /// Every emission arrives here, including the script's own `Emit`: the emit verb goes out to Godot
 /// and Godot dispatches back, which is what makes a Verse handler and a GDScript handler see the
 /// same ordering.
-AUTORTFM_DISABLE int32 DeliverToEvent(int64 SignalId, const vh_value* Args, int32 ArgCount);
+AUTORTFM_DISABLE TResult<void> DeliverToEvent(int64 SignalId, const vh_value* Args, int32 ArgCount);
 
 } // namespace GodotVerse
