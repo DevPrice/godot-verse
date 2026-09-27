@@ -317,6 +317,11 @@ Adding an override you do not implement changes behaviour.
 `Private/` is the ABI implementation. `VerseHost.cpp` is the entry surface; `HostRuntime`,
 `HostScript` and `HostEventLoop` are compile/analyse/run, class shape, and the task pump;
 `HostTypeModel` is what kind of type a declaration names and which package declares a class;
+`HostLookup` is lookup, completion and the argument hint -- the code Epic's language server will
+replace, which never enters the VM; `HostEngineAdapters` is where a definition was written (the
+mirror's side table and `PrototypeOf`), a script class by qualified name, and the decorated names
+the VM keys by, each a function a caller cannot go around; `HostScriptState.h` is the accessors
+the split-out units read HostScript.cpp's state through;
 `HostDebug` is the `Verse::FDebugger` and the profiler's accumulators, and nothing else in the host
 knows either exists; `HostFatal` records a fatal error before the process ends; `GodotBindings`
 and `GodotClasses` are the native Verse surface. The cooked
@@ -970,7 +975,8 @@ layer, and is skipped there when `../godot` is absent.
   through `FGodotSnapshotInjection` — restores both,
   keyed by qualified name plus the function type's code, because `GodotMath.native.verse` declares
   eight two-parameter `operator'+'` and a verse path alone is ambiguous. **Anything new that reads a
-  mirror definition's location or accessor flag must go through that table**, `GetScopeName()`
+  mirror definition's location or accessor flag must go through that table** -- `FillLocation`,
+  `OwnerNameOf` and `IsClassVarAccessor` in `HostEngineAdapters.h`, whose row type is opaque -- `GetScopeName()`
   included: from a digest a top-level definition's Owner and its path are *both* the digest path,
   so an `Owner == DeclaredIn` test keeps passing while both are wrong.
 - **A build after an analysis runs neither of the phases a build spends its time in.** The program
