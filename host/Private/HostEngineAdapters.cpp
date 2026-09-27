@@ -7,6 +7,7 @@
 #include "HostScriptState.h"
 #include "HostTypeModel.h"
 #include "ULangUEUtils.h"
+#include "uLang/Semantics/Attributable.h"
 #include "uLang/Semantics/Definition.h"
 #include "uLang/Semantics/Expression.h"
 #include "uLang/Semantics/SemanticClass.h"
@@ -356,6 +357,198 @@ AUTORTFM_DISABLE FUtf8String ExtensionMethodDecoratedName(const uLang::CFunction
               Function._EnclosingScope.GetScopePath('/', uLang::CScope::EPathMode::PrefixSeparator))
         + UTF8TEXT(":)")
         + FULangConversionUtils::ULangStrToFUtf8String(Function.GetDecoratedName());
+}
+
+AUTORTFM_DISABLE TOptional<FUtf8String> AttributeArgument(const uLang::CAttributable& Attributes,
+                                                          const uLang::CClass* AttributeClass,
+                                                          const uLang::CSemanticProgram& Program)
+{
+    if (!AttributeClass)
+    {
+        return {};
+    }
+    // Matches on the invocation's *return type*, which is why a caller names the attribute class
+    // rather than the `<constructor>` beside it, and declines an argument that is a MakeTuple.
+    const uLang::TOptional<uLang::CUTF8String> Text = Attributes.GetAttributeTextValue(AttributeClass, Program);
+    if (!Text.IsSet())
+    {
+        return {};
+    }
+    return FULangConversionUtils::ULangStrToFUtf8String(*Text);
+}
+
+namespace {
+
+/// The shape matches verse_doc_comment_above's exactly (src/verse_doc_markup.h has the rules): a
+/// `#` line is what follows the delimiter and one space, indentation kept so an indented sample is
+/// still a code block to the consumer's converter; a `<# ... #>` block and a `<#>` comment are the
+/// text between or under their delimiters, the continuation lines dedented by what they share and
+/// blank lines at either end dropped; every line trimmed at its end and joined with newlines.
+AUTORTFM_DISABLE void AppendCommentProse(TArray<FUtf8String>& OutLines, const FUtf8String& Source)
+{
+    FUtf8StringView Text = FUtf8StringView(Source);
+    Text.TrimStartAndEndInline();
+
+    // `<#>` before `<#`, or the longer delimiter is read as the shorter plus a `>`.
+    if (Text.StartsWith(FUtf8StringView(UTF8TEXT("<#>"))))
+    {
+        Text.RightChopInline(3);
+    }
+    else if (Text.StartsWith(FUtf8StringView(UTF8TEXT("<#"))))
+    {
+        Text.RightChopInline(2);
+        if (Text.EndsWith(FUtf8StringView(UTF8TEXT("#>"))))
+        {
+            Text.LeftChopInline(2);
+        }
+    }
+    else if (Text.StartsWith(FUtf8StringView(UTF8TEXT("#"))))
+    {
+        Text.RightChopInline(1);
+    }
+
+    TArray<FUtf8String> Lines;
+    FUtf8String(Text).ParseIntoArray(Lines, UTF8TEXT("\n"), /*InCullEmpty*/ false);
+    if (Lines.IsEmpty())
+    {
+        return;
+    }
+    for (FUtf8String& Line : Lines)
+    {
+        Line.TrimEndInline();
+    }
+
+    // The delimiter's own line: one space is the delimiter's, the rest is text.
+    FUtf8String& First = Lines[0];
+    if (First.StartsWith(UTF8TEXT(" ")))
+    {
+        First.RightChopInline(1);
+    }
+
+    // The continuation lines, dedented by the leading whitespace every non-blank one shares.
+    int32 Common = -1;
+    for (int32 Index = 1; Index < Lines.Num(); Index++)
+    {
+        const FUtf8String& Line = Lines[Index];
+        int32 Indent = 0;
+        while (Indent < Line.Len() && (Line[Indent] == UTF8CHAR(' ') || Line[Indent] == UTF8CHAR('\t')))
+        {
+            Indent++;
+        }
+        if (Indent == Line.Len())
+        {
+            continue;
+        }
+        if (Common < 0)
+        {
+            Common = Indent;
+            continue;
+        }
+        const FUtf8String& Reference = Lines[1];
+        int32 Shared = 0;
+        while (Shared < Common && Shared < Indent && Line[Shared] == Reference[Shared])
+        {
+            Shared++;
+        }
+        Common = Shared;
+    }
+    for (int32 Index = 1; Index < Lines.Num() && Common > 0; Index++)
+    {
+        FUtf8String& Line = Lines[Index];
+        if (Line.Len() <= Common)
+        {
+            Line.Empty();
+        }
+        else
+        {
+            Line.RightChopInline(Common);
+        }
+    }
+
+    int32 Begin = 0;
+    int32 End = Lines.Num();
+    while (Begin < End && Lines[Begin].IsEmpty())
+    {
+        Begin++;
+    }
+    while (End > Begin && Lines[End - 1].IsEmpty())
+    {
+        End--;
+    }
+    for (int32 Index = Begin; Index < End; Index++)
+    {
+        OutLines.Add(Lines[Index]);
+    }
+}
+
+} // namespace
+
+/// Two sources, and a definition has one or the other rather than both.
+///
+/// **`@doc("...")` is how Verse's own library documents itself** -- 132 of them across
+/// /Verse.org/Verse, `Sqrt` and `Concatenate` among them -- and an attribute's text is reachable
+/// from nowhere else: a consumer reading the source file above the declaration finds an attribute
+/// line, not prose.
+///
+/// **A comment block is how this bridge documents its own**, and the parser keeps one as prefix
+/// comments on the node that begins the construct. That is the same association
+/// verse_doc_comment_above warns about on the consumer's side: for a member behind four lines of
+/// `@editable` the comments hang off the attribute clause rather than the member, so this can come
+/// back empty where re-reading the file would not. It is a fallback for a definition whose file
+/// the consumer cannot open, not a replacement for that reading.
+AUTORTFM_DISABLE FUtf8String DocOf(const uLang::CDefinition& Definition, const uLang::CSemanticProgram& Program)
+{
+    // The prototype: prose is written once, on the generic declaration, and GetAttributes
+    // *ensures* against being asked of an instantiated definition (PrototypeOf says why).
+    const uLang::CDefinition& Prototype = PrototypeOf(Definition);
+
+    if (const TOptional<FUtf8String> Text = AttributeArgument(Prototype.GetAttributes(), Program._doc_attribute.Get(), Program);
+        Text.IsSet() && !Text->IsEmpty())
+    {
+        return Text.GetValue();
+    }
+
+    const uLang::CExpressionBase* const Ast = Prototype.GetAstNode();
+    const Verse::Vst::Node* const Vst = Ast ? Ast->GetMappedVstNode() : nullptr;
+    if (!Vst)
+    {
+        return FUtf8String();
+    }
+
+    TArray<FUtf8String> Lines;
+    for (const Verse::Vst::TNodeRef<Verse::Vst::Node>& Node : Vst->GetPrefixComments())
+    {
+        const Verse::Vst::Comment* const Comment = Node->AsNullable<Verse::Vst::Comment>();
+        if (!Comment)
+        {
+            continue;
+        }
+        // Exhaustive on purpose: a fifth kind is how a doc-comment syntax would arrive, and it
+        // should fail this build rather than be read as an ordinary comment
+        // (tripwire/no_doc_comment_syntax). The node's text is the comment as written, delimiters
+        // included, for all four (tLang.cpp prints it back verbatim), so one stripping rule serves.
+        VH_EXHAUSTIVE_SWITCH_BEGIN
+        switch (Comment->_Type)
+        {
+        case Verse::Vst::Comment::EType::block:
+        case Verse::Vst::Comment::EType::line:
+        case Verse::Vst::Comment::EType::ind:
+        case Verse::Vst::Comment::EType::frag:
+            AppendCommentProse(Lines, FUtf8String(Comment->GetSourceCStr()));
+            break;
+        }
+        VH_EXHAUSTIVE_SWITCH_END
+    }
+    FUtf8String Prose;
+    for (const FUtf8String& Line : Lines)
+    {
+        if (!Prose.IsEmpty())
+        {
+            Prose += UTF8TEXT("\n");
+        }
+        Prose += Line;
+    }
+    return Prose;
 }
 
 } // namespace GodotVerse

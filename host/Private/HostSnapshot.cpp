@@ -106,6 +106,7 @@
 #include <thread>
 
 using GodotVerse::AnalysisTraceEnabled;
+using GodotVerse::AttributeArgument;
 using GodotVerse::BindingsVersePath;
 using GodotVerse::ClassChainOfOrigin;
 using GodotVerse::ClassMembersLive;
@@ -238,8 +239,7 @@ AUTORTFM_DISABLE bool GodotVerse::HasClass(FUtf8StringView ClassName)
 namespace {
 /// The bridge's own attributes, declared in HostBuild.cpp's AttributePackageSource and so sharing
 /// the verse path a script already imports. The section ones name the attribute *class* rather
-/// than the `<constructor>` function beside it: GetAttributeTextValue matches on the invocation's
-/// return type, and a single string argument is the one attribute payload SOL-972 leaves readable.
+/// than the `<constructor>` function beside it, which is what AttributeArgument matches on.
 constexpr const char* ExportAttributePath = "/Godot.org/Godot/export";
 constexpr const char* ExportSignalAttributePath = "/Godot.org/Godot/export_signal";
 constexpr const char* StaticsAttributePath = "/Godot.org/Godot/statics_attribute";
@@ -257,12 +257,7 @@ constexpr const char* ExportSubgroupAttributePath = "/Godot.org/Godot/export_sub
 /// does not carry it.
 AUTORTFM_DISABLE FUtf8String AttributeText(const uLang::CDataDefinition& Member, const uLang::CClass* AttributeClass, const uLang::CSemanticProgram& Program)
 {
-    if (!AttributeClass)
-    {
-        return FUtf8String();
-    }
-    const uLang::TOptional<uLang::CUTF8String> Text = Member.GetAttributes().GetAttributeTextValue(AttributeClass, Program);
-    return Text.IsSet() ? FULangConversionUtils::ULangStrToFUtf8String(*Text) : FUtf8String();
+    return AttributeArgument(Member.GetAttributes(), AttributeClass, Program).Get(FUtf8String());
 }
 
 } // namespace
@@ -770,13 +765,12 @@ AUTORTFM_DISABLE void GodotVerse::ReportStaticsDiagnostics()
 
     for (const uLang::TSRef<uLang::CModule>& Module : Root->GetDefinitionsOfKind<uLang::CModule>())
     {
-        const uLang::TOptional<uLang::CUTF8String> Text =
-            Module->GetAttributes().GetAttributeTextValue(StaticsAttribute, *Program);
+        const TOptional<FUtf8String> Text = AttributeArgument(Module->GetAttributes(), StaticsAttribute, *Program);
         if (!Text.IsSet())
         {
             continue;
         }
-        const FUtf8String ClassName = FULangConversionUtils::ULangStrToFUtf8String(*Text);
+        const FUtf8String ClassName = Text.GetValue();
         const FUtf8String ModuleName = FUtf8String(Module->AsNameCString());
 
         FUtf8String Path;
@@ -861,13 +855,12 @@ AUTORTFM_DISABLE bool GetClassStaticsLive(FUtf8StringView ClassName,
     // other ClassNameUtf8 in the ABI does.
     for (const uLang::TSRef<uLang::CModule>& Module : Root->GetDefinitionsOfKind<uLang::CModule>())
     {
-        const uLang::TOptional<uLang::CUTF8String> Text =
-            Module->GetAttributes().GetAttributeTextValue(StaticsAttribute, *Program);
+        const TOptional<FUtf8String> Text = AttributeArgument(Module->GetAttributes(), StaticsAttribute, *Program);
         if (!Text.IsSet())
         {
             continue;
         }
-        if (!FUtf8StringView(FULangConversionUtils::ULangStrToFUtf8String(*Text)).Equals(ClassName))
+        if (!FUtf8StringView(Text.GetValue()).Equals(ClassName))
         {
             continue;
         }
@@ -1281,14 +1274,12 @@ AUTORTFM_DISABLE bool GetClassRpcsLive(FUtf8StringView ClassName, TArray<GodotVe
         FUtf8String DeclaredIn;
         FillLocation(*Function, DeclaredIn, Desc.Line, Desc.Column);
 
-        // One string, so GetAttributeTextValue reads it -- that function refuses anything whose
-        // argument is a MakeTuple, which is every attribute of more than one argument, and is
-        // the whole reason the words travel together rather than as GDScript's four.
-        const uLang::TOptional<uLang::CUTF8String> Config =
-            Function->GetAttributes().GetAttributeTextValue(RpcAttribute, *Program);
+        // One string, split by ReadRpcConfig, rather than GDScript's four arguments: see
+        // AttributeArgument for why an attribute can carry no more.
+        const ::TOptional<FUtf8String> Config = AttributeArgument(Function->GetAttributes(), RpcAttribute, *Program);
         if (Config.IsSet())
         {
-            ReadRpcConfig(FULangConversionUtils::ULangStrToFUtf8String(*Config), Desc);
+            ReadRpcConfig(Config.GetValue(), Desc);
         }
         OutRpcs.Add(MoveTemp(Desc));
     }

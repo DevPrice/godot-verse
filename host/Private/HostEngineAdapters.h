@@ -6,8 +6,10 @@
 #include "Containers/StringView.h"
 #include "Containers/UnrealString.h"
 #include "Containers/Utf8String.h"
+#include "Misc/Optional.h"
 
 namespace uLang {
+class CAttributable;
 class CClass;
 class CDefinition;
 class CFunction;
@@ -85,5 +87,27 @@ AUTORTFM_DISABLE FUtf8String ExtensionMethodName(const uLang::CFunction& Functio
 ///
 ///   (/user@localhost:)(/user@localhost:)operator'.ToString'(:(...:)game_state,:tuple())
 AUTORTFM_DISABLE FUtf8String ExtensionMethodDecoratedName(const uLang::CFunction& Function);
+
+/// The one string an attribute of AttributeClass was spelled with -- `@rpc("any_peer call_local")`
+/// answers `any_peer call_local` -- or unset when Attributes carries none. Also unset for one
+/// spelled with several arguments, which is why every attribute the bridge declares takes one
+/// string and its reader splits it.
+///
+/// A substitute for SOL-972 (tripwire/attribute_takes_one_argument, docs/tripwires.md): uLang's only
+/// accessor, GetAttributeTextValue, refuses an argument that is a tuple, and an overloaded attribute
+/// constructor cannot be referenced at all. The day the tripwire fires, this is where a reader of
+/// several arguments goes, and the one-string spelling keeps working beside it.
+AUTORTFM_DISABLE TOptional<FUtf8String> AttributeArgument(const uLang::CAttributable& Attributes,
+                                                          const uLang::CClass* AttributeClass,
+                                                          const uLang::CSemanticProgram& Program);
+
+/// A definition's documentation as prose, with every delimiter taken off, or empty: its `@doc`
+/// text, or else the comments the parser keeps in front of its node, stripped by the rules
+/// src/verse_doc_markup.h's verse_doc_comment_above uses so the two readers cannot be told apart.
+///
+/// A substitute for a doc-comment syntax Verse does not have (tripwire/no_doc_comment_syntax,
+/// docs/tripwires.md): the comment above a declaration is the documentation, which is Epic's own
+/// convention. The one place the host reads either source.
+AUTORTFM_DISABLE FUtf8String DocOf(const uLang::CDefinition& Definition, const uLang::CSemanticProgram& Program);
 
 } // namespace GodotVerse
