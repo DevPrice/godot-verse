@@ -244,7 +244,42 @@ AUTORTFM_DISABLE EClassOrigin ClassOriginOf(const uLang::CClass& Class, const uL
     {
         return EClassOrigin::Script;
     }
+    // The bindings package is generated as one unmodularized snippet (FindBindingClass), so a
+    // binding's qualified name is its bare name -- which is what QualifiedNameOf falls back to for a
+    // class outside the script package.
+    if (ResolvesAt(BindingsVersePath))
+    {
+        return EClassOrigin::Binding;
+    }
     return EClassOrigin::Other;
+}
+
+AUTORTFM_DISABLE TArray<const uLang::CClass*> ClassChainOfOrigin(const uLang::CClass& Class,
+                                                                 const uLang::CSemanticProgram& Program,
+                                                                 EClassOrigin Origin)
+{
+    TArray<const uLang::CClass*> Chain;
+    for (const uLang::CClass* Cursor = &Class;
+         Cursor != nullptr && ClassOriginOf(*Cursor, Program) == Origin;
+         Cursor = Cursor->GetSuperClass())
+    {
+        Chain.Insert(Cursor, 0);
+    }
+    return Chain;
+}
+
+AUTORTFM_DISABLE const uLang::CClass* NearestAncestorOfOrigin(const uLang::CClass& Class,
+                                                             const uLang::CSemanticProgram& Program,
+                                                             EClassOrigin Origin)
+{
+    for (const uLang::CClass* Cursor = &Class; Cursor != nullptr; Cursor = Cursor->GetSuperClass())
+    {
+        if (ClassOriginOf(*Cursor, Program) == Origin)
+        {
+            return Cursor;
+        }
+    }
+    return nullptr;
 }
 
 AUTORTFM_DISABLE const verse_math::layout* FindStructLayout(FUtf8StringView VerseName)

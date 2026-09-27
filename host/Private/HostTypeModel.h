@@ -3,6 +3,7 @@
 #pragma once
 
 #include "AutoRTFM.h"
+#include "Containers/Array.h"
 #include "Containers/StringView.h"
 #include "Containers/UnrealString.h"
 
@@ -29,14 +30,17 @@ inline constexpr const char* GodotVersePath = "/Godot.org/Godot";
 inline constexpr const char* BindingsVersePath = "/Godot.org/Bindings";
 
 /// Which package declares a class, proven by resolving the class's own name at that package's verse
-/// path. A class nested inside another resolves at neither and is Other.
+/// path. A class nested inside another, or left behind by a retired generation, resolves at none of
+/// them and is Other.
 ///
-/// The numbers are the sidecar's `refOrigin`, which a runtime host and the interpreter both read.
+/// The first three numbers are the sidecar's `refOrigin`, which a runtime host and the interpreter
+/// both read; a Binding is recorded there as Other, which is what it was before it had a name.
 enum class EClassOrigin : uint8
 {
     Other = 0,
     Mirrored = 1,
     Script = 2,
+    Binding = 3,
 };
 
 /// What kind of type a declaration names, as the describers and converters of a declared type tell
@@ -125,6 +129,18 @@ AUTORTFM_DISABLE FDeclaredType ClassifyDeclaredType(const uLang::CTypeBase* Type
 AUTORTFM_DISABLE const uLang::CNormalType& UnwrapDeclaredType(const uLang::CTypeBase& Type, bool& bOutIsOption);
 
 AUTORTFM_DISABLE EClassOrigin ClassOriginOf(const uLang::CClass& Class, const uLang::CSemanticProgram& Program);
+
+/// Class and the unbroken run of its superclasses of Origin, base first. Empty when Class itself is
+/// not of Origin. For Script, the chain a script class's own members, exports and signals live on:
+/// above it is generated API whose members are Godot's own properties.
+AUTORTFM_DISABLE TArray<const uLang::CClass*> ClassChainOfOrigin(const uLang::CClass& Class,
+                                                                 const uLang::CSemanticProgram& Program,
+                                                                 EClassOrigin Origin);
+
+/// The nearest class of Origin in Class's own superclass chain, Class included, or null.
+AUTORTFM_DISABLE const uLang::CClass* NearestAncestorOfOrigin(const uLang::CClass& Class,
+                                                             const uLang::CSemanticProgram& Program,
+                                                             EClassOrigin Origin);
 
 /// `player` at the script package's root, `gameplay/player` in a module, and the bare name for a
 /// class outside the script package. What every ClassNameUtf8 in the ABI carries.

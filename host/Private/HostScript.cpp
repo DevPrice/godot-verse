@@ -96,6 +96,7 @@
 #include <thread>
 
 using GodotVerse::BindingsVersePath;
+using GodotVerse::ClassChainOfOrigin;
 using GodotVerse::ClassifyDeclaredType;
 using GodotVerse::ClassOriginOf;
 using GodotVerse::EClassOrigin;
@@ -103,6 +104,7 @@ using GodotVerse::EDeclaredKind;
 using GodotVerse::FDeclaredType;
 using GodotVerse::FindStructLayout;
 using GodotVerse::GodotVersePath;
+using GodotVerse::NearestAncestorOfOrigin;
 using GodotVerse::QualifiedNameOf;
 using GodotVerse::ScriptVersePath;
 using GodotVerse::UnwrapDeclaredType;
@@ -2614,14 +2616,8 @@ AUTORTFM_DISABLE FUtf8String EnumeratorList(const uLang::CEnumeration& Enumerati
 /// Godot draws no picker for either way.
 AUTORTFM_DISABLE FUtf8String NativeClassOf(const uLang::CClass& Class, const uLang::CSemanticProgram& Program)
 {
-    for (const uLang::CClass* Current = &Class; Current != nullptr; Current = Current->GetSuperClass())
-    {
-        if (ClassOriginOf(*Current, Program) == EClassOrigin::Mirrored)
-        {
-            return FUtf8String(Current->AsNameCString());
-        }
-    }
-    return FUtf8String();
+    const uLang::CClass* const Mirrored = NearestAncestorOfOrigin(Class, Program, EClassOrigin::Mirrored);
+    return Mirrored ? FUtf8String(Mirrored->AsNameCString()) : FUtf8String();
 }
 
 /// Whether Godot has a name for this class at all: `@global_class`, and being the class its own
@@ -2642,21 +2638,6 @@ AUTORTFM_DISABLE bool RegistersWithGodot(const uLang::CClass& Class, const uLang
 AUTORTFM_DISABLE FUtf8String RidFieldKey()
 {
     return FUtf8String(UTF8TEXT("(")) + GodotVersePath + UTF8TEXT("/rid:)Id");
-}
-
-/// Whether an Other-origin class is one of the generated bindings' own, rather than some other
-/// class ClassOriginOf cannot place (a nested class; one left behind by a retired generation).
-/// `ClassOriginOf` already answers Other for both -- DeclaredReferenceClass's default case reaches
-/// FindBindingClass on exactly that assumption -- so this is the same resolution test one more
-/// verse path over: the bindings package is generated as a single unmodularized snippet
-/// (FindBindingClass's own comment), so a binding class's qualified name is its bare name, which is
-/// what QualifiedNameOf already falls back to for a class outside the project's own package.
-AUTORTFM_DISABLE bool IsBindingClass(const uLang::CClass& Class, const uLang::CSemanticProgram& Program)
-{
-    const FUtf8String Path = FUtf8String(BindingsVersePath) + UTF8TEXT("/") + QualifiedNameOf(Class);
-    return Program.FindDefinitionByVersePath<uLang::CClass>(
-               FULangConversionUtils::FUtf8StringViewToULangStringView(Path))
-        == &Class;
 }
 
 /// A mirrored struct whose value can cross, and the fields the Godot type is built from.
@@ -2808,7 +2789,10 @@ AUTORTFM_DISABLE void DescribeReferenceExport(const FDeclaredType& Declared,
         return;
     }
 
-    if (Origin == EClassOrigin::Script)
+    VH_EXHAUSTIVE_SWITCH_BEGIN
+    switch (Origin)
+    {
+    case EClassOrigin::Script:
     {
         // The inspector filters a slot by a Godot class name, and only a class Godot has
         // *registered* has one. Two things are needed for that and testing one of them was a
@@ -2841,24 +2825,22 @@ AUTORTFM_DISABLE void DescribeReferenceExport(const FDeclaredType& Declared,
         OutDesc.Reject = VH_EXPORT_OK;
         return;
     }
-
-    if (Origin == EClassOrigin::Mirrored)
-    {
+    case EClassOrigin::Mirrored:
         OutDesc.Reject = VH_EXPORT_OK;
-    }
-    else if (IsBindingClass(Class, Program))
-    {
-        // Its own reason rather than VH_EXPORT_UNSUPPORTED_TYPE's generic one: the inspector
-        // has no picker for a generated-binding class, but *why* differs from an unsupported
-        // value type, and NativeClassOf above has already found the native base to suggest
-        // exporting instead, when the binding's chain reaches one. Out of scope to lift this
-        // by design (docs/generated-bindings.md); support is deferred, not refused for good.
+        break;
+    // Its own reason rather than VH_EXPORT_UNSUPPORTED_TYPE's generic one: the inspector has no
+    // picker for a generated-binding class, but *why* differs from an unsupported value type, and
+    // NativeClassOf above has already found the native base to suggest exporting instead, when the
+    // binding's chain reaches one. Out of scope to lift this by design (docs/generated-bindings.md);
+    // support is deferred, not refused for good.
+    case EClassOrigin::Binding:
         OutDesc.Reject = VH_EXPORT_BINDING_CLASS_UNSUPPORTED;
-    }
-    else
-    {
+        break;
+    case EClassOrigin::Other:
         OutDesc.Reject = VH_EXPORT_UNSUPPORTED_TYPE;
+        break;
     }
+    VH_EXHAUSTIVE_SWITCH_END
 }
 
 /// What the inspector can make of a member's declared type: the value's shape on the wire, the
@@ -3412,11 +3394,10 @@ AUTORTFM_DISABLE FMemberType DescribeMemberType(FUtf8StringView ClassName, FUtf8
     // Up the chain, because one script class may derive from another and the member may be the
     // base's. The walk stops at the first class outside the script package: above that is generated
     // API, whose members are Godot's own properties rather than script state.
-    for (const uLang::CClass* Cursor = Class;
-         Cursor != nullptr && ClassOriginOf(*Cursor, *Program) == EClassOrigin::Script;
-         Cursor = Cursor->GetSuperClass())
+    const TArray<const uLang::CClass*> Chain = ClassChainOfOrigin(*Class, *Program, EClassOrigin::Script);
+    for (int32 Link = Chain.Num() - 1; Link >= 0; --Link)
     {
-        for (const uLang::TSRef<uLang::CDataDefinition>& Member : Cursor->GetDefinitionsOfKind<uLang::CDataDefinition>())
+        for (const uLang::TSRef<uLang::CDataDefinition>& Member : Chain[Link]->GetDefinitionsOfKind<uLang::CDataDefinition>())
         {
             if (!FUtf8StringView(Member->AsNameCString()).Equals(FieldName))
             {
@@ -5021,21 +5002,26 @@ AUTORTFM_DISABLE Verse::VValue NewArrayValue(Verse::FRunningContext Context,
 /// The UClass a declared reference type names, wherever the class was declared.
 ///
 /// Three packages can declare one and each answers to a different lookup: the mirror's own, the
-/// project's (which is what `@global_class` registers with Godot), and the generated bindings' --
-/// which `ClassOriginOf` calls Other, because a binding resolves at neither of the first two verse
-/// paths. Null for a class none of them carries, which a nested class is and so is one left behind
-/// by a retired generation.
+/// project's (which is what `@global_class` registers with Godot), and the generated bindings'.
+/// Null for a class none of them carries, which a nested class is and so is one left behind by a
+/// retired generation.
 AUTORTFM_DISABLE UClass* DeclaredReferenceClass(const FMemberType& Declared)
 {
+    VH_EXHAUSTIVE_SWITCH_BEGIN
     switch (Declared.ReferenceOrigin)
     {
     case EClassOrigin::Mirrored:
         return FindMirroredClass(FUtf8StringView(Declared.ReferenceName));
     case EClassOrigin::Script:
         return FindGodotClass(FUtf8StringView(Declared.ReferenceQualifiedName));
-    default:
+    case EClassOrigin::Binding:
+        return FindBindingClass(FUtf8StringView(Declared.ReferenceName));
+    // Also what a binding reads back out of a sidecar as, which records it as Other.
+    case EClassOrigin::Other:
         return FindBindingClass(FUtf8StringView(Declared.ReferenceName));
     }
+    VH_EXHAUSTIVE_SWITCH_END
+    return nullptr;
 }
 
 /// Builds the value to write, given the one already in the slot. An uninitialized return means the
@@ -5857,13 +5843,7 @@ AUTORTFM_DISABLE bool GetClassExportsLive(FUtf8StringView ClassName, TArray<Godo
     // generated API: a mirrored class' members are Godot's own properties, which Godot already draws
     // and which carry no @export. Before script-to-script inheritance was tested there was no class
     // between the two, and this loop read only the one class.
-    TArray<const uLang::CClass*> Chain;
-    for (const uLang::CClass* Cursor = Class;
-         Cursor != nullptr && ClassOriginOf(*Cursor, *Program) == EClassOrigin::Script;
-         Cursor = Cursor->GetSuperClass())
-    {
-        Chain.Insert(Cursor, 0);
-    }
+    const TArray<const uLang::CClass*> Chain = ClassChainOfOrigin(*Class, *Program, EClassOrigin::Script);
 
     TArray<const uLang::TSRef<uLang::CDataDefinition>> Members;
     for (const uLang::CClass* Link : Chain)
@@ -6547,13 +6527,7 @@ AUTORTFM_DISABLE bool GetClassSignalsLive(FUtf8StringView ClassName, TArray<Godo
     // Base first, and the whole chain: **signals inherit**. Phase 2 shipped exactly this bug once
     // already, for @export on a base script class, in two places that had been correct right up
     // until a script could derive from a script.
-    TArray<const uLang::CClass*> Chain;
-    for (const uLang::CClass* Cursor = Class;
-         Cursor != nullptr && ClassOriginOf(*Cursor, *Program) == EClassOrigin::Script;
-         Cursor = Cursor->GetSuperClass())
-    {
-        Chain.Insert(Cursor, 0);
-    }
+    const TArray<const uLang::CClass*> Chain = ClassChainOfOrigin(*Class, *Program, EClassOrigin::Script);
 
     for (const uLang::CClass* Link : Chain)
     {
@@ -9664,6 +9638,25 @@ AUTORTFM_DISABLE EDeclaredKind RecordedKind(const FMemberType& Type)
     return EDeclaredKind::Other;
 }
 
+/// `refOrigin` as the sidecar spells it, which the interpreter reads too and which has no Binding:
+/// one is recorded as Other, which is what it was before it had a name, and DeclaredReferenceClass
+/// resolves the two alike.
+AUTORTFM_DISABLE int32 SidecarOriginCode(EClassOrigin Origin)
+{
+    VH_EXHAUSTIVE_SWITCH_BEGIN
+    switch (Origin)
+    {
+    case EClassOrigin::Other:
+    case EClassOrigin::Binding:
+        return (int32)EClassOrigin::Other;
+    case EClassOrigin::Mirrored:
+    case EClassOrigin::Script:
+        return (int32)Origin;
+    }
+    VH_EXHAUSTIVE_SWITCH_END
+    return (int32)EClassOrigin::Other;
+}
+
 /// What RecordedKind answers for a description of Kind, so the cook can check the round trip.
 AUTORTFM_DISABLE EDeclaredKind RecordsAs(EDeclaredKind Kind)
 {
@@ -9713,7 +9706,7 @@ AUTORTFM_DISABLE TSharedPtr<FJsonObject> WriteMemberType(const FMemberType& Type
     {
         Object->SetStringField(TEXT("ref"), FString(Type.ReferenceName));
         Object->SetStringField(TEXT("refPath"), FString(Type.ReferenceQualifiedName));
-        Object->SetNumberField(TEXT("refOrigin"), (int32)Type.ReferenceOrigin);
+        Object->SetNumberField(TEXT("refOrigin"), SidecarOriginCode(Type.ReferenceOrigin));
         Object->SetBoolField(TEXT("refOption"), Type.bReferenceIsOption);
     }
     if (!Type.StructName.IsEmpty())
@@ -10101,11 +10094,10 @@ AUTORTFM_DISABLE void CollectDeclaredTypes(FUtf8StringView ClassName, GodotVerse
     // package the members are Godot's own properties, which the mirror describes and this does not.
     // Derived class first, so a member a subclass redeclares wins the way a lookup from the
     // subclass would have found it.
-    for (const uLang::CClass* Cursor = Class;
-         Cursor != nullptr && ClassOriginOf(*Cursor, *Program) == EClassOrigin::Script;
-         Cursor = Cursor->GetSuperClass())
+    const TArray<const uLang::CClass*> Chain = ClassChainOfOrigin(*Class, *Program, EClassOrigin::Script);
+    for (int32 Link = Chain.Num() - 1; Link >= 0; --Link)
     {
-        for (const uLang::TSRef<uLang::CDataDefinition>& Member : Cursor->GetDefinitionsOfKind<uLang::CDataDefinition>())
+        for (const uLang::TSRef<uLang::CDataDefinition>& Member : Chain[Link]->GetDefinitionsOfKind<uLang::CDataDefinition>())
         {
             const FUtf8String Name(Member->AsNameCString());
             if (Out.Members.Contains(Name))
