@@ -1,6 +1,7 @@
 #pragma once
 
 #include <godot_cpp/classes/object.hpp>
+#include <godot_cpp/templates/hash_map.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_int32_array.hpp>
@@ -58,6 +59,14 @@ public:
 
 private:
 	VerseScriptLanguage &language;
+
+	// vh_class_override_candidates for p_class_name, or the last answer it gave while the snapshot
+	// still described the class.
+	godot::TypedArray<godot::Dictionary> override_candidates(const godot::String &p_class_name) const;
+
+	// Keyed by module-qualified class name. Never cleared: a class the snapshot has again is
+	// answered fresh and overwrites its row, and one that never comes back costs one row.
+	mutable godot::HashMap<godot::String, godot::TypedArray<godot::Dictionary>> last_good_override_candidates;
 
 	// The completion buffer the last vh_complete_symbol answered for, with its position, mode, the
 	// analysis_epoch it was answered at, and the answer. Godot re-asks on every keystroke while the

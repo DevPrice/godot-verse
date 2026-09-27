@@ -966,6 +966,25 @@ PackedStringArray VerseCompletion::receiver_classes_from_text(const String &p_so
 	return verse_godot_class_for(word) != nullptr ? member_bearing_chain(word) : PackedStringArray();
 }
 
+// The last analysis only describes a class when the whole project parsed, so a class it says
+// nothing about is answered with what it said the last time it did. `vh_has_class` is not that
+// test: around an analysis that did not parse it can still answer yes for a class it describes no
+// member of. A class with members of its own and no candidates is answered fresh -- its
+// base changed, and the old list would offer overrides of a base it no longer extends.
+TypedArray<Dictionary> VerseCompletion::override_candidates(const String &p_class_name) const {
+	VerseRuntime *runtime = get_runtime();
+	if (runtime == nullptr) {
+		return TypedArray<Dictionary>();
+	}
+	const TypedArray<Dictionary> candidates = runtime->class_override_candidates(p_class_name);
+	if (!candidates.is_empty() || !runtime->class_members(p_class_name).is_empty()) {
+		last_good_override_candidates[p_class_name] = candidates;
+		return candidates;
+	}
+	const TypedArray<Dictionary> *last_good = last_good_override_candidates.getptr(p_class_name);
+	return last_good != nullptr ? *last_good : candidates;
+}
+
 // What a string literal at the cursor can be completed to, or nothing.
 //
 // Godot re-quotes every option handed back while the caret is inside a string (CodeEdit's
@@ -1414,8 +1433,7 @@ Dictionary VerseCompletion::complete_code(const String &p_code, const String &p_
 			//
 			// Members only, not the scope walk: everything else a scope admits lives in the AST,
 			// which is exactly what no analysis of this buffer has built yet.
-			const String class_name = language.qualified_class_name(p_path);
-			const TypedArray<Dictionary> members = runtime->class_members(class_name);
+			const TypedArray<Dictionary> members = runtime->class_members(language.qualified_class_name(p_path));
 			for (int64_t i = 0; i < members.size(); i++) {
 				const Dictionary item = members[i];
 				if (!matches_typed_prefix(item["name"], prefix)) {
@@ -1429,26 +1447,31 @@ Dictionary VerseCompletion::complete_code(const String &p_code, const String &p_
 				}
 			}
 
-			// The other half of what a member declaration is reaching for, and the half the scope
-			// walk used to be the only source of: what the class inherits and could override. Off
-			// the same snapshot, described by the same host code the refined answer will use, so
-			// the declarations offered here are the ones that replace them -- same text, same
-			// LOCATION_LOCAL, nothing to jump when the list is swapped.
-			//
-			// Nothing but overrides: an inherited name that is not one is an ordinary call, and
-			// the thousands of them belong to the scope walk that has not run yet.
-			if (!declaring_in_class.is_empty()) {
-				const TypedArray<Dictionary> candidates = runtime->class_override_candidates(class_name);
-				for (int64_t i = 0; i < candidates.size(); i++) {
-					const Dictionary item = candidates[i];
-					const String name = item["name"];
-					if (!matches_typed_prefix(name, prefix) || already_declared.has(name)) {
-						continue;
-					}
-					if (completes_as_override(item, declaring_in_class)) {
-						host_offered_names.insert(name);
-						options.push_back(override_option_for(item));
-					}
+		}
+
+		// The other half of what a member declaration is reaching for: what the class inherits and
+		// could override. Off the snapshot, described by the same host code the refined answer
+		// uses, so an item here formats identically to the one the scope walk offers and the full
+		// list replaces the partial one without anything moving (B13).
+		//
+		// After the host's answer as well as instead of it, because the scope walk has a class to
+		// walk only when the buffer parses. One syntax error anywhere leaves it none, and the
+		// author's buffer holds one for most of the time they are typing. A name the walk did
+		// offer is skipped, so a buffer that parses gets exactly the list it always did.
+		//
+		// Nothing but overrides: an inherited name that is not one is an ordinary call, and the
+		// thousands of them belong to the scope walk.
+		if (!declaring_in_class.is_empty()) {
+			const TypedArray<Dictionary> candidates = override_candidates(language.qualified_class_name(p_path));
+			for (int64_t i = 0; i < candidates.size(); i++) {
+				const Dictionary item = candidates[i];
+				const String name = item["name"];
+				if (!matches_typed_prefix(name, prefix) || already_declared.has(name) || host_offered_names.has(name)) {
+					continue;
+				}
+				if (completes_as_override(item, declaring_in_class)) {
+					host_offered_names.insert(name);
+					options.push_back(override_option_for(item));
 				}
 			}
 		}
