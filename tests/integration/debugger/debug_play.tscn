@@ -1,0 +1,12 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://debugger/debug_control.gd" id="1_control"]
+[ext_resource type="Script" path="res://scripts/debug_play.verse" id="2_verse"]
+
+[node name="DebugPlay" type="Node"]
+
+[node name="Control" type="Node" parent="."]
+script = ExtResource("1_control")
+
+[node name="Verse" type="Node2D" parent="."]
+script = ExtResource("2_verse")

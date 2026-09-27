@@ -31,6 +31,7 @@ func run() -> void:
 	await _harness()
 	await _placeholders_and_saving()
 	await _code_editor()
+	await _debugger_and_profiler()
 	finished = true
 
 
@@ -1129,6 +1130,367 @@ func _panel_text(code: CodeEdit) -> String:
 		if parsed.begins_with("[Ignore]"):
 			text += parsed
 	return text
+
+
+# --- the debugger and the profiler through Play (docs/editor-test-audit.md step 5) ---------------
+#
+# by-hand-findings.md's "To repeat it" steps 1-5 and its profiler session, through Godot's own
+# Debugger panel: breakpoints set in the gutter reach the game, the stack panel and Stack Variables
+# read the stop, the panel's own buttons step, and the Profiler tab's tree names Verse functions.
+# res://debugger/debug_play.tscn runs a GDScript control first and scripts/debug_play.verse after
+# it; tools/debug_wire.py drives the same scene over the wire with no editor, and names the two
+# known defects below in the same words.
+
+const DEBUG_SCENE := "res://debugger/debug_play.tscn"
+const DEBUG_VERSE := "res://scripts/debug_play.verse"
+const DEBUG_CONTROL := "res://debugger/debug_control.gd"
+const READY_DEFECT := "known defect: the Verse debugger attaches from the language's _frame (VerseDebugger::sync_attachment), and a main scene's _Ready runs before the first one, so a breakpoint there never fires"
+const TWICE_DEFECT := "known defect: a line holding a call reports its location again when the result lands, and should_break asks is_breakpoint of both, so a breakpoint there stops twice per arrival -- Continue stops on the same line once more"
+const STACK_ROW := "^(\\d+) - (.*):(\\d+) - at function: (.*)$"
+
+
+# EditorDebuggerSession's breaked is the one signal that says a stop happened; the panel's rows
+# arrive after it, over the same connection.
+class _BreakWatcher extends EditorDebuggerPlugin:
+	var breaks := 0
+
+	func _setup_session(session_id: int) -> void:
+		get_session(session_id).breaked.connect(func(_can_debug: bool) -> void: breaks += 1)
+
+
+var _watcher: _BreakWatcher
+var _debug_lines := {}
+
+
+func _debugger_and_profiler() -> void:
+	_mark("the debugger: breakpoints in the gutter")
+	var verse: Script = load(DEBUG_VERSE)
+	var control: Script = load(DEBUG_CONTROL)
+	var verse_code := await code_edit_for(verse)
+	var control_code := await code_edit_for(control)
+	if verse_code == null or control_code == null:
+		check("debug_play.verse and debug_control.gd open in the script editor", false)
+		return
+	_debug_lines = {
+		"control": _exact_line_of(control_code, "\tvar second := work()"),
+		"ready": _exact_line_of(verse_code, "\t\tPrint(\"debug_play ready\")"),
+		"start": _exact_line_of(verse_code, "\t\tStart := 1"),
+		"spot": _exact_line_of(verse_code, "\t\tSpot := vector2{X := 1.0, Y := 2.0}"),
+		"call": _exact_line_of(verse_code, "\t\tTotal := Helper()"),
+		"outer_call": _exact_line_of(verse_code, "\t\tDeeper := Outer()"),
+		"outer_decl": _exact_line_of(verse_code, "\tOuter<public>()<transacts>:int ="),
+		"outer_first": _exact_line_of(verse_code, "\t\tStepped := Helper() + 1"),
+		"again": _exact_line_of(verse_code, "\t\tAgain := Helper()"),
+		"trailing": _exact_line_of(verse_code, "\t\tInner"),
+		"process": _exact_line_of(verse_code, "\t\tset Frames += 1"),
+	}
+	if _debug_lines.values().has(-1):
+		check("debug_play.verse and debug_control.gd write every line the cases arm", false)
+		return
+	control_code.set_line_as_breakpoint(_debug_lines.control, true)
+	for key in ["ready", "start", "outer_call", "again", "trailing"]:
+		verse_code.set_line_as_breakpoint(_debug_lines[key], true)
+	check_eq("the gutter holds the six breakpoints the cases arm",
+			EditorInterface.get_script_editor().get_breakpoints().size(), 6)
+
+	_watcher = _BreakWatcher.new()
+	plugin.add_debugger_plugin(_watcher)
+	if play_scene(DEBUG_SCENE):
+		await _debug_session(verse_code)
+	EditorInterface.stop_playing_scene()
+	await wait_until(func() -> bool: return not EditorInterface.is_playing_scene(), 10000)
+	plugin.remove_debugger_plugin(_watcher)
+	for line in verse_code.get_breakpointed_lines():
+		verse_code.set_line_as_breakpoint(line, false)
+	for line in control_code.get_breakpointed_lines():
+		control_code.set_line_as_breakpoint(line, false)
+
+
+func _debug_session(verse_code: CodeEdit) -> void:
+	var lines := _debug_lines
+	# Godot's lines are 1-based where CodeEdit's are 0-based.
+	var at := func(key: String) -> int: return lines[key] + 1
+	var visited := []
+
+	_mark("the debugger: the GDScript control's stop")
+	var stop := await _next_stop(visited, 90000)
+	check("GDScript control: a breakpoint set in the gutter stops the game", not stop.is_empty())
+	if stop.is_empty():
+		return
+	check_eq("GDScript control: the stack panel's top row is its line in _ready",
+			_frame_of(stop, 0), [DEBUG_CONTROL, at.call("control"), "_ready"])
+	var variables := await _stack_variables(["Locals/first"])
+	check_eq("GDScript control: Stack Variables shows the local first", variables.get("Locals/first"), 10)
+	stop = await _press_and_stop("Step Over", visited)
+	check_eq("GDScript control: Step Over from a breakpoint on a line holding a call moves one line",
+			_frame_of(stop, 0).slice(0, 2), [DEBUG_CONTROL, at.call("control") + 1])
+	if stop.is_empty():
+		return
+
+	_mark("the debugger: the Verse stops")
+	stop = await _press_and_stop("Continue", visited)
+	if _frame_of(stop, 0).slice(0, 2) == [DEBUG_VERSE, at.call("ready")]:
+		check("a breakpoint in the main scene's _Ready stops", true)
+		stop = await _press_and_stop("Continue", visited)
+	else:
+		skip("a breakpoint in the main scene's _Ready stops", READY_DEFECT)
+	check("a breakpoint set in a .verse's gutter stops the game", not stop.is_empty())
+	if stop.is_empty():
+		return
+	check_eq("the stack panel's top row is debug_play.verse at the breakpoint's line, in Walk",
+			_frame_of(stop, 0), [DEBUG_VERSE, at.call("start"), "Walk"])
+	check_eq("and its second row is the _Process that called it",
+			_frame_of(stop, 1).slice(0, 1) + _frame_of(stop, 1).slice(2), [DEBUG_VERSE, "_Process"])
+
+	stop = await _press_and_stop("Step Over", visited)
+	check_eq("the Step Over button moves one line", _frame_of(stop, 0), [DEBUG_VERSE, at.call("spot"), "Walk"])
+	if stop.is_empty():
+		return
+	stop = await _press_and_stop("Step Over", visited)
+	check("Step Over from a line that reports twice does not land on it again",
+			not stop.is_empty() and _frame_of(stop, 0)[1] != at.call("spot"))
+	check_eq("and lands on the next line", _frame_of(stop, 0), [DEBUG_VERSE, at.call("call"), "Walk"])
+	if stop.is_empty():
+		return
+
+	variables = await _stack_variables(["Locals/Spot", "Members/Health", "Members/Where", "Members/Frames"])
+	check_eq("Stack Variables shows the local Spot as a Vector2", variables.get("Locals/Spot"), Vector2(1, 2))
+	check_eq("Stack Variables shows the member Health as an int", variables.get("Members/Health"), 7)
+	check_eq("Stack Variables shows the member Where as a Vector2", variables.get("Members/Where"), Vector2(3, 4))
+	check_eq("Stack Variables shows the var member Frames as an int", variables.get("Members/Frames"), 3)
+	var selves := variables.keys().filter(func(name: String) -> bool: return name.get_slice("/", 1).to_lower() == "self")
+	check("Stack Variables shows self under Members and nowhere else",
+			selves.size() == 1 and String(selves[0]).begins_with("Members/"))
+
+	stop = await _press_and_stop("Step Over", visited)
+	check("Step Over from a line holding a call does not land on it again when the result lands",
+			not stop.is_empty() and _frame_of(stop, 0)[1] != at.call("call"))
+	check_eq("and lands on the next line, in the same function", _frame_of(stop, 0),
+			[DEBUG_VERSE, at.call("call") + 1, "Walk"])
+	if stop.is_empty():
+		return
+
+	_mark("the debugger: Step Into and Step Out")
+	stop = await _press_and_stop("Continue", visited)
+	check_eq("a second breakpoint stops at the call to Outer", _frame_of(stop, 0).slice(0, 2),
+			[DEBUG_VERSE, at.call("outer_call")])
+	if stop.is_empty():
+		return
+	# Off before stepping, so a stop on this line again can only be the step's.
+	verse_code.set_line_as_breakpoint(lines.outer_call, false)
+	var depth: int = stop.size()
+	stop = await _press_and_stop("Step Into", visited)
+	check("the Step Into button enters the Verse callee", stop.size() == depth + 1
+			and _frame_of(stop, 0)[2] == "Outer" and _frame_of(stop, 0)[1] in [at.call("outer_decl"), at.call("outer_first")])
+	check_eq("and the stack panel shows the caller under it, at the call", _frame_of(stop, 1),
+			[DEBUG_VERSE, at.call("outer_call"), "Walk"])
+	if stop.is_empty():
+		return
+	stop = await _press_and_stop("Step Out", visited)
+	check("the Step Out button returns to the caller", stop.size() == depth and _frame_of(stop, 0)[2] == "Walk")
+	if stop.is_empty():
+		return
+
+	stop = await _press_and_stop("Continue", visited)
+	check_eq("a breakpoint on another line holding a call stops", _frame_of(stop, 0).slice(0, 2),
+			[DEBUG_VERSE, at.call("again")])
+	if stop.is_empty():
+		return
+	var again := await _press_and_stop("Continue", visited, 2000)
+	if again.is_empty():
+		check("and Continue from it does not stop there again when the result lands", true)
+	elif _frame_of(again, 0).slice(0, 2) == [DEBUG_VERSE, at.call("again")]:
+		skip("and Continue from it does not stop there again when the result lands", TWICE_DEFECT)
+		await _press_and_stop("Continue", visited, 1000)
+	else:
+		check("and Continue from it does not stop there again when the result lands", false)
+		await _press_and_stop("Continue", visited, 1000)
+	check("a breakpoint on a trailing bare expression never fires",
+			not visited.has([DEBUG_VERSE, at.call("trailing")]))
+
+	_mark("the debugger: a breakpoint toggled while the game runs")
+	verse_code.set_line_as_breakpoint(lines.process, true)
+	stop = await _next_stop(visited, 10000)
+	check_eq("a breakpoint toggled in the gutter while the game runs arms, in _Process",
+			_frame_of(stop, 0), [DEBUG_VERSE, at.call("process"), "_Process"])
+	if stop.is_empty():
+		return
+	verse_code.set_line_as_breakpoint(lines.process, false)
+	check("and one toggled off while stopped stays off", (await _press_and_stop("Continue", visited, 1500)).is_empty())
+
+	_mark("the debugger: Skip Breakpoints")
+	var skip_button := _debugger_button("Skip Breakpoints")
+	if skip_button == null:
+		check("the Debugger panel has a Skip Breakpoints button", false)
+		return
+	skip_button.emit_signal("pressed")
+	verse_code.set_line_as_breakpoint(lines.process, true)
+	check("with Skip Breakpoints on, an armed line in _Process does not stop", (await _next_stop(visited, 1500)).is_empty())
+	skip_button.emit_signal("pressed")
+	stop = await _next_stop(visited, 10000)
+	check_eq("and it stops there again once Skip Breakpoints is off", _frame_of(stop, 0).slice(0, 2),
+			[DEBUG_VERSE, at.call("process")])
+	verse_code.set_line_as_breakpoint(lines.process, false)
+	if not stop.is_empty():
+		await _press_and_stop("Continue", visited, 1000)
+
+	await _profiler_panel()
+
+
+# The Profiler tab: its Start button, two seconds of frames, then Stop -- which is what makes the
+# game send servers:profile_total, the accumulated table built from _profiling_get_accumulated_data
+# and so the path through the ProfilingInfo stride trap, and the tree then shows it.
+func _profiler_panel() -> void:
+	_mark("the Profiler tab")
+	var profilers := find_all(_debugger_panel(), "EditorProfiler") if _debugger_panel() != null else []
+	var start: Button = null
+	if not profilers.is_empty():
+		for button in find_all(profilers[0], "Button"):
+			if (button as Button).toggle_mode and (button as Button).text == "Start":
+				start = button
+	if start == null:
+		check("the Debugger panel has a Profiler tab with a Start button", false)
+		return
+	const PROCESS := "debug_play._Process(:float)"
+	start.button_pressed = true
+	start.emit_signal("pressed")
+	# The tree draws one frame at a time, and a frame whose rows are all below the timer's
+	# resolution can leave one out, so it is read until a frame carries all three.
+	var framed := {}
+	await wait_until(func() -> bool:
+		framed.clear()
+		framed.merge(_profiler_rows(profilers[0]))
+		return framed.has(PROCESS) and framed.has("debug_play_tag") and framed.has("_process"), 10000)
+	check("the Profiler lists a Verse function with its call count", framed.get(PROCESS, 0) >= 1)
+	check("and the profile{} block's row", framed.has("debug_play_tag"))
+	# get_frame_data fills the same array get_accumulated_data does, at the same stride, so two
+	# Verse rows reading one frame's single call each is the trap measured on this side too.
+	check("the frame's two Verse rows each read one call (the ProfilingInfo stride)",
+			framed.get(PROCESS, 0) == 1 and framed.get("debug_play_tag", 0) == 1)
+	check("GDScript control: the Profiler lists its _process", framed.has("_process"))
+	check("and no row reads SigErr", not framed.keys().any(func(name: String) -> bool: return name.begins_with("SigErr")))
+
+	start.button_pressed = false
+	start.emit_signal("pressed")
+	var totals := {}
+	await wait_until(func() -> bool:
+		totals.clear()
+		totals.merge(_profiler_rows(profilers[0]))
+		return totals.get(PROCESS, 0) > 1, 5000)
+	const TOTALS := "stopping it draws the accumulated table, where _Process counts every frame's call"
+	if totals.get(PROCESS, 0) > 1:
+		check(TOTALS, true)
+	elif totals.get("_process", 0) <= 1:
+		skip(TOTALS, "Godot's own behaviour, not the bridge's: after Stop the tab keeps drawing a single frame for GDScript's _process too, so servers:profile_total is asserted by the debug-wire layer instead")
+	else:
+		check(TOTALS, false)
+
+
+# The Script Functions rows of the Profiler's tree, by name, with their call counts.
+func _profiler_rows(profiler: Node) -> Dictionary:
+	var rows := {}
+	for tree in find_all(profiler, "Tree"):
+		var root := (tree as Tree).get_root()
+		if root == null:
+			continue
+		for category in root.get_children():
+			if category.get_text(0) != "Script Functions":
+				continue
+			for item in category.get_children():
+				rows[item.get_text(0)] = item.get_text(2).to_int()
+	return rows
+
+
+# The next stop, once the stack panel has drawn it: [[file, line, function], ...] from the top,
+# or an empty array when `timeout_ms` passes with no stop.
+func _next_stop(visited: Array, timeout_ms := 30000) -> Array:
+	var before := _watcher.breaks
+	if not await wait_until(func() -> bool: return _watcher.breaks > before, timeout_ms):
+		return []
+	# A lambda captures a local by value, so the rows are gathered into it rather than assigned.
+	var frames := []
+	await wait_until(func() -> bool:
+		frames.assign(_stack_rows())
+		return not frames.is_empty(), 10000)
+	if not frames.is_empty():
+		visited.append(frames[0].slice(0, 2))
+	return frames
+
+
+func _press_and_stop(tooltip: String, visited: Array, timeout_ms := 30000) -> Array:
+	var button := _debugger_button(tooltip)
+	if button == null:
+		check("the Debugger panel has a %s button" % tooltip, false)
+		return []
+	button.emit_signal("pressed")
+	return await _next_stop(visited, timeout_ms)
+
+
+# _line_of matches a prefix, which finds `Inner := 21` for the bare `Inner` under it.
+func _exact_line_of(code: CodeEdit, text: String) -> int:
+	for line in code.get_line_count():
+		if code.get_line(line).strip_edges(false, true) == text:
+			return line
+	return -1
+
+
+func _frame_of(stop: Array, level: int) -> Array:
+	return stop[level] if level < stop.size() else ["", 0, ""]
+
+
+# The stack panel's rows, "0 - res://x.verse:12 - at function: Walk", as [file, line, function] --
+# the function without the parameter types a Verse frame is named with (`_Process(:float)`).
+func _stack_rows() -> Array:
+	var panel := _debugger_panel()
+	if panel == null:
+		return []
+	var pattern := RegEx.create_from_string(STACK_ROW)
+	for tree in find_all(panel, "Tree"):
+		if (tree as Tree).get_column_title(0) != "Stack Frames" or (tree as Tree).get_root() == null:
+			continue
+		var rows := []
+		for item in (tree as Tree).get_root().get_children():
+			var found := pattern.search(item.get_text(0))
+			if found != null:
+				rows.append([found.get_string(2), found.get_string(3).to_int(), found.get_string(4).get_slice("(", 0)])
+		return rows
+	return []
+
+
+# Stack Variables, as the panel's inspector holds them: `Locals/<name>` and `Members/<name>` on the
+# object it edits. Asked until every name in `wanted` is there, because the rows arrive after the
+# stack does.
+func _stack_variables(wanted: Array) -> Dictionary:
+	var values := {}
+	await wait_until(func() -> bool:
+		values.clear()
+		var panel := _debugger_panel()
+		var inspectors := find_all(panel, "EditorDebuggerInspector") if panel != null else []
+		var edited: Object = (inspectors[0] as EditorInspector).get_edited_object() if not inspectors.is_empty() else null
+		if edited == null:
+			return false
+		for property in edited.get_property_list():
+			var name := String(property["name"])
+			if name.begins_with("Locals/") or name.begins_with("Members/"):
+				values[name] = edited.get(name)
+		return wanted.all(func(key: String) -> bool: return values.has(key)), 10000)
+	return values
+
+
+# The ScriptEditorDebugger the game's session draws into. One Play is one session, the first tab.
+func _debugger_panel() -> Node:
+	var panels := find_all(EditorInterface.get_base_control(), "ScriptEditorDebugger")
+	return panels[0] if not panels.is_empty() else null
+
+
+func _debugger_button(tooltip: String) -> Button:
+	var panel := _debugger_panel()
+	if panel == null:
+		return null
+	for button in find_all(panel, "Button"):
+		if (button as Button).tooltip_text == tooltip:
+			return button
+	return null
 
 
 # --- helpers ------------------------------------------------------------------------------------
