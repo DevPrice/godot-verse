@@ -42,7 +42,8 @@ TSharedPtr<FJsonObject> WriteValue(const vh_value& Value)
     TSharedPtr<FJsonObject> Object = MakeShared<FJsonObject>();
     Object->SetNumberField(TEXT("type"), Value.Type);
     Object->SetNumberField(TEXT("tag"), Value.VariantTag);
-    switch (Value.Type)
+    VH_EXHAUSTIVE_SWITCH_BEGIN
+    switch (static_cast<vh_type>(Value.Type))
     {
     case VH_TYPE_LOGIC:
         Object->SetBoolField(TEXT("v"), Value.Logic != 0);
@@ -91,12 +92,16 @@ TSharedPtr<FJsonObject> WriteValue(const vh_value& Value)
             Object->SetObjectField(TEXT("v"), WriteValue(*Value.Option));
         }
         break;
-    default:
-        // VH_TYPE_VOID has no payload, and VH_TYPE_REF is an id in the *consumer's* table, which
-        // means nothing in another process. A static holding one crosses as void rather than as a
-        // dangling id; nothing in the mirror declares such a constant.
+    // VH_TYPE_VOID has no payload, and VH_TYPE_REF is an id in the *consumer's* table, which means
+    // nothing in another process. A static holding one crosses as void rather than as a dangling
+    // id; nothing in the mirror declares such a constant. VH_TYPE_VARIANT never reaches a vh_value
+    // at all -- it is a declaration type, never a payload.
+    case VH_TYPE_VOID:
+    case VH_TYPE_REF:
+    case VH_TYPE_VARIANT:
         break;
     }
+    VH_EXHAUSTIVE_SWITCH_END
     return Object;
 }
 
@@ -160,7 +165,8 @@ void ReadValue(const TSharedPtr<FJsonObject>& Object, GodotVerse::FFieldStorage&
     }
     OutValue.Type = (int32)Object->GetNumberField(TEXT("type"));
     OutValue.VariantTag = (int32)Object->GetNumberField(TEXT("tag"));
-    switch (OutValue.Type)
+    VH_EXHAUSTIVE_SWITCH_BEGIN
+    switch (static_cast<vh_type>(OutValue.Type))
     {
     case VH_TYPE_LOGIC:
         OutValue.Logic = Object->GetBoolField(TEXT("v")) ? 1 : 0;
@@ -213,10 +219,15 @@ void ReadValue(const TSharedPtr<FJsonObject>& Object, GodotVerse::FFieldStorage&
         }
         break;
     }
-    default:
-        // VH_TYPE_MAP is not written for a static (see WriteValue), so nothing reads one back.
+    // VH_TYPE_MAP is not written for a static (see WriteValue), so nothing reads one back.
+    // VH_TYPE_VOID has no payload; VH_TYPE_REF and VH_TYPE_VARIANT are WriteValue's non-writes too.
+    case VH_TYPE_MAP:
+    case VH_TYPE_VOID:
+    case VH_TYPE_REF:
+    case VH_TYPE_VARIANT:
         break;
     }
+    VH_EXHAUSTIVE_SWITCH_END
 }
 
 // -------------------------------------------------------------- descriptors --
