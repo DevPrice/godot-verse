@@ -520,8 +520,8 @@ exception with its own throwaway profile per run, because it has to pin a langua
 before the editor's first launch; it builds that profile with the same `godot_env.py` functions.
 
 **units** — lexer, class-declaration scanner, module map, doc-markup converter, signature parser,
-the naming-rule differential test, the GDScript converter, generator, and `vm/`'s own cases
-(`verse_vm_test`). No Godot, no UE. Every `build_*_test.py` compiles through `tools/unit_build.py`:
+the naming-rule differential test, the GDScript converter, generator, `vm/`'s own cases
+(`verse_vm_test`) and `tools/check_host_constructions.py`'s scan of `host/Private`. No Godot, no UE. Every `build_*_test.py` compiles through `tools/unit_build.py`:
 MSVC on Windows, `$CXX`, g++ or clang++ elsewhere, and the binary is named `.exe` everywhere because
 that is what `run_tests.py` runs. The converter's goldens are whole files
 (`tests/verse_gd_convert/fixtures/*.expected`); `bin/verse_gd_convert_test.exe --update` rewrites
@@ -1249,14 +1249,10 @@ layer, and is skipped there when `../godot` is absent.
 
 ### Objects that are not nodes
 
-- **Every `vh_object` runs a block clause that asks the host for a Godot object** (R-NODE-3), and
-  the host is much the commoner constructor: a script instance for a node Godot already made, a
-  mirror wrapper for a handle crossing in, the transient instance the export defaults are read off,
-  the bare `vh_object` the fallback answers. Every host-side `NewObject` of one is wrapped in an
-  `FAdoptPeerScope`, which carries the **class** as well as the handle so a *member* of the class
-  being built still mints its own. **Add a fifth construction path and it leaks a Godot object per
-  construction**, silently, while a working scene looks entirely normal.
-- **A reading device suppresses minting outright**, which is `FSuppressMintScope` and one caller:
+- **Every host-side construction of a `vh_object` is `NewHostObject(Class, FHostPeer)`**, which
+  names its Godot peer before the block clause asks (R-NODE-3); any other `NewObject` under
+  `host/Private` fails `tools/check_host_constructions.py`, run by the units layer and `build_host.py`.
+- **A reading device suppresses minting outright**, which is `FHostPeer::Suppressed()` and one caller:
   `NewDefaultsObject`. Its members' initializers run in full, so a class with `var Held:node2d =
   node2d{}` minted a real node per exporting class *per analysis* — a leak on the per-keystroke
   path, since a Verse-minted node is deliberately never freed.

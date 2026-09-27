@@ -2611,8 +2611,8 @@ namespace {
 /// unconditional mint would leak a Godot object per construction while a working scene looked
 /// entirely normal (docs/phase-4b-design.md 4.3).
 ///
-/// Every host-side NewObject of a vh_object is wrapped in one of these. The class is carried as
-/// well as the handle so that a *member* of the class being built -- `Helper := helper{}` in a
+/// NewHostObject opens one around every host-side construction that is not a reading device. The
+/// class is carried as well as the handle so that a *member* of the class being built -- `Helper := helper{}` in a
 /// script -- still mints its own: the record answers the construction it was opened for and
 /// nothing else, whichever of the two the VM runs first.
 ///
@@ -2668,6 +2668,55 @@ public:
     FSuppressMintScope& operator=(const FSuppressMintScope&) = delete;
 };
 
+/// Which Godot object a vh_object the host builds is the peer of. Chosen before the build starts,
+/// because the object's block clause asks for it from inside NewObject; the private constructor
+/// leaves the two named ones as the only ways to say.
+class FHostPeer
+{
+public:
+    /// Handle -- 0 for deliberately none -- is the peer of the object being built and of nothing
+    /// else, so a member its initializers construct still mints its own. FAdoptPeerScope.
+    static FHostPeer Adopt(int64 Handle) { return FHostPeer(Handle, false); }
+
+    /// Nothing built while the construction runs gets a Godot object, however deep: the object is
+    /// a reading device rather than something an author asked for. FSuppressMintScope.
+    static FHostPeer Suppressed() { return FHostPeer(0, true); }
+
+    int64 GetHandle() const { return Handle; }
+    bool IsSuppressed() const { return bSuppressed; }
+
+private:
+    FHostPeer(int64 InHandle, bool bInSuppressed)
+        : Handle(InHandle)
+        , bSuppressed(bInSuppressed)
+    {
+    }
+
+    int64 Handle;
+    bool bSuppressed;
+};
+
+/// The one host-side construction of a vh_object, with the scope Peer names open around it. Null
+/// for a null class.
+///
+/// A NewObject of a vh_object anywhere else is refused by tools/check_host_constructions.py, which
+/// the units layer and build_host.py both run: a construction nobody said the peer of mints one,
+/// and leaks it, while a working scene looks entirely normal.
+AUTORTFM_DISABLE UObject* NewHostObject(UClass* Class, FHostPeer Peer)
+{
+    if (!Class)
+    {
+        return nullptr;
+    }
+    if (Peer.IsSuppressed())
+    {
+        FSuppressMintScope Reading;
+        return NewObject<UObject>(GetTransientPackage(), Class);
+    }
+    FAdoptPeerScope Adopting(Class, Peer.GetHandle());
+    return NewObject<UObject>(GetTransientPackage(), Class);
+}
+
 /// A fresh Verse wrapper around a Godot handle, which is what a mirrored-class member holds.
 ///
 /// Built the way Instantiate builds a script's own object, and buildable that way for the same
@@ -2677,13 +2726,9 @@ public:
 /// returns, which leaves only the field C++ owns to fill in.
 AUTORTFM_DISABLE UObject* NewMirroredWrapper(UClass* NativeClass, int64 Handle)
 {
-    UObject* Wrapper = nullptr;
-    {
-        // The handle this wrapper is *for*: the block clause runs inside NewObject and writes it,
-        // and the assignment below then writes the same value a second time.
-        FAdoptPeerScope Adopting(NativeClass, Handle);
-        Wrapper = NativeClass ? NewObject<UObject>(GetTransientPackage(), NativeClass) : nullptr;
-    }
+    // The handle this wrapper is *for*: the block clause runs inside NewObject and writes it, and
+    // the assignment below then writes the same value a second time.
+    UObject* const Wrapper = NewHostObject(NativeClass, FHostPeer::Adopt(Handle));
     verse::vh_object* Shadow = Cast<verse::vh_object>(Wrapper);
     if (!Shadow)
     {
@@ -3059,8 +3104,7 @@ AUTORTFM_DISABLE UObject* GodotVerse::ObjectForHandle(int64 Handle, UClass* Fall
 
     // A bare vh_object, which every cast then declines. It has no peer and must not mint one:
     // this is the answer to "Godot would not say what that handle is", not a request for an object.
-    FAdoptPeerScope Adopting(verse::vh_object::StaticClass(), 0);
-    return NewObject<verse::vh_object>(GetTransientPackage());
+    return NewHostObject(verse::vh_object::StaticClass(), FHostPeer::Adopt(0));
 }
 
 AUTORTFM_DISABLE int64 GodotVerse::AdoptOrMintPeer(verse::vh_object* Self, const char*& OutRefusedClass)
@@ -3468,11 +3512,9 @@ namespace {
 /// never consults it.
 AUTORTFM_DISABLE UObject* NewDefaultsObject(FUtf8StringView ClassName)
 {
-    UClass* const NativeClass = FindGodotClass(ClassName);
     // Nothing under here gets a Godot object -- not this instance, and not whatever its member
     // initializers construct, which is the half that matters. See FSuppressMintScope.
-    FSuppressMintScope Reading;
-    return NativeClass ? NewObject<UObject>(GetTransientPackage(), NativeClass) : nullptr;
+    return NewHostObject(FindGodotClass(ClassName), FHostPeer::Suppressed());
 }
 
 AUTORTFM_DISABLE TSharedPtr<const GodotVerse::FFieldValue> ReadDefaultFieldOf(UObject* Defaults, FUtf8StringView FieldName)
@@ -5364,10 +5406,10 @@ AUTORTFM_DISABLE GodotVerse::FInstance* GodotVerse::Instantiate(FUtf8StringView 
         // The node Godot already made is this instance's peer, and the block clause on vh_object
         // adopts it rather than minting a second one -- which is the whole of docs/phase-4b-
         // design.md 4.3, and the failure that would not have announced itself.
-        FAdoptPeerScope Adopting(NativeClass, Handle);
+        //
         // UVerseClass::PostInitInstance runs the Verse constructor from inside NewObject, so fields
         // are initialised by the time this returns.
-        Instance = NewObject<UObject>(GetTransientPackage(), NativeClass);
+        Instance = NewHostObject(NativeClass, FHostPeer::Adopt(Handle));
     }
     if (!Instance)
     {

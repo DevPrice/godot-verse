@@ -12,6 +12,8 @@ import sys
 import time
 from pathlib import Path
 
+import check_host_constructions
+
 SKIP_DIRS = {"Intermediate", "Binaries"}
 
 # The path build_host.py itself writes into the engine tree. Engine changes are what the
@@ -336,6 +338,13 @@ def main() -> None:
         sys.exit(1)
     if not engine.exists():
         print(f"error: engine root {engine} does not exist", file=sys.stderr)
+        sys.exit(1)
+
+    refused = [(name, detail) for name, ok, detail in check_host_constructions.violations(src / "Private")
+               if not ok]
+    if refused:
+        for name, detail in refused:
+            print(f"error: {name}: {detail}", file=sys.stderr)
         sys.exit(1)
 
     if args.clean and dst.exists():
