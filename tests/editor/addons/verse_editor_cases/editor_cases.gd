@@ -1959,8 +1959,11 @@ func _autoloads() -> void:
 				skip(name, TOOL_AUTOLOAD_DEFECT)
 		else:
 			check_eq("R-EXP-7: and answers a method from the last built generation", probe.call("Which"), "tool")
-			await wait_until(func() -> bool: return editor_log_text().substr(before.length()).contains("tool_probe ready"), 5000)
-			check("R-EXP-7: its _Ready ran in the editor", editor_log_text().substr(before.length()).contains("tool_probe ready"))
+			# A count, not an offset into `before`: the Output panel trims its oldest lines, so the
+			# text grows at the end and shrinks at the front, and an offset stops pointing anywhere.
+			var readies_before := before.count("tool_probe ready")
+			await wait_until(func() -> bool: return editor_log_text().count("tool_probe ready") > readies_before, 5000)
+			check("R-EXP-7: its _Ready ran in the editor", editor_log_text().count("tool_probe ready") > readies_before)
 	autoloads.call("autoload_remove", "ToolProbe")
 	check("R-EXP-7: and removing it takes the node out of the editor",
 			await wait_until(func() -> bool: return tree_root.get_node_or_null("ToolProbe") == null, 10000))
