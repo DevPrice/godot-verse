@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "HostScript.h"
+#include "HostEngineAdapters.h"
 #include "HostScriptState.h"
 #include "HostTypeModel.h"
 #include "verse_diagnostics.h"
@@ -105,12 +106,25 @@ using GodotVerse::ClassOriginOf;
 using GodotVerse::EClassOrigin;
 using GodotVerse::EDeclaredKind;
 using GodotVerse::CurrentSemanticProgram;
+using GodotVerse::DecoratedNameOf;
+using GodotVerse::ExtensionMethodDecoratedName;
+using GodotVerse::ExtensionMethodName;
 using GodotVerse::FDeclaredType;
+using GodotVerse::FMirrorDefinition;
+using GodotVerse::FillLocation;
+using GodotVerse::FindMirrorDefinition;
+using GodotVerse::FindScriptClass;
 using GodotVerse::FindScriptClassLive;
 using GodotVerse::FindStructLayout;
+using GodotVerse::ForgetMirrorDefinitions;
 using GodotVerse::GodotVersePath;
+using GodotVerse::IsClassVarAccessor;
+using GodotVerse::MirrorDefinitionsRecorded;
 using GodotVerse::NearestAncestorOfOrigin;
+using GodotVerse::OwnerNameOf;
+using GodotVerse::PrototypeOf;
 using GodotVerse::QualifiedNameOf;
+using GodotVerse::RecordMirrorDefinitions;
 using GodotVerse::ScriptSnippetText;
 using GodotVerse::ScriptVersePath;
 using GodotVerse::UnwrapDeclaredType;
@@ -791,21 +805,10 @@ AUTORTFM_DISABLE bool RunCheck(const FUtf8String& Path, const FUtf8String& Sourc
 /// which only exists once the analysis that produced the diagnostic has finished.
 AUTORTFM_DISABLE FUtf8String SubjectTypeOfDiagnostic(FUtf8StringView Path, int32 Row, int32 Column);
 
-/// Records where /Godot.org/Godot's definitions were written, off a program that still read them
-/// from their own files. Defined beside FillLocation, which is what the recording is for.
-AUTORTFM_DISABLE void RecordMirrorDefinitions();
-
-/// That, and then retires the package to its digest. Split because the two want different moments:
-/// the recording wants the program mid-build, where the AST is whole, and the role change wants to
-/// be the last thing a build does to the source project.
+/// RecordMirrorDefinitions, and then retires the package to its digest. Split because the two want
+/// different moments: the recording wants the program mid-build, where the AST is whole, and the
+/// role change wants to be the last thing a build does to the source project.
 AUTORTFM_DISABLE void RecordAndRetireMirror();
-
-/// Whether that has happened, which is what decides whether the mirror may be retired to its
-/// digest.
-AUTORTFM_DISABLE bool MirrorDefinitionsRecorded();
-
-/// Drops the table, so that a host torn down and started again records it afresh.
-AUTORTFM_DISABLE void ForgetMirrorDefinitions();
 
 /// Where one build's time went, accumulated from the compiler's own statistics events.
 ///
@@ -1099,7 +1102,7 @@ public:
         }
 
         TakeAnalysisSnapshot();
-        RecordMirrorDefinitions();
+        RecordMirrorDefinitions(*Program);
         GSnapshotTakenDuringBuild = true;
         return false; // Do not halt the toolchain.
     }
@@ -1481,15 +1484,8 @@ AUTORTFM_DISABLE bool GodotVerse::ScriptSnippetText(FUtf8StringView Path, FUtf8S
 
 AUTORTFM_DISABLE const uLang::CClass* GodotVerse::FindScriptClassLive(FUtf8StringView ClassName)
 {
-    uLang::CSemanticProgram* const Program = CurrentSemanticProgram();
-    if (!Program)
-    {
-        return nullptr;
-    }
-
-    const FUtf8String ClassPath = FUtf8String(ScriptVersePath) + UTF8TEXT("/") + FUtf8String(ClassName);
-    return Program->FindDefinitionByVersePath<uLang::CClass>(
-        FULangConversionUtils::FUtf8StringViewToULangStringView(ClassPath));
+    const uLang::CSemanticProgram* const Program = CurrentSemanticProgram();
+    return Program ? FindScriptClass(*Program, ClassName) : nullptr;
 }
 
 /// Read once: GetEnvironmentVariable allocates, and the analysis this is asked about is the
@@ -2272,260 +2268,6 @@ AUTORTFM_DISABLE FUtf8String AttributeText(const uLang::CDataDefinition& Member,
     return Text.IsSet() ? FULangConversionUtils::ULangStrToFUtf8String(*Text) : FUtf8String();
 }
 
-/// The definition a question about source should be asked of.
-///
-/// Instantiating a parametric class makes a fresh CDefinition per member -- `typed_array(node)`
-/// has its own `ToArray` -- and none of them was written anywhere: the file, the line and the
-/// prose all belong to the generic declaration they were instantiated from. uLang says so itself
-/// where it *ensures* against `GetAttributes` on an instantiated definition, "which inherits its
-/// attributes from its prototype definition" (uLang/Semantics/Definition.h:222).
-///
-/// An ordinary definition is its own prototype, so this is identity for all but the mirror's four
-/// parametric classes.
-AUTORTFM_DISABLE const uLang::CDefinition& PrototypeOf(const uLang::CDefinition& Definition)
-{
-    const uLang::CDefinition* const Prototype = Definition.GetPrototypeDefinition();
-    return Prototype ? *Prototype : Definition;
-}
-
-/// Where the parse says a definition was written.
-AUTORTFM_DISABLE void LocationFromVst(const uLang::CDefinition& Definition, FUtf8String& OutPath, int32& OutLine, int32& OutColumn)
-{
-    if (const uLang::CExpressionBase* DefinitionNode = PrototypeOf(Definition).GetAstNode())
-    {
-        if (const Verse::Vst::Node* Vst = DefinitionNode->GetMappedVstNode())
-        {
-            const Verse::SLocus& Whence = Vst->Whence();
-            OutPath = FULangConversionUtils::ULangStrToFUtf8String(Vst->GetSnippetPath());
-            OutLine = (int32)Whence.BeginRow();
-            OutColumn = (int32)Whence.BeginColumn();
-        }
-    }
-}
-
-/// One mirror definition as its own source file spells it.
-struct FMirrorDefinition
-{
-    int32 PathIndex{INDEX_NONE};
-    int32 Line{-1};
-    int32 Column{-1};
-    bool bIsClassVarAccessor{false};
-};
-
-/// The files those definitions were written in, named once each rather than once per definition.
-TArray<FUtf8String> GMirrorPaths;
-
-/// Every definition /Godot.org/Godot declares, keyed by qualified name and signature. Empty until
-/// the first build fills it, which is also what lets the mirror be retired to its digest.
-TMap<FUtf8String, FMirrorDefinition> GMirrorDefinitions;
-bool GMirrorRecorded = false;
-
-/// How many definitions shared a key with one already recorded -- see RecordMirrorScope. Traced
-/// rather than asserted on, since a repeat costs a line number and not a file.
-int32 GMirrorKeyCollisions = 0;
-
-/// What names a mirror definition across two analyses of it.
-///
-/// CScope::GetScopePath walks logical scopes only -- a snippet is not one -- so the qualified name
-/// is the same string whether the definition was read from `GodotClasses.native.verse` or from the
-/// one synthetic snippet a digest is. The signature is what tells an overload from its sibling:
-/// GodotMath declares `operator'+'` once per math type, all of them at module scope with two
-/// parameters, and the function type is the only thing that differs.
-AUTORTFM_DISABLE FUtf8String MirrorKeyOf(const uLang::CDefinition& RawDefinition)
-{
-    // The prototype's name, so a member reached through a concrete instantiation --
-    // `typed_array(node).ToArray` -- keys to the generic declaration this table actually recorded.
-    // Recording walks the generic, whose prototype is itself, so no recorded key moves.
-    const uLang::CDefinition& Definition = PrototypeOf(RawDefinition);
-    FUtf8String Key = FULangConversionUtils::ULangStrToFUtf8String(uLang::GetQualifiedNameString(Definition));
-    if (const uLang::CFunction* Function = Definition.AsNullable<uLang::CFunction>())
-    {
-        if (const uLang::CFunctionType* Type = Function->_Signature.GetFunctionType())
-        {
-            Key += UTF8TEXT(" ");
-            Key += FULangConversionUtils::ULangStrToFUtf8String(Type->AsCode());
-        }
-    }
-    return Key;
-}
-
-/// The recorded location of a mirror definition, or nothing for one the table does not name.
-///
-/// Gated on the package so that a script's own definitions -- which are read from their real files
-/// on every analysis -- never pay for building a key. The attribute package shares the mirror's
-/// verse path and so passes the gate; it stays Source, and the table has its definitions recorded
-/// with the same file and line its own parse would have given, so either answer is the same one.
-AUTORTFM_DISABLE const FMirrorDefinition* FindMirrorDefinition(const uLang::CDefinition& Definition)
-{
-    if (GMirrorDefinitions.IsEmpty())
-    {
-        return nullptr;
-    }
-    const uLang::CAstPackage* const Package = Definition._EnclosingScope.GetPackage();
-    if (!Package || !FUtf8StringView(Package->_VersePath.AsCString()).Equals(FUtf8StringView(GodotVersePath)))
-    {
-        return nullptr;
-    }
-    return GMirrorDefinitions.Find(MirrorKeyOf(Definition));
-}
-
-/// The class a parametric type definition stands for, or null for anything else.
-///
-/// `signal(t) := class(...)` is a CFunction whose result is a type rather than a value, so every
-/// walk that tests for a function and stops finds one here. The class is inside the CTypeType the
-/// signature answers -- the same unwrap DescribeCompletion does for an archetype's receiver.
-AUTORTFM_DISABLE const uLang::CClass* ParametricClassOf(const uLang::CDefinition& Definition)
-{
-    const uLang::CFunction* const Function = Definition.AsNullable<uLang::CFunction>();
-    if (!Function)
-    {
-        return nullptr;
-    }
-    const uLang::CFunctionType* const Type = Function->_Signature.GetFunctionType();
-    if (!Type)
-    {
-        return nullptr;
-    }
-    const uLang::CTypeType* const TypeType = Type->GetReturnType().GetNormalType().AsNullable<uLang::CTypeType>();
-    if (!TypeType || !TypeType->PositiveType())
-    {
-        return nullptr;
-    }
-    return TypeType->PositiveType()->GetNormalType().AsNullable<uLang::CClass>();
-}
-
-AUTORTFM_DISABLE void RecordMirrorScope(const uLang::CLogicalScope& Scope)
-{
-    for (const uLang::TSRef<uLang::CDefinition>& Definition : Scope.GetDefinitions())
-    {
-        FUtf8String Path;
-        int32 Line = -1;
-        int32 Column = -1;
-        LocationFromVst(*Definition, Path, Line, Column);
-        if (!Path.IsEmpty())
-        {
-            FMirrorDefinition Entry;
-            Entry.PathIndex = GMirrorPaths.AddUnique(Path);
-            Entry.Line = Line;
-            Entry.Column = Column;
-            if (const uLang::CFunction* Function = Definition->AsNullable<uLang::CFunction>())
-            {
-                Entry.bIsClassVarAccessor = Function->_bIsAccessorOfSomeClassVar;
-            }
-            // A key that repeats means two definitions this cannot tell apart, and the first is no
-            // worse a guess than the last -- they are siblings in one scope, so what differs is the
-            // line and not the file. Counted so that a drift in what a key has to carry is visible
-            // rather than silent.
-            FUtf8String Key = MirrorKeyOf(*Definition);
-            if (GMirrorDefinitions.Contains(Key))
-            {
-                ++GMirrorKeyCollisions;
-                // Named, not just counted: a count says a key has stopped being unique and leaves
-                // whoever reads it to find out which, and the answer decides whether the cost is a
-                // line number or a whole definition's documentation.
-                if (AnalysisTraceEnabled())
-                {
-                    fprintf(stderr, "[vh-trace]   mirror key collision: %s\n", reinterpret_cast<const char*>(*Key));
-                }
-            }
-            GMirrorDefinitions.FindOrAdd(MoveTemp(Key), Entry);
-        }
-
-        // Not into a function: its parameters and locals are reachable from nowhere an editor can
-        // put a cursor, and nothing reads the location of a parameter item -- Godot's argument hint
-        // draws a name and a type (verse_script_language.cpp, call_hint_for) and no more.
-        const uLang::CLogicalScope* const Inner = Definition->DefinitionAsLogicalScopeNullable();
-        if (Inner && !Definition->AsNullable<uLang::CFunction>())
-        {
-            RecordMirrorScope(*Inner);
-        }
-        else if (const uLang::CClass* const Parametric = ParametricClassOf(*Definition))
-        {
-            // A *parametric* class is a CFunction -- `signal(t) := class...` is a function
-            // answering a type -- so the rule above walked straight past every member of one, and
-            // signal(t).Await, typed_array(t).ToArray and event(t)'s members had no recorded
-            // location at all. After the first build the mirror is read from its digest, and a
-            // digest is one synthetic snippet with no file behind it, so the consumer had nothing
-            // to read a comment from and hovered them with a type and an empty box.
-            RecordMirrorScope(*Parametric);
-        }
-    }
-}
-
-AUTORTFM_DISABLE bool MirrorDefinitionsRecorded()
-{
-    return GMirrorRecorded;
-}
-
-AUTORTFM_DISABLE void ForgetMirrorDefinitions()
-{
-    GMirrorPaths.Empty();
-    GMirrorDefinitions.Empty();
-    GMirrorKeyCollisions = 0;
-    GMirrorRecorded = false;
-}
-
-/// Records where every definition of the generated mirror was written, and which of its functions
-/// are a class var's accessors.
-///
-/// This is what lets /Godot.org/Godot be read from its digest, which takes an analysis from
-/// ~1410 ms to ~740 ms whatever the project's own size is. A digest is one synthetic snippet of
-/// bodiless declarations at a path the toolchain picks (SolarisModule.cpp, MakeDigestSnippet) and
-/// *no such file is ever written*, so a package read from one loses two things the editor is built
-/// on:
-///
-///   - every definition's file and line, which is goto-definition, the doc comment a tooltip reads
-///     "above" a declaration, and -- because a top-level definition reports the file it was written
-///     in as its owner -- whether the Godot side recognises a name as one of the package's globals
-///     at all (`is_godot_package_global`, which pairs the owner with the path);
-///   - CFunction::_bIsAccessorOfSomeClassVar, which the analyzer sets only where it resolves a
-///     class var's `<getter>`/`<setter>` attributes against the functions they name. The digest
-///     re-emits the var and not the attributes, so every one of the mirror's property accessors
-///     comes back offerable as an override.
-///
-/// Both are answered from here instead. Taken from the first build's own semantic analysis, which
-/// is the last program that reads the mirror's own files, through the post-analysis injection --
-/// so the table costs a walk of a program that exists anyway rather than an analysis of its own.
-AUTORTFM_DISABLE void RecordMirrorDefinitions()
-{
-    if (GMirrorRecorded || !GIde.IsValid())
-    {
-        return;
-    }
-    const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
-    if (!BuildManager.IsValid())
-    {
-        return;
-    }
-    const uLang::TSRef<uLang::CSemanticProgram>& Program = BuildManager->GetProgramContext()._Program;
-    const uLang::CModule* const Mirror = Program->FindDefinitionByVersePath<uLang::CModule>(GodotVersePath);
-    if (!Mirror)
-    {
-        return;
-    }
-
-    const double Started = FPlatformTime::Seconds();
-    RecordMirrorScope(*Mirror);
-    GMirrorRecorded = true;
-
-    if (AnalysisTraceEnabled())
-    {
-        SIZE_T Bytes = GMirrorDefinitions.GetAllocatedSize();
-        for (const TPair<FUtf8String, FMirrorDefinition>& Entry : GMirrorDefinitions)
-        {
-            Bytes += Entry.Key.GetAllocatedSize();
-        }
-        fprintf(stderr,
-                "[vh-trace] mirror table: %d definition(s) in %d file(s), %d ambiguous, %d KB retained, %.1f ms\n",
-                GMirrorDefinitions.Num(),
-                GMirrorPaths.Num(),
-                GMirrorKeyCollisions,
-                (int32)(Bytes / 1024),
-                (FPlatformTime::Seconds() - Started) * 1000.0);
-        fflush(stderr);
-    }
-}
-
 /// The recording, and then the role change that lets the next build read the mirror from its
 /// digest.
 ///
@@ -2536,14 +2278,17 @@ AUTORTFM_DISABLE void RecordMirrorDefinitions()
 /// and CompileProject asks MirrorDefinitionsRecorded() before deciding whether to force it back.
 AUTORTFM_DISABLE void RecordAndRetireMirror()
 {
-    RecordMirrorDefinitions();
-
-    if (!GMirrorRecorded || !GIde.IsValid())
+    if (!GIde.IsValid())
     {
         return;
     }
     const uLang::TSPtr<uLang::CProgramBuildManager> BuildManager = GIde->GetBuildManager();
     if (!BuildManager.IsValid())
+    {
+        return;
+    }
+    RecordMirrorDefinitions(*BuildManager->GetProgramContext()._Program);
+    if (!MirrorDefinitionsRecorded())
     {
         return;
     }
@@ -2558,31 +2303,6 @@ AUTORTFM_DISABLE void RecordAndRetireMirror()
             Retired._Package->SetRole(uLang::EPackageRole::External);
         }
     }
-}
-
-/// Where a definition was written, for a caller that has already asked the table about it -- which
-/// is worth passing along, since building a key spells the whole function type.
-AUTORTFM_DISABLE void FillLocation(const uLang::CDefinition& Definition,
-                                   const FMirrorDefinition* Recorded,
-                                   FUtf8String& OutPath,
-                                   int32& OutLine,
-                                   int32& OutColumn)
-{
-    if (Recorded)
-    {
-        OutPath = GMirrorPaths[Recorded->PathIndex];
-        OutLine = Recorded->Line;
-        OutColumn = Recorded->Column;
-        return;
-    }
-    LocationFromVst(Definition, OutPath, OutLine, OutColumn);
-}
-
-/// Where a definition was written, or nothing for one compiled from a package the project does
-/// not own -- Verse's own library. Those still describe fine.
-AUTORTFM_DISABLE void FillLocation(const uLang::CDefinition& Definition, FUtf8String& OutPath, int32& OutLine, int32& OutColumn)
-{
-    FillLocation(Definition, FindMirrorDefinition(Definition), OutPath, OutLine, OutColumn);
 }
 
 /// Whether this is the class **named after the file it is written in**, which is the bridge's rule
@@ -2605,33 +2325,6 @@ AUTORTFM_DISABLE bool IsClassNamedAfterItsFile(const uLang::CDefinition& Definit
     }
     const FString Stem = FPaths::GetBaseFilename(FString(Path));
     return FUtf8String(Stem) == FUtf8String(Definition.AsNameCString());
-}
-
-/// The name an answer carries as a definition's owner: the class for a member, and for a top-level
-/// definition the file it was written in, since a snippet scope carries its path as its name. That
-/// makes it a location as much as a name -- the Godot side tests the two against each other to
-/// recognise a package global -- so a mirror definition answers it from the table as well.
-///
-/// A class is named the way every ClassNameUtf8 in the ABI names one: `left/widget` for a script
-/// class under a `.vmodule`, its bare name for a mirrored or a bound one. The consumer registers
-/// a script class's documentation under that string and Godot looks the doc up by it, so a
-/// member owned by the bare `widget` found no documentation at all inside a module (B38).
-AUTORTFM_DISABLE FUtf8String OwnerNameOf(const uLang::CDefinition& Definition, const FMirrorDefinition* Recorded)
-{
-    if (Recorded && Definition._EnclosingScope.GetKind() == uLang::CScope::EKind::Snippet)
-    {
-        return GMirrorPaths[Recorded->PathIndex];
-    }
-    if (Definition._EnclosingScope.GetKind() == uLang::CScope::EKind::Class)
-    {
-        return QualifiedNameOf(static_cast<const uLang::CClass&>(Definition._EnclosingScope));
-    }
-    return FUtf8String(Definition._EnclosingScope.GetScopeName().AsCString());
-}
-
-AUTORTFM_DISABLE FUtf8String OwnerNameOf(const uLang::CDefinition& Definition)
-{
-    return OwnerNameOf(Definition, FindMirrorDefinition(Definition));
 }
 
 /// The enumerators of an enum, comma separated in declaration order, which is how Godot's enum
@@ -3244,10 +2937,6 @@ namespace {
 /// The class's recorded tables, or null. What every runtime lookup falls back to, and the whole of
 /// what a host with no semantic program has.
 AUTORTFM_DISABLE const GodotVerse::FDeclaredTypes* RecordedTypes(FUtf8StringView ClassName);
-
-/// `(<enclosing scope path>:)<name>` -- what the VM knows a definition as. Defined below, beside the
-/// lookup that consumes it.
-AUTORTFM_DISABLE FUtf8String DecoratedNameOf(const uLang::CDefinition& Definition);
 
 /// Fills OutLayout from Struct's own fields, base class first.
 ///
@@ -4154,18 +3843,6 @@ AUTORTFM_DISABLE Verse::VFunction* FindVFunctionByDecoratedName(FUtf8StringView 
         }
     }
     return nullptr;
-}
-
-/// The decorated name of a semantic definition: `(<enclosing scope path>:)<name>`.
-///
-/// The one spelling three readers had each built inline -- the enum reader, the statics reader and
-/// the struct-payload field keys -- and now the class lookup needs it too.
-AUTORTFM_DISABLE FUtf8String DecoratedNameOf(const uLang::CDefinition& Definition)
-{
-    return FUtf8String(UTF8TEXT("("))
-        + FULangConversionUtils::ULangStrToFUtf8String(
-              Definition._EnclosingScope.GetScopePath('/', uLang::CScope::EPathMode::PrefixSeparator))
-        + UTF8TEXT(":)") + FUtf8String(Definition.AsNameCString());
 }
 
 /// The VM's enumeration of that decorated name, looked up the way FindMirroredVClass looks up a
@@ -8635,17 +8312,6 @@ AUTORTFM_DISABLE FUtf8String SpellSignature(const uLang::CFunction& Function, in
     return FULangConversionUtils::ULangStrToFUtf8String(Builder.MoveToString());
 }
 
-/// Whether this function is the `<getter>` or `<setter>` a class var names.
-///
-/// The flag is set by the analyzer where it resolves a class var's `<getter>`/`<setter>` against
-/// the functions they name, and a digest re-emits the var without the attributes -- so for the
-/// mirror, which is read from its digest after the first build, the answer comes from the side
-/// table that recorded it while those attributes were still there.
-AUTORTFM_DISABLE bool IsClassVarAccessor(const uLang::CFunction& Function, const FMirrorDefinition* Recorded)
-{
-    return Function._bIsAccessorOfSomeClassVar || (Recorded && Recorded->bIsClassVarAccessor);
-}
-
 /// Whether a subclass could redeclare a function with <override>, which is the three things the
 /// analyzer refuses one for: it has to be a class member -- a module-level function has nothing to
 /// override it from -- it must not be <final>, and it must not be a class var's <getter>/<setter>,
@@ -8970,9 +8636,7 @@ AUTORTFM_DISABLE bool DescribeExtensionMethodCompletion(const uLang::CFunction& 
         OutItem.Type = FULangConversionUtils::ULangStrToFUtf8String(Type->AsCode());
     }
 
-    const CSemanticProgram& Program = Function._EnclosingScope.GetProgram();
-    OutItem.Name = FULangConversionUtils::ULangStrToFUtf8String(
-        CUTF8String(Program._IntrinsicSymbols.StripExtensionFieldOpName(Function.GetName())));
+    OutItem.Name = ExtensionMethodName(Function);
     OutItem.Owner = FUtf8String(Function._EnclosingScope.GetScopeName().AsCString());
     int32 UnusedColumn = -1;
     FillLocation(Function, OutItem.Path, OutItem.Line, UnusedColumn);
@@ -9373,21 +9037,7 @@ AUTORTFM_DISABLE FUtf8String FindToStringExtensionLive(FUtf8StringView ClassName
         {
             if (Cursor == ReceiverClass)
             {
-                // The key a VPackage actually holds, which is not DecoratedNameOf's shape and was
-                // measured rather than assumed: the enclosing scope again, wrapped around the
-                // function's *whole* decorated name -- which already carries its own scope prefix
-                // and its signature. So the scope appears twice and the parameters are part of the
-                // key, which is what tells two `operator'.ToString'` overloads apart.
-                //
-                //   (/user@localhost:)(/user@localhost:)operator'.ToString'(:(...:)game_state,:tuple())
-                //
-                // A class is keyed by DecoratedNameOf alone, so reusing that here found nothing and
-                // to_string silently kept Godot's own text.
-                return FUtf8String(UTF8TEXT("("))
-                    + FULangConversionUtils::ULangStrToFUtf8String(
-                          Function->_EnclosingScope.GetScopePath('/', uLang::CScope::EPathMode::PrefixSeparator))
-                    + UTF8TEXT(":)")
-                    + FULangConversionUtils::ULangStrToFUtf8String(Function->GetDecoratedName());
+                return ExtensionMethodDecoratedName(*Function);
             }
         }
     }
