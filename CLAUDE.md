@@ -461,8 +461,8 @@ executable. If a future engine drop provides one, that script finds and execs it
 
 ### Tests
 
-    python tools/run_tests.py                    # every layer; the one command (R-QUAL-3)
-    python tools/run_tests.py --only units       # or units / abi / contract / integration / export / web / web-threads
+    python tools/run_tests.py                    # every layer but editor; the one command (R-QUAL-3)
+    python tools/run_tests.py --only units       # or units / abi / contract / integration / export / web / web-threads / editor
     python tools/run_tests.py --only units,abi   # or several, comma-separated
     python tools/run_tests.py --build            # rebuild the test binaries first
 
@@ -627,6 +627,23 @@ with the reason when one is missing. One assertion reads the `.pck` directly (`r
 shipped `.verse` is its *size* — a one-byte stub and the whole file both read as "Storing File" in
 an export log. **A pack stores paths with `res://` trimmed off** (`editor_export_platform.cpp:449`);
 `read_pck` puts it back.
+
+**editor** — **opt-in: a run with no `--only` leaves it out** (`DEFAULT_LAYERS`), and only a
+`--only` naming `editor` runs it. `tests/integration` opened in a **headless editor**
+(`godot --headless --editor`), which has placeholders, the script editor's `CodeEdit`, its completion
+popup and hover tooltip, the inspector, the docks and Play (`docs/editor-test-audit.md`, whose
+residual list is what stays by hand). `run_tests.py` copies the project to a throwaway directory
+the way export-vm does, copies `tests/editor/addons/verse_editor_cases` into it and enables that
+plugin, sets `editor/run/main_run_args="--headless"`, and points `APPDATA`/`LOCALAPPDATA` into the
+copy with an editor settings file pinning the language to English and the debugger to port 6118,
+so Devin's own editor settings, project list and debug port are never touched. The plugin does
+nothing unless the display server is headless **and** `--verse-editor-cases` is on the command
+line; its cases live in `editor_cases.gd`, print as `[editor] <case>: ok`, and a per-step watchdog
+fails the run by the step's name rather than hanging. **A case that presses Play goes through
+`play_scene`**, which refuses unless `main_run_args` carries `--headless` — Godot forwards none of
+its own command line to the game. A new group of cases is a function in `editor_cases.gd` awaited from
+`run()`; `run_tests.py` needs no edit. It loads the host, so it runs under the host token like
+integration. (Observed at 2026-09: 18 cases, about 15 s including the import pass.)
 
 A layer whose prerequisites are absent is **skipped and said to be skipped**, never counted as a
 pass; `--fail-on-skip` makes a skip fail the run, which is what CI passes.

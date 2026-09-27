@@ -11,11 +11,16 @@ R-QUAL-3. The three layers R-QUAL-1 names, in the order a failure is cheapest to
   export       a headless Godot export, asserting on the tree it produced
   web          a Web export on the vm backend (nothreads), run in headless Chrome
   web-threads  the same with the threads library and template, served with COOP/COEP
+  editor       tests/integration in a headless editor, driven by tests/editor's plugin (opt-in)
 
 Each layer is skipped rather than failed when what it needs is absent -- a contributor without a UE
 checkout still gets the unit layer -- and a skip is reported as a skip, never as a pass.
 
-  python tools/run_tests.py                 # everything that can run here
+The editor layer is opt-in: a run with no --only runs every other layer, and only a --only naming
+`editor` runs it (docs/editor-test-audit.md).
+
+  python tools/run_tests.py                 # everything that can run here but the editor layer
+  python tools/run_tests.py --only editor   # the editor layer
   python tools/run_tests.py --only export   # one layer
   python tools/run_tests.py --only units,abi  # or several
   python tools/run_tests.py --build         # rebuild the test binaries first
@@ -1798,7 +1803,134 @@ def run_web(results: Results, engine: Path | None, godot: Path | None, threads: 
         shutil.rmtree(project.parent, ignore_errors=True)
 
 
-LAYERS = ["units", "abi", "contract", "integration", "export", "web", "web-threads"]
+# ---------------------------------------------------------------------------------- editor --
+
+# Not 6007, the port every open editor listens on: a Play from this layer must never reach Devin's
+# editor, and Godot tries the next port rather than failing when this one is taken.
+EDITOR_DEBUG_PORT = 6118
+# Bounds the whole run; editor_cases.gd's own watchdog bounds each step well inside it, and names it.
+EDITOR_LAYER_TIMEOUT = 600
+EDITOR_CASES_ADDON = REPO / "tests" / "editor" / "addons" / "verse_editor_cases"
+
+
+def _godot_minor_version(godot: Path) -> str | None:
+    completed = subprocess.run([str(godot), "--version"], capture_output=True, text=True,
+                               errors="replace")
+    printed = (completed.stdout or "").strip().splitlines()
+    parts = printed[-1].split(".") if printed else []
+    return ".".join(parts[:2]) if len(parts) >= 2 else None
+
+
+def _editor_layer_project(base_project: Path, godot: Path) -> tuple[Path, dict[str, str]]:
+    """A throwaway copy of base_project with the driver plugin enabled, and the environment to open
+    it in, whose editor settings live inside the copy.
+
+    APPDATA and LOCALAPPDATA are where a Windows editor keeps its settings, its project list and
+    every project's user://, and Devin's own editor reads the same ones. The settings file is
+    written before the editor starts because the language is read at startup: English, so the
+    editor's own strings -- a button's tooltip, a dialog's title -- are the ones the cases look for.
+    """
+    work = Path(tempfile.mkdtemp(prefix="verse_editor_"))
+    project = work / base_project.name
+    shutil.copytree(base_project, project, ignore=shutil.ignore_patterns(".godot", "addons"))
+    shutil.copytree(EDITOR_CASES_ADDON, project / "addons" / EDITOR_CASES_ADDON.name)
+    with open(project / "project.godot", "a", encoding="utf-8") as f:
+        f.write('\n[editor]\n\nrun/main_run_args="--headless"\n'
+                '\n[editor_plugins]\n\n'
+                f'enabled=PackedStringArray("res://addons/{EDITOR_CASES_ADDON.name}/plugin.cfg")\n')
+
+    appdata = work / "appdata"
+    settings_dir = appdata / "Godot"
+    settings_dir.mkdir(parents=True)
+    version = _godot_minor_version(godot) or "4.7"
+    (settings_dir / f"editor_settings-{version}.tres").write_text(
+        '[gd_resource type="EditorSettings" format=3]\n\n[resource]\n'
+        'interface/editor/localization/editor_language = "en"\n'
+        f"network/debug/remote_port = {EDITOR_DEBUG_PORT}\n", encoding="utf-8")
+    (work / "localappdata").mkdir()
+    env = dict(os.environ, APPDATA=str(appdata), LOCALAPPDATA=str(work / "localappdata"))
+    return project, env
+
+
+def run_editor(results: Results, engine: Path | None, godot: Path | None) -> None:
+    """tests/integration opened in a headless editor, driven by tests/editor's plugin.
+
+    docs/editor-test-audit.md's step 2: a placeholder, the script editor's CodeEdit, its completion
+    popup and its hover tooltip all exist under `--headless --editor`, so what by-hand-findings.md
+    sent a person to look at is asserted here instead. Opt-in -- a run with no --only leaves it
+    out -- because it is the slowest layer and walks editor internals that move between Godot
+    versions.
+    """
+    base_project = REPO / "tests" / "integration"
+    if godot is None:
+        results.skip("editor", "no Godot binary -- set GODOT or pass --godot")
+        return
+    if engine is None:
+        results.skip("editor", "no Unreal checkout -- set UE_ROOT or pass --engine")
+        return
+    if not (EDITOR_CASES_ADDON / "plugin.cfg").is_file():
+        results.skip("editor", f"{EDITOR_CASES_ADDON} has no plugin.cfg")
+        return
+
+    project, env = _editor_layer_project(base_project, godot)
+    try:
+        why = stage_extension(project)
+        if why is not None:
+            results.skip("editor", why)
+            return
+
+        # The import pass, without the plugin's flag: it registers the class_name scripts and the
+        # .verse uids a first open would, so the run below starts from a scanned project.
+        subprocess.run([str(godot), "--headless", "--editor", "--quit", "--path", str(project)],
+                       env=env, capture_output=True, text=True, errors="replace",
+                       timeout=EDITOR_LAYER_TIMEOUT)
+
+        print("[run_tests] --- editor ---")
+        try:
+            completed = subprocess.run(
+                [str(godot), "--headless", "--editor", "--path", str(project),
+                 "--", "--verse-editor-cases", f"--verse-editor-port={EDITOR_DEBUG_PORT}"],
+                env=env, capture_output=True, text=True, errors="replace",
+                timeout=EDITOR_LAYER_TIMEOUT)
+            output = (completed.stdout or "") + (completed.stderr or "")
+            returncode = completed.returncode
+        except subprocess.TimeoutExpired as timeout_error:
+            stdout = timeout_error.stdout or ""
+            output = stdout if isinstance(stdout, str) else stdout.decode("utf-8", "replace")
+            returncode = None
+            print(f"[editor] the editor ran for {EDITOR_LAYER_TIMEOUT} s without quitting: FAIL")
+        # The editor's own output is thousands of progress lines; its cases are what this layer reads.
+        for line in output.splitlines():
+            if line.startswith("[editor]"):
+                print(line)
+
+        cases = results.take_cases("editor", output, "editor")
+        counts = test_records.summary_counts(output, "editor")
+        tally = tuple(sum(1 for case in cases if case.status == status)
+                      for status in (test_records.PASS, test_records.FAIL, test_records.SKIP))
+        ok = returncode == 0 and bool(cases) and not test_records.duplicates(cases)
+        if counts is None:
+            ok = False
+            print("[editor] the editor printed no summary line: FAIL -- its last lines:")
+            for line in [line for line in output.splitlines() if line.strip()][-12:]:
+                print(f"[editor]   {line.strip()}")
+        elif counts != tally:
+            results.harness_failure("editor", "case lines agree with the summary",
+                                    f"the summary says {counts} (passed, failed, skipped) and the "
+                                    f"case lines add up to {tally}")
+            ok = False
+        if any(case.status == test_records.FAIL for case in cases):
+            ok = False
+        if returncode not in (0, None):
+            print(f"[editor] the editor exited {returncode}, not 0")
+        results.record("editor", ok)
+    finally:
+        shutil.rmtree(project.parent, ignore_errors=True)
+
+
+LAYERS = ["units", "abi", "contract", "integration", "export", "web", "web-threads", "editor"]
+# What a run with no --only runs. The editor layer is left out on purpose: it is opt-in.
+DEFAULT_LAYERS = [layer for layer in LAYERS if layer != "editor"]
 
 
 def _layer_list(text: str) -> list[str]:
@@ -1878,7 +2010,8 @@ def run_contract(results: Results, engine: Path | None, do_build: bool, godot: P
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--only", type=_layer_list,
-                        help=f"run these layers, comma-separated: {', '.join(LAYERS)}")
+                        help=f"run these layers, comma-separated: {', '.join(LAYERS)} "
+                             f"(default: all but editor)")
     parser.add_argument("--build", action="store_true", help="rebuild the test binaries first")
     parser.add_argument("--engine", help="the Unreal checkout (default: UE_ROOT, then ../UnrealEngine)")
     parser.add_argument("--godot", help="the Godot binary (default: GODOT, then PATH)")
@@ -1890,7 +2023,8 @@ def main() -> None:
     engine = find_engine(args.engine)
     godot = find_godot(args.godot)
     results = Results(RESULTS_FILE)
-    only = args.only or LAYERS
+    only = args.only or DEFAULT_LAYERS
+    print(f"[run_tests] layers: {', '.join(only)}")
 
     # How every Godot this script launches finds the host, the cooker and the engine directory:
     # the settings used to be rewritten into each project.godot before every run, which committed
@@ -1928,6 +2062,9 @@ def main() -> None:
     if "web-threads" in only:
         results.layer = "web-threads"
         run_web(results, engine, godot, threads=True)
+    if "editor" in only:
+        results.layer = "editor"
+        run_editor(results, engine, godot)
 
     cases = [record for record in results.records if record.kind == "case"]
     failing = [record for record in results.records
