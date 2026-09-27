@@ -326,7 +326,10 @@ Adding an override you do not implement changes behaviour.
 
 `Private/` is the ABI implementation. `VerseHost.cpp` is the entry surface; `HostRuntime`,
 `HostScript` and `HostEventLoop` are compile/analyse/run, class shape, and the task pump;
-`HostTypeModel` is what kind of type a declaration names and which package declares a class;
+`HostTypeModel` is what kind of type a declaration names, which package declares a class, and what
+the inspector and the wire make of a declared type (`DescribeType`, `DescribeExportType`,
+`FMemberType`); `HostMarshal` is the converters between a Verse value and a `vh_value`
+(`ValueToWire`, `WireToValue`), which answer a `TResult` naming why a value could not cross;
 `HostLookup` is lookup, completion and the argument hint -- the code Epic's language server will
 replace, which never enters the VM; `HostEngineAdapters` is where a definition was written (the
 mirror's side table and `PrototypeOf`), a script class by qualified name, and the decorated names
