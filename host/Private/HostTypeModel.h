@@ -4,6 +4,7 @@
 
 #include "AutoRTFM.h"
 #include "Containers/Array.h"
+#include "Containers/Map.h"
 #include "Containers/StringView.h"
 #include "Containers/UnrealString.h"
 #include "HostScript.h"
@@ -307,5 +308,80 @@ AUTORTFM_DISABLE void CollectStructFields(const uLang::CClass& Struct,
 /// The sixteen mirrored math types are structs too and are *not* decomposed: a vector2 payload is
 /// one Vector2 argument, which is the whole of what Godot wants.
 AUTORTFM_DISABLE const uLang::CClass* PayloadStructClass(const FDeclaredType& Payload);
+
+/// How a `signal(t)`'s payload maps onto Godot's argument list.
+///
+/// Three shapes, because Verse has three answers to "what is one value carrying several things":
+/// a tuple, which cannot name its elements; a struct, which can; and everything else, which is one
+/// thing. The *emission* has to take the value apart the same way the descriptor put it together,
+/// so one shape serves both rather than each deciding for itself.
+enum class EPayloadShape : uint8
+{
+    /// One argument, the payload itself. `signal(int)`, `signal(node2d)`.
+    Bare,
+    /// One argument per element, positionally named. `tuple()` is this with no arguments.
+    Tuple,
+    /// One argument per top-level field, named by the field.
+    Struct,
+};
+
+/// One Godot argument a payload decomposes into.
+struct FPayloadArg
+{
+    /// What Godot is told the argument is called, and so what the connect dialog shows and what
+    /// _make_function writes: `Arg0` for a tuple element, the field's own name for a struct.
+    FUtf8String Name;
+    /// The decorated key this field is stored under, for LoadField at emission. Empty unless the
+    /// payload is a struct -- a tuple is an array and is read by index.
+    FUtf8String FieldKey;
+    FMemberType Type;
+};
+
+/// A payload's whole story: what it decomposes into, and -- when it decomposes into nothing usable
+/// -- which argument spoiled it and why (vh_signal_reject).
+struct FPayloadShape
+{
+    EPayloadShape Kind = EPayloadShape::Bare;
+    TArray<FPayloadArg> Args;
+    int32 Reject = VH_SIGNAL_OK;
+    FUtf8String RejectDetail;
+    /// The struct the payload decomposes, for Kind == Struct and null otherwise. Kept because the
+    /// *inbound* direction has to build one back, and the semantic class is what names it.
+    const uLang::CClass* StructClass = nullptr;
+    /// The payload as one type, rather than as the arguments it decomposes into. What `Await`
+    /// needs: an emission arrives as N Godot arguments and the event it feeds takes one `t`, so
+    /// the inbound direction has to put back together exactly what DescribePayload took apart.
+    FMemberType Whole;
+};
+
+/// The same thing for the *mirror's* signals, which belong to no script class: `timer.Timeout` ->
+/// what a `Timer.Timeout().Await()` has to rebuild.
+struct FEngineSignalTypes
+{
+    TMap<FUtf8String, FPayloadShape> Shapes;
+};
+
+/// The payload type of a signal class: the type argument the member's declaration instantiated it
+/// with.
+///
+/// The declared type comes back as the *generic* `signal(t)` -- `AsCode` prints it that way
+/// and its `Signal` method's parameter is still the type variable -- but the instantiation is
+/// recorded on the class as a substitution table, with one entry per polarity. Both carry the same
+/// type for a class this shape, so the first is the answer.
+AUTORTFM_DISABLE const uLang::CTypeBase* SignalPayloadType(const uLang::CClass& Declared);
+
+/// What a payload becomes on Godot's side (phase-4-design 6.2), and why it cannot become anything.
+///
+/// A `tuple()` is no arguments; a tuple of N is N; a struct is one per top-level field, named by
+/// the field; anything else is one. The mapping is one level only -- a `vector2` payload is one
+/// Vector2 argument, not two floats -- and it is the same list the signal descriptor reports and an
+/// emission fills, so the arguments a generated handler is written for and the arguments that
+/// arrive cannot disagree.
+///
+/// This is the one place that decides, so G1-G4's rejections are decidable from the declaration:
+/// the editor reports them at the member and no emission has to discover them at runtime.
+AUTORTFM_DISABLE void DescribePayload(const uLang::CTypeBase* Payload,
+                                      const uLang::CSemanticProgram& Program,
+                                      FPayloadShape& OutShape);
 
 } // namespace GodotVerse

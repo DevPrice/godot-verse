@@ -111,9 +111,11 @@ using GodotVerse::ClassOriginOf;
 using GodotVerse::CollectStructFields;
 using GodotVerse::DescribeClassOf;
 using GodotVerse::DescribeExportType;
+using GodotVerse::DescribePayload;
 using GodotVerse::DescribeType;
 using GodotVerse::EClassOrigin;
 using GodotVerse::EDeclaredKind;
+using GodotVerse::EPayloadShape;
 using GodotVerse::EnterVerse;
 using GodotVerse::FVerseEntry;
 using GodotVerse::DecoratedNameOf;
@@ -129,6 +131,8 @@ using GodotVerse::FindScriptClassLive;
 using GodotVerse::FindStructLayout;
 using GodotVerse::FMemberType;
 using GodotVerse::ForgetMirrorDefinitions;
+using GodotVerse::FPayloadArg;
+using GodotVerse::FPayloadShape;
 using GodotVerse::FStructLayout;
 using GodotVerse::FUserStructLayout;
 using GodotVerse::GodotVersePath;
@@ -145,6 +149,7 @@ using GodotVerse::ValueToWire;
 using GodotVerse::WireToValue;
 using GodotVerse::RecordMirrorDefinitions;
 using GodotVerse::ScriptVersePath;
+using GodotVerse::SignalPayloadType;
 using GodotVerse::SubjectTypeOfDiagnostic;
 using GodotVerse::UnwrapDeclaredType;
 
@@ -2312,51 +2317,6 @@ struct FMethodSignatureTypes
     FMemberType Result;
 };
 
-/// How a `signal(t)`'s payload maps onto Godot's argument list.
-///
-/// Three shapes, because Verse has three answers to "what is one value carrying several things":
-/// a tuple, which cannot name its elements; a struct, which can; and everything else, which is one
-/// thing. The *emission* has to take the value apart the same way the descriptor put it together,
-/// so one shape serves both rather than each deciding for itself.
-enum class EPayloadShape : uint8
-{
-    /// One argument, the payload itself. `signal(int)`, `signal(node2d)`.
-    Bare,
-    /// One argument per element, positionally named. `tuple()` is this with no arguments.
-    Tuple,
-    /// One argument per top-level field, named by the field.
-    Struct,
-};
-
-/// One Godot argument a payload decomposes into.
-struct FPayloadArg
-{
-    /// What Godot is told the argument is called, and so what the connect dialog shows and what
-    /// _make_function writes: `Arg0` for a tuple element, the field's own name for a struct.
-    FUtf8String Name;
-    /// The decorated key this field is stored under, for LoadField at emission. Empty unless the
-    /// payload is a struct -- a tuple is an array and is read by index.
-    FUtf8String FieldKey;
-    FMemberType Type;
-};
-
-/// A payload's whole story: what it decomposes into, and -- when it decomposes into nothing usable
-/// -- which argument spoiled it and why (vh_signal_reject).
-struct FPayloadShape
-{
-    EPayloadShape Kind = EPayloadShape::Bare;
-    TArray<FPayloadArg> Args;
-    int32 Reject = VH_SIGNAL_OK;
-    FUtf8String RejectDetail;
-    /// The struct the payload decomposes, for Kind == Struct and null otherwise. Kept because the
-    /// *inbound* direction has to build one back, and the semantic class is what names it.
-    const uLang::CClass* StructClass = nullptr;
-    /// The payload as one type, rather than as the arguments it decomposes into. What `Await`
-    /// needs: an emission arrives as N Godot arguments and the event it feeds takes one `t`, so
-    /// the inbound direction has to put back together exactly what DescribePayload took apart.
-    FMemberType Whole;
-};
-
 } // namespace
 
 /// The three tables one class's analysis recorded. Defined here rather than in the header because
@@ -2370,13 +2330,6 @@ struct GodotVerse::FDeclaredTypes
     TMap<FUtf8String, FMethodSignatureTypes> Methods;
     /// Signal member name -> what its payload decomposes into.
     TMap<FUtf8String, FPayloadShape> Signals;
-};
-
-/// The same thing for the *mirror's* signals, which belong to no script class: `timer.Timeout` ->
-/// what a `Timer.Timeout().Await()` has to rebuild.
-struct GodotVerse::FEngineSignalTypes
-{
-    TMap<FUtf8String, FPayloadShape> Shapes;
 };
 
 namespace {
@@ -4048,176 +4001,6 @@ AUTORTFM_DISABLE bool IsEventClass(const uLang::CClass& Declared)
         }
     }
     return false;
-}
-
-/// The payload type of a signal class: the type argument the member's declaration instantiated it
-/// with.
-///
-/// The declared type comes back as the *generic* `signal(t)` -- `AsCode` prints it that way
-/// and its `Signal` method's parameter is still the type variable -- but the instantiation is
-/// recorded on the class as a substitution table, with one entry per polarity. Both carry the same
-/// type for a class this shape, so the first is the answer.
-AUTORTFM_DISABLE const uLang::CTypeBase* SignalPayloadType(const uLang::CClass& Declared)
-{
-    for (const uLang::STypeVariableSubstitution& Substitution : Declared._TypeVariableSubstitutions)
-    {
-        if (Substitution._PositiveType)
-        {
-            return Substitution._PositiveType;
-        }
-    }
-    return nullptr;
-}
-
-/// The argument name Godot is told, for a payload that carries no names of its own.
-///
-/// Verse tuples cannot name their elements -- `tuple(Damage:int, ...)` is "Expected a type, got
-/// data definition instead" -- so a tuple payload gets positional names and a bare one is named
-/// for its type, which is what the connect dialog and `_make_function` then write. A struct payload
-/// is the spelling that *does* carry names, and never reaches here.
-AUTORTFM_DISABLE FUtf8String SignalArgName(const FMemberType& Arg, int32 Index, bool bIsTuple)
-{
-    if (bIsTuple)
-    {
-        return FUtf8String(UTF8TEXT("Arg")) + FUtf8String::FromInt(Index);
-    }
-    switch (Arg.Described.Type)
-    {
-    case VH_TYPE_LOGIC:  return FUtf8String(UTF8TEXT("Logic"));
-    case VH_TYPE_INT:    return FUtf8String(UTF8TEXT("Int"));
-    case VH_TYPE_FLOAT:  return FUtf8String(UTF8TEXT("Float"));
-    case VH_TYPE_STRING: return FUtf8String(UTF8TEXT("Text"));
-    case VH_TYPE_ARRAY:  return FUtf8String(UTF8TEXT("Items"));
-    case VH_TYPE_REF:    return FUtf8String(UTF8TEXT("Ref"));
-    default:             return FUtf8String(UTF8TEXT("Value"));
-    }
-}
-
-/// Whether the wire can carry one payload argument of this declared type, and it is deliberately
-/// *not* `Described.Reject == VH_EXPORT_OK`.
-///
-/// Four of the export rejections are rules about the inspector rather than about the wire, and a
-/// signal argument is subject to none of them:
-///
-///   - VH_EXPORT_OBJECT_NOT_OPTIONAL is "the inspector can leave a slot empty". Nothing leaves a
-///     signal argument empty -- the emitter supplies it -- and ValueToWire has the bare-object
-///     branch for exactly this case, added when `signal(node2d)` emitted nothing.
-///   - VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL and VH_EXPORT_BINDING_CLASS_UNSUPPORTED are both
-///     "ClassDB cannot filter a picker by this name" -- the latter for a generated-binding class
-///     rather than an unregistered project one. An emission carries a handle; nobody filters
-///     anything, and DeclaredReferenceClass's FindBindingClass arm resolves the class the same way
-///     an ordinary method argument does.
-///   - VH_EXPORT_UNSUPPORTED_TYPE over a *reference* wrapper, a `variant` or a `rid` is "the
-///     inspector has no editor for this". Each crosses perfectly well as one Godot value, which is
-///     why DescribeExportType types it before rejecting it.
-///
-/// What is left really is unrepresentable: an option around a non-object (ValueToWire reads a
-/// cleared option as a null reference, so `?int` would arrive as nothing), and a type with no lane.
-AUTORTFM_DISABLE bool PayloadArgCrosses(const FMemberType& Arg)
-{
-    VH_EXHAUSTIVE_SWITCH_BEGIN
-    switch (static_cast<vh_export_reject>(Arg.Described.Reject))
-    {
-    case VH_EXPORT_OK:
-    case VH_EXPORT_OBJECT_NOT_OPTIONAL:
-    case VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL:
-    case VH_EXPORT_BINDING_CLASS_UNSUPPORTED:
-        return true;
-    case VH_EXPORT_UNSUPPORTED_TYPE:
-        return Arg.Kind == EDeclaredKind::Container || Arg.Kind == EDeclaredKind::Variant
-            || Arg.Kind == EDeclaredKind::Rid;
-    case VH_EXPORT_OPTION_NOT_OBJECT:
-    case VH_EXPORT_HINT_WRONG_TYPE:
-        return false;
-    }
-    VH_EXHAUSTIVE_SWITCH_END
-    return false;
-}
-
-/// What a payload becomes on Godot's side (phase-4-design 6.2), and why it cannot become anything.
-///
-/// A `tuple()` is no arguments; a tuple of N is N; a struct is one per top-level field, named by
-/// the field; anything else is one. The mapping is one level only -- a `vector2` payload is one
-/// Vector2 argument, not two floats -- and it is the same list the signal descriptor reports and an
-/// emission fills, so the arguments a generated handler is written for and the arguments that
-/// arrive cannot disagree.
-///
-/// This is the one place that decides, so G1-G4's rejections are decidable from the declaration:
-/// the editor reports them at the member and no emission has to discover them at runtime.
-AUTORTFM_DISABLE void DescribePayload(const uLang::CTypeBase* Payload,
-                                      const uLang::CSemanticProgram& Program,
-                                      FPayloadShape& OutShape)
-{
-    OutShape = FPayloadShape{};
-    if (!Payload)
-    {
-        return;
-    }
-
-    const auto AddArg = [&OutShape](FUtf8String Name, FUtf8String FieldKey, FMemberType Type) {
-        FPayloadArg& Arg = OutShape.Args.AddDefaulted_GetRef();
-        Arg.Name = MoveTemp(Name);
-        Arg.FieldKey = MoveTemp(FieldKey);
-        Arg.Type = MoveTemp(Type);
-    };
-
-    const FDeclaredType Declared = ClassifyDeclaredType(Payload, Program);
-
-    // The payload as one value, for the direction that has to reassemble it. A tuple has no
-    // description of its own -- DescribeType would answer "nothing" for it -- so Kind and Args are
-    // what the tuple case is rebuilt from and this is only read for Bare and Struct.
-    OutShape.Whole = DescribeType(Payload, Program);
-
-    if (const uLang::CTupleType* Tuple = Declared.Normal->AsNullable<uLang::CTupleType>())
-    {
-        OutShape.Kind = EPayloadShape::Tuple;
-        for (const uLang::CTypeBase* Element : Tuple->GetElements())
-        {
-            FMemberType Described = DescribeType(Element, Program);
-            AddArg(SignalArgName(Described, OutShape.Args.Num(), true), FUtf8String(), MoveTemp(Described));
-        }
-    }
-    else if (const uLang::CClass* const Struct = PayloadStructClass(Declared))
-    {
-        OutShape.Kind = EPayloadShape::Struct;
-        OutShape.StructClass = Struct;
-
-        // The same walk the inbound direction uses, so the order Godot is told the arguments come
-        // in and the order they are read back cannot disagree.
-        FUserStructLayout Layout;
-        Layout.DecoratedName = DecoratedNameOf(*Struct);
-        CollectStructFields(*Struct, Program, Layout);
-
-        for (int32 Index = 0; Index < Layout.FieldNames.Num(); ++Index)
-        {
-            if (Layout.FieldTypes[Index].UserStruct.IsValid())
-            {
-                // One level, and no more. Godot has no argument shape for "a struct", so the second
-                // level has nothing to decompose into and silently dropping it would be the
-                // accepted-but-broken failure this whole pass exists to remove.
-                OutShape.Reject = VH_SIGNAL_PAYLOAD_NESTED_STRUCT;
-                OutShape.RejectDetail = Layout.FieldNames[Index];
-                return;
-            }
-            AddArg(Layout.FieldNames[Index], Layout.FieldKeys[Index], Layout.FieldTypes[Index]);
-        }
-    }
-    else
-    {
-        OutShape.Kind = EPayloadShape::Bare;
-        FMemberType Described = DescribeType(Payload, Program);
-        AddArg(SignalArgName(Described, 0, false), FUtf8String(), MoveTemp(Described));
-    }
-
-    for (const FPayloadArg& Arg : OutShape.Args)
-    {
-        if (!PayloadArgCrosses(Arg.Type))
-        {
-            OutShape.Reject = VH_SIGNAL_PAYLOAD_UNSUPPORTED;
-            OutShape.RejectDetail = Arg.Name;
-            return;
-        }
-    }
 }
 
 std::string_view DiagArg(const FUtf8String& Text)
