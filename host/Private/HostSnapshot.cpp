@@ -137,6 +137,7 @@ using GodotVerse::FindReferenceClass;
 using GodotVerse::FindScriptClassLive;
 using GodotVerse::FindStructLayout;
 using GodotVerse::FMemberType;
+using GodotVerse::FMethodSignatureTypes;
 using GodotVerse::ForgetCachedClasses;
 using GodotVerse::ForgetMirrorDefinitions;
 using GodotVerse::FPayloadArg;
