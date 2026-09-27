@@ -133,6 +133,7 @@ Error VerseProjectState::build_project() {
 	// record_diagnostics below measures a diagnostic's span against it, so it has to be filled
 	// first.
 	analyzed_source_by_path.clear();
+	pending_restore.reset();
 	std::vector<std::string> texts;
 	texts.reserve(sources.size());
 	for (int64_t i = 0; i < sources.size(); i++) {
@@ -144,6 +145,7 @@ Error VerseProjectState::build_project() {
 		texts.push_back(read ? std::string(text.utf8().get_data()) : std::string());
 	}
 
+	real_source_by_path = analyzed_source_by_path.duplicate();
 	record_diagnostics(errors_by_globalized);
 
 	// Every source is in hand exactly once per build, which is the only affordable moment to ask
@@ -291,6 +293,27 @@ void VerseProjectState::request_check(const String &p_path, const String &p_norm
 	// one costs nothing at all.
 }
 
+std::optional<VerseProjectState::CheckRequest> *VerseProjectState::next_slot(CheckKind &r_kind) {
+	if (!pending_ordinary && !pending_completion) {
+		return nullptr;
+	}
+	// The completion buffer first when both are waiting: a popup and an argument hint are blocked
+	// on it and are drawing nothing meanwhile, where the author's own buffer feeds a gutter that is
+	// still showing the last analysis' diagnostics. Each kind holds only its newest buffer, so
+	// preferring one delays the other by a single analysis and can never queue a third.
+	std::optional<CheckRequest> *slot = pending_completion ? &pending_completion : &pending_ordinary;
+	r_kind = pending_completion ? CheckKind::COMPLETION : CheckKind::ORDINARY;
+	if (pending_restore) {
+		if (pending_restore->path == (*slot)->path) {
+			pending_restore.reset();
+		} else {
+			r_kind = CheckKind::ORDINARY;
+			return &pending_restore;
+		}
+	}
+	return slot;
+}
+
 void VerseProjectState::start_pending_check() {
 	if (!pending_ordinary && !pending_completion) {
 		return;
@@ -301,12 +324,8 @@ void VerseProjectState::start_pending_check() {
 		return;
 	}
 
-	// The completion buffer first when both are waiting: a popup and an argument hint are blocked
-	// on it and are drawing nothing meanwhile, where the author's own buffer feeds a gutter that is
-	// still showing the last analysis' diagnostics. Each kind holds only its newest buffer, so
-	// preferring one delays the other by a single analysis and can never queue a third.
-	const CheckKind kind = pending_completion ? CheckKind::COMPLETION : CheckKind::ORDINARY;
-	std::optional<CheckRequest> &slot = kind == CheckKind::COMPLETION ? pending_completion : pending_ordinary;
+	CheckKind kind = CheckKind::ORDINARY;
+	std::optional<CheckRequest> &slot = *next_slot(kind);
 	const CheckRequest request = *slot;
 
 	const String globalized = ProjectSettings::get_singleton()->globalize_path(request.path);
@@ -331,25 +350,51 @@ void VerseProjectState::flush_pending_check() {
 		return;
 	}
 
-	// The completion slot first, in the order start_pending_check prefers them and for the same
-	// reason. One flush runs one analysis and leaves the other slot for _frame; probe_complete is
-	// what makes that enough, because it flushes once per caret and each caret queues one buffer.
-	std::optional<CheckRequest> &slot = pending_completion ? pending_completion : pending_ordinary;
-	const CheckRequest request = *slot;
-	slot.reset();
+	// In the order start_pending_check takes them and for the same reasons. One flush runs one
+	// analysis and leaves the other slot for _frame; probe_complete is what makes that enough,
+	// because it flushes once per caret and each caret queues one buffer -- except that a restore
+	// owed to another file runs first, since it is what the requested analysis must not read.
+	for (;;) {
+		CheckKind kind = CheckKind::ORDINARY;
+		std::optional<CheckRequest> *slot = next_slot(kind);
+		if (slot == nullptr) {
+			return;
+		}
+		const bool restoring = slot == &pending_restore;
+		const CheckRequest request = **slot;
+		slot->reset();
 
-	// The synchronous entry point, which is what makes this a flush rather than a second queue: it
-	// blocks on whatever the background thread is doing and then analyses.
-	Dictionary errors_by_globalized;
-	runtime->check_project(ProjectSettings::get_singleton()->globalize_path(request.path), request.source, &errors_by_globalized);
+		// The synchronous entry point, which is what makes this a flush rather than a second queue:
+		// it blocks on whatever the background thread is doing and then analyses.
+		Dictionary errors_by_globalized;
+		runtime->check_project(ProjectSettings::get_singleton()->globalize_path(request.path), request.source, &errors_by_globalized);
 
-	analyzed_source_by_path[request.path] = request.source;
-	// The snapshot the host now holds changed, whether or not this buffer was a completion one --
-	// see analysis_epoch. This never touches description_epoch: a probe_hover/probe_complete flush
-	// has no live scripts of its own to describe, which matches poll_check never doing so here
-	// either (only its non-completion branch does).
-	analysis_epoch.advance();
-	record_diagnostics(errors_by_globalized);
+		analyzed_source_by_path[request.path] = request.source;
+		note_landed(kind, request);
+		// The snapshot the host now holds changed, whether or not this buffer was a completion one
+		// -- see analysis_epoch. This never touches description_epoch: a probe_hover/probe_complete
+		// flush has no live scripts of its own to describe, which matches poll_check never doing so
+		// here either (only its non-completion branch does).
+		analysis_epoch.advance();
+		record_diagnostics(errors_by_globalized);
+		if (!restoring) {
+			return;
+		}
+	}
+}
+
+void VerseProjectState::note_landed(CheckKind p_kind, const CheckRequest &p_request) {
+	if (p_kind == CheckKind::COMPLETION) {
+		const String real = real_source_by_path.has(p_request.path)
+				? String(real_source_by_path[p_request.path])
+				: verse_newline_normalized(FileAccess::get_file_as_string(p_request.path));
+		pending_restore = CheckRequest{ p_request.path, real };
+	} else {
+		real_source_by_path[p_request.path] = p_request.source;
+		if (pending_restore && pending_restore->path == p_request.path) {
+			pending_restore.reset();
+		}
+	}
 }
 
 void VerseProjectState::poll_check() {
@@ -368,6 +413,7 @@ void VerseProjectState::poll_check() {
 		// queues the ordinary analysis that puts the diagnostics back, and a hover declines in the
 		// meantime rather than trusting loci measured against a spliced-in placeholder.
 		analyzed_source_by_path[landed.request.path] = landed.request.source;
+		note_landed(landed.kind, landed.request);
 		// The whole-project snapshot the host holds moved, whichever buffer produced it -- see
 		// analysis_epoch.
 		analysis_epoch.advance();

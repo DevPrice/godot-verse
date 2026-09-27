@@ -2635,8 +2635,13 @@ func _begin_override_completion() -> void:
 	# file that compiles leaves that behind it.
 	var named_source := FileAccess.get_file_as_string(NAMED_PROBE_PATH).replace("\r\n", "\n")
 	if named_source.contains(NAMED_ARGUMENT):
-		_override_buffers.append([NAMED_PROBE_PATH,
-				named_source.replace(NAMED_ARGUMENT, "?E" + char(0xFFFF) + "]")])
+		var named := [NAMED_PROBE_PATH, named_source.replace(NAMED_ARGUMENT, "?E" + char(0xFFFF) + "]")]
+		_override_buffers.append(named)
+		# The same ask straight after the broken buffer, with no clean one of that file between: the
+		# host keeps the last buffer each file was analysed as, so it is the broken line it holds for
+		# override_complete_probe.verse unless the bridge hands the file's own text back first.
+		_override_buffers.append([OVERRIDE_PROBE_PATH, broken])
+		_override_buffers.append(named)
 	_ask_next_override_buffer()
 
 
@@ -2705,6 +2710,13 @@ func _poll_override_completion() -> void:
 			named_options, [["ExactMatch:logic", "ExactMatch := "]])
 	_check("with the hint above it keeping the named parameter's `?`",
 			String(named.get("call_hint", "")).contains("?ExactMatch:logic"))
+	var after_broken: Dictionary = _override_answers[5][1] if _override_answers.size() > 5 else {}
+	var after_broken_options := []
+	for option in after_broken.get("options", []):
+		after_broken_options.append([String(option.get("display", "")), String(option.get("insert_text", ""))])
+	_check_eq("another file's half-typed line leaves this file's completion as it was",
+			[after_broken_options, String(after_broken.get("call_hint", ""))],
+			[named_options, String(named.get("call_hint", ""))])
 	_end_editor_only()
 
 

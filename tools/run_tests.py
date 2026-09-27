@@ -678,9 +678,11 @@ def run_host_fatal(results: Results, godot: Path, project: Path) -> None:
 
 def _integration_argv(godot: Path, project: Path) -> list[str]:
     # --headless opens no window. --quit-after bounds a hang: the script quits on its own, and a
-    # run that has not is a failure worth seeing rather than one to wait out.
+    # run that has not is a failure worth seeing rather than one to wait out. It counts frames, and
+    # a headless frame is unpaced: the override-completion block polls once per frame through an
+    # analysis per buffer and one per restore of a file's own text, and 600 ran out inside it.
     return [str(godot), "--headless", "--path", str(project), "--script", "res://test_main.gd",
-            "--quit-after", "600"]
+            "--quit-after", "1500"]
 
 
 def _keep_integration_reference(results: Results) -> None:

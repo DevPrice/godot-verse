@@ -127,6 +127,8 @@ public:
 	//   any        request_check otherwise                          that kind's slot := the buffer
 	//   IDLE       start_pending_check: a slot filled, host up and  ANALYZING the completion slot if it is
 	//              not busy, vh_check_project_begin accepts         filled, else the ordinary; slot emptied
+	//                                                               -- but the owed restore first, as an
+	//                                                               ORDINARY, when it is for another file
 	//   ANALYZING  start_pending_check                              nothing: the host refuses a begin until
 	//                                                               the last one is reaped
 	//   ANALYZING  poll_check, the host reports it finished         IDLE, after the landing below
@@ -137,6 +139,9 @@ public:
 	//   any        flush_pending_check, no host or no compiler      both slots emptied
 	//   any        build_project publishes a generation             both epochs advance; one ORDINARY
 	//                                                               request queued for the text just read
+	//
+	// A COMPLETION landing also owes the host that file's own text back (pending_restore), and an
+	// ORDINARY landing for the file, or a build, pays it.
 	//
 	// A landing records the buffer as analysed and advances analysis_epoch. ORDINARY then advances
 	// description_epoch, records the diagnostics, refreshes the file's script warnings, re-arms the
@@ -255,6 +260,26 @@ private:
 	};
 	std::optional<CheckRequest> pending_ordinary;
 	std::optional<CheckRequest> pending_completion;
+	// A file's own text, owed to the host after a completion analysis of it. The host keeps the
+	// last buffer it was handed for every file, so the half-typed line a completion analysed stays
+	// the host's copy of that file after the author moves on -- and a line that does not parse
+	// costs every other file its analysis, completion included. Sent ahead of the next analysis of
+	// any *other* file (next_request); an analysis of the same file supersedes it.
+	std::optional<CheckRequest> pending_restore;
+	// The text each file had in the last analysis that was not a completion's: the build's read of
+	// the disk, or an ordinary buffer. What pending_restore sends.
+	godot::Dictionary real_source_by_path;
+
+	// The slot start_pending_check or flush_pending_check runs next, or null when all are empty:
+	// the completion slot, then the ordinary one, with pending_restore ahead of either when it is
+	// for another file. A restore for the same file is dropped here, since that analysis replaces
+	// the host's copy anyway. r_kind is what the landing is treated as; a restore is ORDINARY,
+	// because it is the file's own text.
+	std::optional<CheckRequest> *next_slot(CheckKind &r_kind);
+
+	// What a landing of p_kind leaves owed: a completion owes the file's own text back, and
+	// anything else is that text, which settles the debt.
+	void note_landed(CheckKind p_kind, const CheckRequest &p_request);
 	// Empty is IDLE.
 	std::optional<InFlightCheck> in_flight;
 

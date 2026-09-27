@@ -532,20 +532,15 @@ down to [the residual list](by-hand-findings.md#what-is-still-checked-by-hand):
 `debug-wire` 38/0/2, `multiplayer` 38/0/0, `integration` 611/0/5.
 
 **`known defect:` skips**, read off the case sources rather than fixed — ten, across the three
-layers:
-
-- **`editor_cases.gd`**: after a Play, a call completed in the editor settles on an empty argument
-  hint although the re-ask arrives; after B27's Plays and the unfinished calls typed behind them,
-  every `hover_probe.verse` member hovers with no description; `signal_ref.Await`/`.Subscribe`
-  still hover as a Local Constant; B40's registered page (`event.Emit`, `signal_ref`'s members) has
-  an empty description, because `publish_api_method` is handed the host's own empty doc;
-  `READY_DEFECT` (a breakpoint in the main scene's `_Ready` never fires — the Verse debugger
-  attaches from `_frame`, after `_Ready` runs) and `TWICE_DEFECT` (a line holding a call reports
-  its location twice, so a breakpoint there stops twice per arrival); `NODE_PATH_DEFECT`
-  (`@export_node_path` on a `string` draws a plain text field, not a node picker);
-  `TOOL_AUTOLOAD_DEFECT` (a `@tool` Verse autoload holds a placeholder rather than a real
-  instance); `GLOBAL_ICON_DEFECT` (a `@global_class` script's `@icon` never reaches the scene dock
-  or create dialog); and Make Function's stub not compiling (`Int:?` — the dialog's `name: Type`
-  spelling, with its leading space, is handed to `verse_type_for_godot_type` unstripped).
-- **`debug_wire.py`**: `READY_DEFECT` and `TWICE_DEFECT` again, in the same words, over the wire
-  rather than the panel.
+layers, when this was written. Seven were consumer defects and are fixed, each turning its skip
+into an assertion: Make Function's stub for a signal with a payload (`Int:?`, from the dialog's
+`name: Type` spelling handed over with its space), `@export_node_path` on a `string` drawing a text
+field rather than a node picker, a `@global_class` script's `@icon` never reaching the scene dock
+or the create dialog, a `@tool` Verse autoload holding a placeholder, `signal_ref.Await`/
+`.Subscribe` hovering as a Local Constant, a breakpoint in the main scene's `_Ready` never firing,
+and a breakpoint on a line holding a call stopping twice per arrival (the last two in both
+`editor_cases.gd` and `debug_wire.py`). What stands is the host's, all in `editor_cases.gd`: after a
+Play, a call completed in the editor settles on an empty argument hint although the re-ask arrives;
+after B27's Plays and the unfinished calls typed behind them, every `hover_probe.verse` member
+hovers with no description; and B40's registered page (`event.Emit`, `signal_ref`'s members) has an
+empty description, because `publish_api_method` is handed the host's own empty doc.
