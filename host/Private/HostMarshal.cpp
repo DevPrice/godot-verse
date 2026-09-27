@@ -74,18 +74,15 @@ AUTORTFM_DISABLE int32 StructFieldCount(const FStructLayout& Layout)
     return Count;
 }
 
-/// Reads Layout's fields off a struct value into a fresh block of OutStorage, in Layout's order, and
-/// points OutValue at it. False if any field is missing or is not a number, which would otherwise
-/// hand the consumer a tuple it cannot rebuild.
 /// Appends a struct's scalar components to OutItems, walking into nested fields.
 ///
 /// Recursive because Godot's math types are: a transform3d is a basis and a vector3, and the basis
 /// is three vector3s. The wire carries the leaves in this order and nothing else, so the walk here
 /// and the packer gen_verse_api.py emits have to agree -- which is why both come from one layout.
-AUTORTFM_DISABLE bool ReadStructComponents(Verse::FRunningContext Context,
-                                           Verse::VValueObject& Struct,
-                                           const FStructLayout& Layout,
-                                           TArray<vh_value>& OutItems)
+AUTORTFM_DISABLE TResult<void> ReadStructComponents(Verse::FRunningContext Context,
+                                                    Verse::VValueObject& Struct,
+                                                    const FStructLayout& Layout,
+                                                    TArray<vh_value>& OutItems)
 {
     for (int32 Index = 0; Index < Layout.field_count; ++Index)
     {
@@ -94,16 +91,25 @@ AUTORTFM_DISABLE bool ReadStructComponents(Verse::FRunningContext Context,
         const Verse::FOpResult Read = Struct.LoadField(Context, Key);
         if (!Read.IsReturn())
         {
-            return false;
+            return EHostFailure::MissingField;
         }
 
         if (Field.nested_tag != 0)
         {
             const FStructLayout* const Nested = FindStructLayoutByTag(Field.nested_tag);
-            Verse::VValueObject* const Inner = Read.Value.DynamicCast<Verse::VValueObject>();
-            if (!Nested || !Inner || !ReadStructComponents(Context, *Inner, *Nested, OutItems))
+            if (!Nested)
             {
-                return false;
+                return EHostFailure::Unconvertible;
+            }
+            Verse::VValueObject* const Inner = Read.Value.DynamicCast<Verse::VValueObject>();
+            if (!Inner)
+            {
+                return EHostFailure::TypeMismatch;
+            }
+            const TResult<void> Nest = ReadStructComponents(Context, *Inner, *Nested, OutItems);
+            if (!Nest)
+            {
+                return Nest;
             }
             continue;
         }
@@ -113,7 +119,7 @@ AUTORTFM_DISABLE bool ReadStructComponents(Verse::FRunningContext Context,
         {
             if (!Read.Value.IsInt())
             {
-                return false;
+                return EHostFailure::TypeMismatch;
             }
             Item.Type = VH_TYPE_INT;
             Item.Int = Read.Value.AsInt().AsInt64();
@@ -122,42 +128,46 @@ AUTORTFM_DISABLE bool ReadStructComponents(Verse::FRunningContext Context,
         {
             if (!Read.Value.IsFloat())
             {
-                return false;
+                return EHostFailure::TypeMismatch;
             }
             Item.Type = VH_TYPE_FLOAT;
             Item.Float = Read.Value.AsFloat().AsDouble();
         }
         OutItems.Add(Item);
     }
-    return true;
+    return TResult<void>::Ok();
 }
 
-AUTORTFM_DISABLE bool ReadStructValue(Verse::FRunningContext Context,
-                                      Verse::VValueObject& Struct,
-                                      const FStructLayout& Layout,
-                                      GodotVerse::FFieldStorage& OutStorage,
-                                      vh_value& OutValue)
+/// Reads Layout's fields off a struct value into a fresh block of OutStorage, in Layout's order, and
+/// points OutValue at it. Fails if any field is missing or is not a number, which would otherwise
+/// hand the consumer a tuple it cannot rebuild.
+AUTORTFM_DISABLE TResult<void> ReadStructValue(Verse::FRunningContext Context,
+                                               Verse::VValueObject& Struct,
+                                               const FStructLayout& Layout,
+                                               GodotVerse::FFieldStorage& OutStorage,
+                                               vh_value& OutValue)
 {
     const int32 BlockIndex = OutStorage.Blocks.AddDefaulted();
     OutStorage.Blocks[BlockIndex].Reserve(StructFieldCount(Layout));
-    if (!ReadStructComponents(Context, Struct, Layout, OutStorage.Blocks[BlockIndex]))
+    const TResult<void> Read = ReadStructComponents(Context, Struct, Layout, OutStorage.Blocks[BlockIndex]);
+    if (!Read)
     {
-        return false;
+        return Read;
     }
 
     OutValue.Type = VH_TYPE_TUPLE;
     OutValue.VariantTag = Layout.variant_tag;
     OutValue.Seq.Items = OutStorage.Blocks[BlockIndex].GetData();
     OutValue.Seq.Count = OutStorage.Blocks[BlockIndex].Num();
-    return true;
+    return TResult<void>::Ok();
 }
 
-AUTORTFM_DISABLE bool ReadArrayValue(Verse::FRunningContext Context,
-                                     const Verse::VArrayBase& Array,
-                                     int32 Tag,
-                                     int32 ElementTag,
-                                     GodotVerse::FFieldStorage& OutStorage,
-                                     vh_value& OutValue)
+AUTORTFM_DISABLE TResult<void> ReadArrayValue(Verse::FRunningContext Context,
+                                              const Verse::VArrayBase& Array,
+                                              int32 Tag,
+                                              int32 ElementTag,
+                                              GodotVerse::FFieldStorage& OutStorage,
+                                              vh_value& OutValue)
 {
     const int32 Count = (int32)Array.Num();
     const FStructLayout* const Layout = FindStructLayoutByPackedTag(Tag);
@@ -178,16 +188,21 @@ AUTORTFM_DISABLE bool ReadArrayValue(Verse::FRunningContext Context,
         if (Layout)
         {
             Verse::VValueObject* const Struct = Element.DynamicCast<Verse::VValueObject>();
-            if (!Struct || !ReadStructValue(Context, *Struct, *Layout, OutStorage, Item))
+            if (!Struct)
             {
-                return false;
+                return EHostFailure::TypeMismatch;
+            }
+            const TResult<void> Read = ReadStructValue(Context, *Struct, *Layout, OutStorage, Item);
+            if (!Read)
+            {
+                return Read;
             }
         }
         else if (Tag == VH_VARIANT_PACKED_INT64_ARRAY)
         {
             if (!Element.IsInt())
             {
-                return false;
+                return EHostFailure::TypeMismatch;
             }
             Item.Type = VH_TYPE_INT;
             Item.Int = Element.AsInt().AsInt64();
@@ -196,7 +211,7 @@ AUTORTFM_DISABLE bool ReadArrayValue(Verse::FRunningContext Context,
         {
             if (!Element.IsFloat())
             {
-                return false;
+                return EHostFailure::TypeMismatch;
             }
             Item.Type = VH_TYPE_FLOAT;
             Item.Float = Element.AsFloat().AsDouble();
@@ -206,7 +221,7 @@ AUTORTFM_DISABLE bool ReadArrayValue(Verse::FRunningContext Context,
             const Verse::VArrayBase* const Text = Element.DynamicCast<Verse::VArrayBase>();
             if (!Text)
             {
-                return false;
+                return EHostFailure::TypeMismatch;
             }
             const int32 StringIndex = OutStorage.Strings.Add(FUtf8String(Text->AsStringView()));
             Item.Type = VH_TYPE_STRING;
@@ -217,14 +232,14 @@ AUTORTFM_DISABLE bool ReadArrayValue(Verse::FRunningContext Context,
         {
             if (!Element.IsLogic())
             {
-                return false;
+                return EHostFailure::TypeMismatch;
             }
             Item.Type = VH_TYPE_LOGIC;
             Item.Logic = Element.AsBool() ? 1 : 0;
         }
         else
         {
-            return false;
+            return EHostFailure::Unconvertible;
         }
 
         OutStorage.Blocks[BlockIndex].Add(Item);
@@ -234,7 +249,7 @@ AUTORTFM_DISABLE bool ReadArrayValue(Verse::FRunningContext Context,
     OutValue.VariantTag = Tag;
     OutValue.Seq.Items = OutStorage.Blocks[BlockIndex].GetData();
     OutValue.Seq.Count = Count;
-    return true;
+    return TResult<void>::Ok();
 }
 
 /// A fresh struct value of Class, with Layout's fields taken from Items.
@@ -251,23 +266,22 @@ AUTORTFM_DISABLE bool ReadArrayValue(Verse::FRunningContext Context,
 /// `NewVObject` rather than a lower-level allocation because it is what marks a struct deeply mutable
 /// (`VVMClass.cpp:333-336`); an object built any other way does not compare or freeze like one.
 
-
 /// Builds one mirrored struct from Count of the components at Items, consuming them in order.
 ///
 /// The cursor is threaded through rather than indexed from zero per field, because a nested field
 /// takes as many components as its own layout says -- a basis takes nine of a transform3d's twelve
 /// and the origin takes the rest.
-AUTORTFM_DISABLE Verse::VValue NewStructFrom(Verse::FRunningContext Context,
-                                             const FStructLayout& Layout,
-                                             const vh_value* Items,
-                                             int32 ItemCount,
-                                             int32& Cursor)
+AUTORTFM_DISABLE TResult<Verse::VValue> NewStructFrom(Verse::FRunningContext Context,
+                                                      const FStructLayout& Layout,
+                                                      const vh_value* Items,
+                                                      int32 ItemCount,
+                                                      int32& Cursor)
 {
     Verse::VClass* const Class =
         FindMirroredVClass(Context, FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Layout.verse_name)));
     if (!Class)
     {
-        return Verse::VValue();
+        return EHostFailure::NotPublished;
     }
 
     TArray<Verse::VUniqueString*> Keys;
@@ -295,19 +309,20 @@ AUTORTFM_DISABLE Verse::VValue NewStructFrom(Verse::FRunningContext Context,
             const FStructLayout* const Nested = FindStructLayoutByTag(Field.nested_tag);
             if (!Nested)
             {
-                return Verse::VValue();
+                return EHostFailure::Unconvertible;
             }
-            FieldValue = NewStructFrom(Context, *Nested, Items, ItemCount, Cursor);
-            if (FieldValue.IsUninitialized())
+            const TResult<Verse::VValue> Built = NewStructFrom(Context, *Nested, Items, ItemCount, Cursor);
+            if (!Built)
             {
-                return Verse::VValue();
+                return Built;
             }
+            FieldValue = Built.GetValue();
         }
         else
         {
             if (Cursor >= ItemCount)
             {
-                return Verse::VValue();
+                return EHostFailure::TypeMismatch;
             }
             const vh_value& Item = Items[Cursor++];
             const double Number = Item.Type == VH_TYPE_FLOAT
@@ -321,7 +336,7 @@ AUTORTFM_DISABLE Verse::VValue NewStructFrom(Verse::FRunningContext Context,
         if (!Struct.CreateField(Context, *Keys[Index])
             || !Struct.SetField(Context, *Keys[Index], FieldValue).IsReturn())
         {
-            return Verse::VValue();
+            return EHostFailure::ConstructionFailed;
         }
     }
     return Verse::VValue(Struct);
@@ -409,15 +424,15 @@ AUTORTFM_DISABLE UClass* DeclaredReferenceClass(const FMemberType& Declared)
 /// VH_VARIANT_RID, the number in `Int`. Same discovery, different encoding, so it is its own arm
 /// rather than a layout row. Putting it in the table would change what VH_VARIANT_RID means on the
 /// wire, which is an ABI major for nothing Godot wants.
-AUTORTFM_DISABLE bool ReadRidStruct(Verse::FRunningContext Context,
-                                    Verse::VValue Value,
-                                    vh_value& OutValue)
+AUTORTFM_DISABLE TResult<void> ReadRidStruct(Verse::FRunningContext Context,
+                                             Verse::VValue Value,
+                                             vh_value& OutValue)
 {
     Verse::VValueObject* const Struct = Value.DynamicCast<Verse::VValueObject>();
     if (!Struct || !Struct->GetClass().GetBaseName().AsStringView().Equals(
                        FUtf8StringView(UTF8TEXT("rid"))))
     {
-        return false;
+        return EHostFailure::TypeMismatch;
     }
 
     // The decorated key, the way ReadStructComponents builds one -- a field is stored under
@@ -426,30 +441,33 @@ AUTORTFM_DISABLE bool ReadRidStruct(Verse::FRunningContext Context,
     const FUtf8String KeyText = RidFieldKey();
     Verse::VUniqueString& Key = Verse::VUniqueString::New(Context, FUtf8StringView(KeyText));
     const Verse::FOpResult Read = Struct->LoadField(Context, Key);
-    if (!Read.IsReturn() || !Read.Value.IsInt())
+    if (!Read.IsReturn())
     {
-        return false;
+        return EHostFailure::MissingField;
+    }
+    if (!Read.Value.IsInt())
+    {
+        return EHostFailure::TypeMismatch;
     }
 
     OutValue.Type = VH_TYPE_INT;
     OutValue.VariantTag = VH_VARIANT_RID;
     OutValue.Int = Read.Value.AsInt().AsInt64();
-    return true;
+    return TResult<void>::Ok();
 }
 
-/// The `rid` a RID arriving from Godot becomes. Uninitialised on failure, the way the other
-/// builders here report one.
+/// The `rid` a RID arriving from Godot becomes.
 ///
 /// NewVObject rather than a lower-level allocation, for the reason WireToValue's user-struct arm
 /// gives: it is what marks a struct deeply mutable, and one built any other way does not compare
 /// or freeze like a struct.
-AUTORTFM_DISABLE Verse::VValue NewRidValue(Verse::FRunningContext Context, int64 Id)
+AUTORTFM_DISABLE TResult<Verse::VValue> NewRidValue(Verse::FRunningContext Context, int64 Id)
 {
     Verse::VClass* const StructClass =
         FindMirroredVClass(Context, FUtf8StringView(UTF8TEXT("rid")));
     if (!StructClass)
     {
-        return Verse::VValue();
+        return EHostFailure::NotPublished;
     }
 
     const FUtf8String KeyText = RidFieldKey();
@@ -463,7 +481,7 @@ AUTORTFM_DISABLE Verse::VValue NewRidValue(Verse::FRunningContext Context, int64
     if (!Struct.CreateField(Context, Key)
         || !Struct.SetField(Context, Key, Verse::VValue(Verse::VInt(Context, Id))).IsReturn())
     {
-        return Verse::VValue();
+        return EHostFailure::ConstructionFailed;
     }
     return Verse::VValue(Struct);
 }
@@ -538,25 +556,25 @@ AUTORTFM_DISABLE Verse::VClass* FindMirroredVClass(Verse::FRunningContext Contex
     return nullptr;
 }
 
-AUTORTFM_DISABLE Verse::VValue NewStructValue(Verse::FRunningContext Context,
-                                              Verse::VClass& Class,
-                                              const FStructLayout& Layout,
-                                              const vh_value* Items,
-                                              int32 ItemCount)
+AUTORTFM_DISABLE TResult<Verse::VValue> NewStructValue(Verse::FRunningContext Context,
+                                                       Verse::VClass& Class,
+                                                       const FStructLayout& Layout,
+                                                       const vh_value* Items,
+                                                       int32 ItemCount)
 {
     if (ItemCount != StructFieldCount(Layout))
     {
-        return Verse::VValue();
+        return EHostFailure::TypeMismatch;
     }
     int32 Cursor = 0;
     return NewStructFrom(Context, Layout, Items, ItemCount, Cursor);
 }
 
-AUTORTFM_DISABLE bool ValueToWire(Verse::FRunningContext Context,
-                                  Verse::VValue Value,
-                                  const FMemberType& Declared,
-                                  GodotVerse::FFieldStorage& OutStorage,
-                                  vh_value& OutValue)
+AUTORTFM_DISABLE TResult<void> ValueToWire(Verse::FRunningContext Context,
+                                           Verse::VValue Value,
+                                           const FMemberType& Declared,
+                                           GodotVerse::FFieldStorage& OutStorage,
+                                           vh_value& OutValue)
 {
     VH_EXHAUSTIVE_SWITCH_BEGIN
     switch (Declared.Kind)
@@ -572,17 +590,17 @@ AUTORTFM_DISABLE bool ValueToWire(Verse::FRunningContext Context,
         // reinterpret whatever cell it found.
         if (!Value.DynamicCast<Verse::VNativeStruct>())
         {
-            return false;
+            return EHostFailure::TypeMismatch;
         }
         Verse::TFromVValue<verse::variant> Boxed{};
         if (!Verse::FNativeConverter::FromVValue(Context, Value, Boxed).IsReturn())
         {
-            return false;
+            return EHostFailure::Unconvertible;
         }
         OutStorage.Blocks.Reserve(OutStorage.Blocks.Num() + 1);
         OutValue = GodotVerse::VariantToWire(Boxed.GetValue(), OutStorage.Text,
                                              OutStorage.Blocks.AddDefaulted_GetRef());
-        return true;
+        return TResult<void>::Ok();
     }
 
     // A `rid` is a struct whose description says VH_TYPE_INT, so it has to be unwrapped here:
@@ -688,7 +706,7 @@ AUTORTFM_DISABLE bool ValueToWire(Verse::FRunningContext Context,
         const verse::godot_ref* Wrapper = Cast<verse::godot_ref>(Value.ExtractUObject());
         if (!Wrapper)
         {
-            return false;
+            return EHostFailure::TypeMismatch;
         }
         OutValue.Type = VH_TYPE_REF;
         OutValue.VariantTag = Declared.Described.VariantTag;
@@ -699,10 +717,11 @@ AUTORTFM_DISABLE bool ValueToWire(Verse::FRunningContext Context,
         // A mirrored struct: vector2, color. The fields are read by name, and the names come
         // from the declared type -- the value carries its field keys but not which order a
         // Godot Vector2 wants them in, and positions are the whole of what crosses.
-        if (!Declared.Struct || !ReadStructValue(Context, *Struct, *Declared.Struct, OutStorage, OutValue))
+        if (!Declared.Struct)
         {
-            return false;
+            return EHostFailure::Unconvertible;
         }
+        return ReadStructValue(Context, *Struct, *Declared.Struct, OutStorage, OutValue);
     }
     else if (const Verse::VArrayBase* Array = Value.DynamicCast<Verse::VArrayBase>())
     {
@@ -726,18 +745,21 @@ AUTORTFM_DISABLE bool ValueToWire(Verse::FRunningContext Context,
             OutValue.String.Utf8 = reinterpret_cast<const char*>(*OutStorage.Text);
             OutValue.String.Len = OutStorage.Text.Len();
         }
-        else if (Desc.Type != VH_TYPE_ARRAY
-                 || !ReadArrayValue(Context, *Array, Desc.VariantTag, Desc.ElementVariantTag, OutStorage, OutValue))
+        else if (Desc.Type != VH_TYPE_ARRAY)
         {
-            return false;
+            return EHostFailure::TypeMismatch;
+        }
+        else
+        {
+            return ReadArrayValue(Context, *Array, Desc.VariantTag, Desc.ElementVariantTag, OutStorage, OutValue);
         }
     }
     else
     {
-        return false;
+        return EHostFailure::Unconvertible;
     }
 
-    return true;
+    return TResult<void>::Ok();
 }
 
 AUTORTFM_DISABLE UClass* FindReferenceClass(int32 VariantTag)
@@ -752,13 +774,17 @@ AUTORTFM_DISABLE UClass* FindReferenceClass(int32 VariantTag)
     return nullptr;
 }
 
-AUTORTFM_DISABLE UObject* NewReferenceWrapper(UClass* NativeClass, int64 Id)
+AUTORTFM_DISABLE TResult<UObject*> NewReferenceWrapper(UClass* NativeClass, int64 Id)
 {
-    UObject* Wrapper = NativeClass ? NewObject<UObject>(GetTransientPackage(), NativeClass) : nullptr;
+    if (!NativeClass)
+    {
+        return EHostFailure::NotPublished;
+    }
+    UObject* Wrapper = NewObject<UObject>(GetTransientPackage(), NativeClass);
     verse::godot_ref* Shadow = Cast<verse::godot_ref>(Wrapper);
     if (!Shadow)
     {
-        return nullptr;
+        return EHostFailure::TypeMismatch;
     }
     Shadow->Ref.Init(Id, Shadow);
     return Wrapper;
@@ -770,19 +796,19 @@ AUTORTFM_DISABLE Verse::VValue ReferenceOption(Verse::FRunningContext Context, U
                       : Verse::VValue(Verse::GlobalFalse());
 }
 
-AUTORTFM_DISABLE Verse::VValue NewArrayValue(Verse::FRunningContext Context,
-                                            bool bMutable,
-                                            int32 Tag,
-                                            int32 ElementTag,
-                                            const vh_value* Items,
-                                            int32 ItemCount)
+AUTORTFM_DISABLE TResult<Verse::VValue> NewArrayValue(Verse::FRunningContext Context,
+                                                      bool bMutable,
+                                                      int32 Tag,
+                                                      int32 ElementTag,
+                                                      const vh_value* Items,
+                                                      int32 ItemCount)
 {
     const FStructLayout* const Layout = FindStructLayoutByPackedTag(Tag);
     Verse::VClass* const StructClass =
         Layout ? FindMirroredVClass(Context, FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Layout->verse_name))) : nullptr;
     if (Layout && !StructClass)
     {
-        return Verse::VValue();
+        return EHostFailure::NotPublished;
     }
 
     TArray<Verse::VValue> Elements;
@@ -792,12 +818,12 @@ AUTORTFM_DISABLE Verse::VValue NewArrayValue(Verse::FRunningContext Context,
         const vh_value& Item = Items[Index];
         if (Layout)
         {
-            const Verse::VValue Element = NewStructValue(Context, *StructClass, *Layout, Item.Seq.Items, Item.Seq.Count);
-            if (Element.IsUninitialized())
+            const TResult<Verse::VValue> Element = NewStructValue(Context, *StructClass, *Layout, Item.Seq.Items, Item.Seq.Count);
+            if (!Element)
             {
-                return Verse::VValue();
+                return Element;
             }
-            Elements.Add(Element);
+            Elements.Add(Element.GetValue());
         }
         else if (Tag == VH_VARIANT_PACKED_INT64_ARRAY)
         {
@@ -811,7 +837,7 @@ AUTORTFM_DISABLE Verse::VValue NewArrayValue(Verse::FRunningContext Context,
         {
             if (Item.Type != VH_TYPE_STRING)
             {
-                return Verse::VValue();
+                return EHostFailure::TypeMismatch;
             }
             const FUtf8StringView Utf8(reinterpret_cast<const UTF8CHAR*>(Item.String.Utf8), Item.String.Len);
             // An element's mutability follows its container's, which is not obvious and is load
@@ -830,7 +856,7 @@ AUTORTFM_DISABLE Verse::VValue NewArrayValue(Verse::FRunningContext Context,
         }
         else
         {
-            return Verse::VValue();
+            return EHostFailure::Unconvertible;
         }
     }
 
@@ -848,10 +874,10 @@ AUTORTFM_DISABLE Verse::VValue NewArrayValue(Verse::FRunningContext Context,
     return Verse::VValue(Verse::VArray::New(Context, (uint32)ItemCount, Init));
 }
 
-AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
-                                  const vh_value& Value,
-                                  const FMemberType& Declared,
-                                  Verse::VValue& OutValue)
+AUTORTFM_DISABLE TResult<void> WireToValue(Verse::FRunningContext Context,
+                                           const vh_value& Value,
+                                           const FMemberType& Declared,
+                                           Verse::VValue& OutValue)
 {
     const GodotVerse::FExportDesc& Desc = Declared.Described;
 
@@ -872,10 +898,10 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
             // mistake.
             if (!Declared.bReferenceIsOption)
             {
-                return false;
+                return EHostFailure::NullNotOptional;
             }
             OutValue = ReferenceOption(Context, nullptr);
-            return true;
+            return TResult<void>::Ok();
         }
         // The object the handle *is*, not an instance of the class the signature named (R-SCN-6).
         // A parameter declared `node2d` receiving a node that carries a script is handed that
@@ -884,33 +910,45 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
         // whose object does not meet it is VH_ERR_ARGUMENT rather than a raise.
         UClass* const DeclaredClass = DeclaredReferenceClass(Declared);
         UObject* const Referenced = GodotVerse::ObjectForHandle(Handle, DeclaredClass);
-        if (!Referenced || !DeclaredClass || !Referenced->IsA(DeclaredClass))
+        if (!DeclaredClass)
         {
-            return false;
+            return EHostFailure::NotPublished;
+        }
+        if (!Referenced || !Referenced->IsA(DeclaredClass))
+        {
+            return EHostFailure::TypeMismatch;
         }
         // Wrapped only where the declaration asked for an option. Handing a `?node2d` to a parameter
         // declared `node2d` is what made every method on it unreachable: the script had an option
         // where it had written a node, and the first `.GetName()` died inside the interpreter rather
         // than failing to compile.
         OutValue = Declared.bReferenceIsOption ? ReferenceOption(Context, Referenced) : Verse::VValue(Referenced);
-        return true;
+        return TResult<void>::Ok();
     }
 
     // An enum parameter takes its ordinal, bounded by the enum the author declared rather than
     // clamped into it -- an ordinal with no enumerator is a caller that disagrees with the script
     // about the enum, which is worth reporting rather than silently reinterpreting.
-    const auto EnumeratorFromWire = [&Value, &Declared, &OutValue]() {
-        if (Value.Type != VH_TYPE_INT || Value.Int < 0 || Value.Int >= Declared.EnumeratorCount)
+    const auto EnumeratorFromWire = [&Value, &Declared, &OutValue]() -> TResult<void> {
+        if (Value.Type != VH_TYPE_INT)
         {
-            return false;
+            return EHostFailure::TypeMismatch;
+        }
+        if (Value.Int < 0 || Value.Int >= Declared.EnumeratorCount)
+        {
+            return EHostFailure::EnumOrdinalOutOfRange;
         }
         Verse::VEnumeration* const Enumeration = FindVEnumeration(FUtf8StringView(Declared.EnumerationName));
-        if (!Enumeration || Value.Int >= Enumeration->NumEnumerators)
+        if (!Enumeration)
         {
-            return false;
+            return EHostFailure::NotPublished;
+        }
+        if (Value.Int >= Enumeration->NumEnumerators)
+        {
+            return EHostFailure::EnumOrdinalOutOfRange;
         }
         OutValue = Verse::VValue(Enumeration->GetEnumeratorChecked((int32)Value.Int));
-        return true;
+        return TResult<void>::Ok();
     };
 
     VH_EXHAUSTIVE_SWITCH_BEGIN
@@ -921,7 +959,7 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
     // FNativeConverter, which is what VNI's generated glue calls for a native struct parameter.
     case EDeclaredKind::Variant:
         OutValue = Verse::FNativeConverter::ToVValue(Context, GodotVerse::VariantFromWire(Value));
-        return true;
+        return TResult<void>::Ok();
 
     // A reference wrapper: the id is the whole of the value, and the Verse object exists to hold
     // it and to release it when collected. Built through the UObject path rather than as a VM cell
@@ -929,13 +967,13 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
     case EDeclaredKind::Container:
     {
         const int64 Id = Value.Type == VH_TYPE_REF ? Value.Ref : (Value.Type == VH_TYPE_INT ? Value.Int : 0);
-        UObject* const Wrapper = NewReferenceWrapper(FindReferenceClass(Desc.VariantTag), Id);
+        const TResult<UObject*> Wrapper = NewReferenceWrapper(FindReferenceClass(Desc.VariantTag), Id);
         if (!Wrapper)
         {
-            return false;
+            return Wrapper.GetFailure();
         }
-        OutValue = Verse::VValue(Wrapper);
-        return true;
+        OutValue = Verse::VValue(Wrapper.GetValue());
+        return TResult<void>::Ok();
     }
 
     // The mirror image of ValueToWire's arm: a RID arrives as a plain int under its own variant
@@ -945,15 +983,15 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
     {
         if (Value.Type != VH_TYPE_INT)
         {
-            return false;
+            return EHostFailure::TypeMismatch;
         }
-        const Verse::VValue Built = NewRidValue(Context, Value.Int);
-        if (Built.IsUninitialized())
+        const TResult<Verse::VValue> Built = NewRidValue(Context, Value.Int);
+        if (!Built)
         {
-            return false;
+            return Built.GetFailure();
         }
-        OutValue = Built;
-        return true;
+        OutValue = Built.GetValue();
+        return TResult<void>::Ok();
     }
 
     // A struct the project declares, arriving as one argument per field. The mirrored math types
@@ -969,12 +1007,12 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
         const FUserStructLayout& Layout = *Declared.UserStruct;
         if (Value.Type != VH_TYPE_TUPLE || Value.Seq.Count != Layout.FieldKeys.Num())
         {
-            return false;
+            return EHostFailure::TypeMismatch;
         }
         Verse::VClass* const StructClass = FindVClassByDecoratedName(FUtf8StringView(Layout.DecoratedName));
         if (!StructClass)
         {
-            return false;
+            return EHostFailure::NotPublished;
         }
 
         TArray<Verse::VUniqueString*> Keys;
@@ -997,18 +1035,19 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
         for (int32 Index = 0; Index < Layout.FieldKeys.Num(); ++Index)
         {
             Verse::VValue FieldValue;
-            if (!WireToValue(Context, Value.Seq.Items[Index], Layout.FieldTypes[Index], FieldValue))
+            const TResult<void> Field = WireToValue(Context, Value.Seq.Items[Index], Layout.FieldTypes[Index], FieldValue);
+            if (!Field)
             {
-                return false;
+                return Field;
             }
             if (!Struct.CreateField(Context, *Keys[Index])
                 || !Struct.SetField(Context, *Keys[Index], FieldValue).IsReturn())
             {
-                return false;
+                return EHostFailure::ConstructionFailed;
             }
         }
         OutValue = Verse::VValue(Struct);
-        return true;
+        return TResult<void>::Ok();
     }
 
     case EDeclaredKind::MathStruct:
@@ -1019,17 +1058,21 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
         }
         Verse::VClass* const StructClass =
             FindMirroredVClass(Context, FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Declared.Struct->verse_name)));
-        if (!StructClass || Value.Type != VH_TYPE_TUPLE)
+        if (!StructClass)
         {
-            return false;
+            return EHostFailure::NotPublished;
         }
-        const Verse::VValue Built = NewStructValue(Context, *StructClass, *Declared.Struct, Value.Seq.Items, Value.Seq.Count);
-        if (Built.IsUninitialized())
+        if (Value.Type != VH_TYPE_TUPLE)
         {
-            return false;
+            return EHostFailure::TypeMismatch;
         }
-        OutValue = Built;
-        return true;
+        const TResult<Verse::VValue> Built = NewStructValue(Context, *StructClass, *Declared.Struct, Value.Seq.Items, Value.Seq.Count);
+        if (!Built)
+        {
+            return Built.GetFailure();
+        }
+        OutValue = Built.GetValue();
+        return TResult<void>::Ok();
     }
 
     case EDeclaredKind::Array:
@@ -1044,27 +1087,30 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
         if (Value.Type == VH_TYPE_REF)
         {
             GodotVerse::FHostState& Host = GodotVerse::GetHost();
-            if (!Host.Godot.RefContents
-                || Host.Godot.RefContents(Host.Godot.Ctx, Value.Ref, &ContentsArena, &Contents) != VH_CALL_OK)
+            if (!Host.Godot.RefContents)
             {
-                return false;
+                return EHostFailure::CallbackMissing;
+            }
+            if (Host.Godot.RefContents(Host.Godot.Ctx, Value.Ref, &ContentsArena, &Contents) != VH_CALL_OK)
+            {
+                return EHostFailure::CallbackFailed;
             }
             Source = &Contents;
         }
         if (Source->Type != VH_TYPE_ARRAY)
         {
-            return false;
+            return EHostFailure::TypeMismatch;
         }
         // Immutable: a parameter is a fresh binding the callee cannot assign through, so there is
         // no `var` container to match the way a member write has to.
-        const Verse::VValue Built = NewArrayValue(Context, /*bMutable*/ false, Desc.VariantTag, Desc.ElementVariantTag,
-                                                  Source->Seq.Items, Source->Seq.Count);
-        if (Built.IsUninitialized())
+        const TResult<Verse::VValue> Built = NewArrayValue(Context, /*bMutable*/ false, Desc.VariantTag, Desc.ElementVariantTag,
+                                                           Source->Seq.Items, Source->Seq.Count);
+        if (!Built)
         {
-            return false;
+            return Built.GetFailure();
         }
-        OutValue = Built;
-        return true;
+        OutValue = Built.GetValue();
+        return TResult<void>::Ok();
     }
 
     // An option around an enum is given the enumerator bare, as it always has been.
@@ -1097,7 +1143,7 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
     {
     case VH_TYPE_LOGIC:
         OutValue = Verse::VValue::FromBool(Value.Logic != 0);
-        return true;
+        return TResult<void>::Ok();
     case VH_TYPE_INT:
         // A float parameter handed an int is widened rather than refused: Godot spells 0 as an
         // integer Variant whatever the receiving type, so refusing would make `Process(0)`
@@ -1110,42 +1156,42 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
         {
             OutValue = Verse::VValue(Verse::VInt(Context, Value.Int));
         }
-        return true;
+        return TResult<void>::Ok();
     case VH_TYPE_FLOAT:
         OutValue = Verse::VValue(Verse::VFloat(Value.Float));
-        return true;
+        return TResult<void>::Ok();
     case VH_TYPE_STRING:
         OutValue = Verse::VValue(Verse::VArray::New(
             Context, FUtf8StringView(reinterpret_cast<const UTF8CHAR*>(Value.String.Utf8), Value.String.Len)));
-        return true;
+        return TResult<void>::Ok();
     default:
-        return false;
+        return EHostFailure::Unconvertible;
     }
 }
 
-AUTORTFM_DISABLE bool ReadMathStruct(Verse::FRunningContext Context,
-                                                Verse::VValue Value,
-                                                FFieldStorage& OutStorage,
-                                                vh_value& OutValue)
+AUTORTFM_DISABLE TResult<void> ReadMathStruct(Verse::FRunningContext Context,
+                                              Verse::VValue Value,
+                                              FFieldStorage& OutStorage,
+                                              vh_value& OutValue)
 {
     Verse::VValueObject* const Struct = Value.DynamicCast<Verse::VValueObject>();
     if (!Struct)
     {
-        return false;
+        return EHostFailure::TypeMismatch;
     }
     const FStructLayout* const Layout =
         FindStructLayout(Struct->GetClass().GetBaseName().AsStringView());
     if (!Layout)
     {
-        return false;
+        return EHostFailure::TypeMismatch;
     }
     return ReadStructValue(Context, *Struct, *Layout, OutStorage, OutValue);
 }
 
-AUTORTFM_DISABLE bool ReadSelfDescribingValue(Verse::FRunningContext Context,
-                                                          Verse::VValue Value,
-                                                          FFieldStorage& OutStorage,
-                                                          vh_value& OutValue)
+AUTORTFM_DISABLE TResult<void> ReadSelfDescribingValue(Verse::FRunningContext Context,
+                                                       Verse::VValue Value,
+                                                       FFieldStorage& OutStorage,
+                                                       vh_value& OutValue)
 {
     VH_EXHAUSTIVE_SWITCH_BEGIN
     switch (SelfDescribedKind(Value))
@@ -1154,24 +1200,24 @@ AUTORTFM_DISABLE bool ReadSelfDescribingValue(Verse::FRunningContext Context,
         OutValue.Type = VH_TYPE_INT;
         OutValue.VariantTag = VH_VARIANT_OBJECT;
         OutValue.Int = Cast<verse::vh_object>(Value.ExtractUObject())->Handle.Get();
-        return true;
+        return TResult<void>::Ok();
     case EDeclaredKind::Int:
         OutValue.Type = VH_TYPE_INT;
         OutValue.VariantTag = VH_VARIANT_INT;
         OutValue.Int = Value.AsInt().AsInt64();
-        return true;
+        return TResult<void>::Ok();
     case EDeclaredKind::Float:
         OutValue.Type = VH_TYPE_FLOAT;
         OutValue.VariantTag = VH_VARIANT_FLOAT;
         OutValue.Float = Value.AsFloat().AsDouble();
-        return true;
+        return TResult<void>::Ok();
     case EDeclaredKind::String:
         OutStorage.Text = FUtf8String(Value.DynamicCast<Verse::VArrayBase>()->AsStringView());
         OutValue.Type = VH_TYPE_STRING;
         OutValue.VariantTag = VH_VARIANT_STRING;
         OutValue.String.Utf8 = reinterpret_cast<const char*>(*OutStorage.Text);
         OutValue.String.Len = OutStorage.Text.Len();
-        return true;
+        return TResult<void>::Ok();
     case EDeclaredKind::MathStruct:
         return ReadMathStruct(Context, Value, OutStorage, OutValue);
     // A `rid` is as self-describing as a `vector2` -- it names its own class -- and only its
@@ -1182,7 +1228,7 @@ AUTORTFM_DISABLE bool ReadSelfDescribingValue(Verse::FRunningContext Context,
         OutValue.Type = VH_TYPE_LOGIC;
         OutValue.VariantTag = VH_VARIANT_BOOL;
         OutValue.Logic = Value.AsBool() ? 1 : 0;
-        return true;
+        return TResult<void>::Ok();
     case EDeclaredKind::Other:
     case EDeclaredKind::Char:
     case EDeclaredKind::Enum:
@@ -1195,10 +1241,10 @@ AUTORTFM_DISABLE bool ReadSelfDescribingValue(Verse::FRunningContext Context,
     case EDeclaredKind::Container:
     case EDeclaredKind::TypedContainer:
     case EDeclaredKind::OtherClass:
-        return false;
+        return EHostFailure::Unconvertible;
     }
     VH_EXHAUSTIVE_SWITCH_END
-    return false;
+    return EHostFailure::Unconvertible;
 }
 
 } // namespace GodotVerse

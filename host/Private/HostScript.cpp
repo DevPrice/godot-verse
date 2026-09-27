@@ -2574,7 +2574,7 @@ AUTORTFM_DISABLE bool ReadFieldOf(UObject* Object, FUtf8StringView FieldName, vh
         }
 
         bRead = ValueToWire(Context, Value, DescribeMemberType(DeclaringClass, FieldName),
-                            OutStorage, OutValue);
+                            OutStorage, OutValue).IsOk();
     });
     return bRead;
 }
@@ -3513,8 +3513,18 @@ AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, c
                 Verse::VRef* const Box = Current.DynamicCast<Verse::VRef>();
                 const Verse::VValue Inner = Box ? Box->Get(Context) : Current;
                 Verse::VValueObject* const Struct = Inner.DynamicCast<Verse::VValueObject>();
-                return Struct ? NewStructValue(Context, Struct->GetClass(), *Layout, Value.Seq.Items, Value.Seq.Count)
-                              : Verse::VValue();
+                if (!Struct)
+                {
+                    return Verse::VValue();
+                }
+                const GodotVerse::TResult<Verse::VValue> Built =
+                    NewStructValue(Context, Struct->GetClass(), *Layout, Value.Seq.Items, Value.Seq.Count);
+                if (!Built)
+                {
+                    VH_UNREPORTED("a struct member write built no value; WriteFieldOf answers bool");
+                    return Verse::VValue();
+                }
+                return Built.GetValue();
             });
         }
 
@@ -3523,8 +3533,14 @@ AUTORTFM_DISABLE bool WriteFieldOf(UObject* Object, FUtf8StringView FieldName, c
         return WriteFieldWith(Object, FieldName, Mode, [&Value, Tag, ElementTag](Verse::FRunningContext Context, Verse::VValue Current) {
             Verse::VRef* const Box = Current.DynamicCast<Verse::VRef>();
             const Verse::VValue Inner = Box ? Box->Get(Context) : Current;
-            return NewArrayValue(Context, Inner.IsCellOfType<Verse::VMutableArray>(), Tag, ElementTag,
-                                 Value.Seq.Items, Value.Seq.Count);
+            const GodotVerse::TResult<Verse::VValue> Built = NewArrayValue(
+                Context, Inner.IsCellOfType<Verse::VMutableArray>(), Tag, ElementTag, Value.Seq.Items, Value.Seq.Count);
+            if (!Built)
+            {
+                VH_UNREPORTED("an array member write built no value; WriteFieldOf answers bool");
+                return Verse::VValue();
+            }
+            return Built.GetValue();
         });
     }
 
@@ -5325,7 +5341,7 @@ AUTORTFM_DISABLE bool ArgumentArrayValue(Verse::FRunningContext Context,
         Key.Int = Index;
         Host.Godot.RefSet(Host.Godot.Ctx, Ref, &Key, &Args[Index]);
     }
-    UObject* const Wrapper = NewReferenceWrapper(FindReferenceClass(VH_VARIANT_ARRAY), Ref);
+    const GodotVerse::TResult<UObject*> Wrapper = NewReferenceWrapper(FindReferenceClass(VH_VARIANT_ARRAY), Ref);
     if (!Wrapper)
     {
         if (Host.Godot.ReleaseRef)
@@ -5334,7 +5350,7 @@ AUTORTFM_DISABLE bool ArgumentArrayValue(Verse::FRunningContext Context,
         }
         return false;
     }
-    OutValue = Verse::VValue(Wrapper);
+    OutValue = Verse::VValue(Wrapper.GetValue());
     return true;
 }
 
@@ -5387,7 +5403,7 @@ AUTORTFM_DISABLE bool PayloadValue(Verse::FRunningContext Context,
         Packed.Type = VH_TYPE_TUPLE;
         Packed.Seq.Items = Args;
         Packed.Seq.Count = ArgCount;
-        return WireToValue(Context, Packed, Shape.Whole, OutValue);
+        return WireToValue(Context, Packed, Shape.Whole, OutValue).IsOk();
     }
     }
     return false;

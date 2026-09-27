@@ -1003,7 +1003,7 @@ void VhVariantFromAny(FVerseValue const& Value, TOptional<FGodotValue>& OutValue
     vh_value Wire{};
     const bool bDescribed = AutoRTFM::Open([&] {
         Verse::FRunningContext Context = Verse::FRunningContextPromise{};
-        return GodotVerse::ReadSelfDescribingValue(Context, Value.GetValue(), Storage, Wire);
+        return GodotVerse::ReadSelfDescribingValue(Context, Value.GetValue(), Storage, Wire).IsOk();
     });
     if (!bDescribed)
     {

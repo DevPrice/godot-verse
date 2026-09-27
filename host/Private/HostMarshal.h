@@ -4,6 +4,7 @@
 
 #include "AutoRTFM.h"
 #include "Containers/StringView.h"
+#include "HostResult.h"
 #include "HostScript.h"
 #include "HostTypeModel.h"
 #include "verse_host_abi.h"
@@ -31,11 +32,13 @@ namespace GodotVerse {
 /// name identifies the class on its own, so the package it is found in does not need predicting.
 AUTORTFM_DISABLE Verse::VClass* FindMirroredVClass(Verse::FRunningContext Context, FUtf8StringView ClassName);
 
-AUTORTFM_DISABLE Verse::VValue NewStructValue(Verse::FRunningContext Context,
-                                              Verse::VClass& Class,
-                                              const FStructLayout& Layout,
-                                              const vh_value* Items,
-                                              int32 ItemCount);
+/// A fresh struct value of Class, with Layout's fields taken from Items -- as many as the layout
+/// has components, or TypeMismatch.
+AUTORTFM_DISABLE TResult<Verse::VValue> NewStructValue(Verse::FRunningContext Context,
+                                                       Verse::VClass& Class,
+                                                       const FStructLayout& Layout,
+                                                       const vh_value* Items,
+                                                       int32 ItemCount);
 
 /// Builds a vh_value from a Verse value, given what its declaration says it is.
 ///
@@ -44,14 +47,12 @@ AUTORTFM_DISABLE Verse::VValue NewStructValue(Verse::FRunningContext Context,
 /// empty array carries no element type; and a struct's field order is nowhere in the value. Taking
 /// the description rather than a member name is what lets a method's return value and a member
 /// read share one conversion.
-AUTORTFM_DISABLE bool ValueToWire(Verse::FRunningContext Context,
-                                  Verse::VValue Value,
-                                  const FMemberType& Declared,
-                                  FFieldStorage& OutStorage,
-                                  vh_value& OutValue);
+AUTORTFM_DISABLE TResult<void> ValueToWire(Verse::FRunningContext Context,
+                                           Verse::VValue Value,
+                                           const FMemberType& Declared,
+                                           FFieldStorage& OutStorage,
+                                           vh_value& OutValue);
 
-/// What an optional reference member holds: an option around the object, or Verse's `false` for one
-/// holding nothing.
 /// The Verse class that wraps a reference of this Godot type.
 AUTORTFM_DISABLE UClass* FindReferenceClass(int32 VariantTag);
 
@@ -59,8 +60,10 @@ AUTORTFM_DISABLE UClass* FindReferenceClass(int32 VariantTag);
 ///
 /// A UObject rather than a VM cell: the id has to be released when Verse drops the value, and only
 /// a UObject is told when that happens. godot_ref::BeginDestroy is the other half.
-AUTORTFM_DISABLE UObject* NewReferenceWrapper(UClass* NativeClass, int64 Id);
+AUTORTFM_DISABLE TResult<UObject*> NewReferenceWrapper(UClass* NativeClass, int64 Id);
 
+/// What an optional reference member holds: an option around the object, or Verse's `false` for one
+/// holding nothing.
 AUTORTFM_DISABLE Verse::VValue ReferenceOption(Verse::FRunningContext Context, UObject* Referenced);
 
 /// A Verse array holding Items, built as the Godot container Tag names it.
@@ -70,15 +73,13 @@ AUTORTFM_DISABLE Verse::VValue ReferenceOption(Verse::FRunningContext Context, U
 /// and writing the wrong one leaves storage the interpreter later dies on. The element storage kind
 /// is always VValue -- the narrower EArrayType cases are an optimisation the VM reads back through
 /// GetValue either way, and an empty array in the slot has no kind to copy.
-AUTORTFM_DISABLE Verse::VValue NewArrayValue(Verse::FRunningContext Context,
-                                            bool bMutable,
-                                            int32 Tag,
-                                            int32 ElementTag,
-                                            const vh_value* Items,
-                                            int32 ItemCount);
+AUTORTFM_DISABLE TResult<Verse::VValue> NewArrayValue(Verse::FRunningContext Context,
+                                                      bool bMutable,
+                                                      int32 Tag,
+                                                      int32 ElementTag,
+                                                      const vh_value* Items,
+                                                      int32 ItemCount);
 
-/// Builds the value to write, given the one already in the slot. An uninitialized return means the
-/// value has no representation in this member and nothing is written.
 /// Builds a Verse value of the declared type from the wire.
 ///
 /// The write path for *members* takes the class and the mutability off the value already in the
@@ -87,12 +88,12 @@ AUTORTFM_DISABLE Verse::VValue NewArrayValue(Verse::FRunningContext Context,
 /// ordinal belongs to -- has to come from the declaration. That is the whole difference between
 /// this and WriteFieldOf's builders, and it is why they are not one function.
 ///
-/// Returns false for a wire value the declared type cannot accept, which is VH_ERR_ARGUMENT to the
-/// caller rather than a runtime error: the script is not at fault for how it was called.
-AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
-                                  const vh_value& Value,
-                                  const FMemberType& Declared,
-                                  Verse::VValue& OutValue);
+/// Fails, saying why, for a wire value the declared type cannot accept, which is VH_ERR_ARGUMENT to
+/// the caller rather than a runtime error: the script is not at fault for how it was called.
+AUTORTFM_DISABLE TResult<void> WireToValue(Verse::FRunningContext Context,
+                                           const vh_value& Value,
+                                           const FMemberType& Declared,
+                                           Verse::VValue& OutValue);
 
 /// Builds a wire value from a Verse value that is one of the mirrored math structs -- `vector2`,
 /// `color`, `transform3d` -- identified from the value alone rather than from a declaration.
@@ -103,17 +104,17 @@ AUTORTFM_DISABLE bool WireToValue(Verse::FRunningContext Context,
 /// value names its own class: `VNamedType::GetBaseName()` is the key the generated layout table is
 /// keyed by.
 ///
-/// False for anything that is not one of them -- including a class of the author's that happens to
+/// Fails for anything that is not one of them -- including a class of the author's that happens to
 /// share a name, because the fields are read by their *decorated* keys
 /// (`(/Godot.org/Godot/vector2:)X`) and a namesake has none of them.
-AUTORTFM_DISABLE bool ReadMathStruct(Verse::FRunningContext Context,
-                                     Verse::VValue Value,
-                                     FFieldStorage& OutStorage,
-                                     vh_value& OutValue);
+AUTORTFM_DISABLE TResult<void> ReadMathStruct(Verse::FRunningContext Context,
+                                              Verse::VValue Value,
+                                              FFieldStorage& OutStorage,
+                                              vh_value& OutValue);
 
 /// Builds a wire value from *any* Verse value that identifies itself, which is ReadMathStruct's
 /// question asked of every type rather than only of the math structs: an int, a float, a logic, a
-/// string, a Godot object and the 16 math structs. False for everything else.
+/// string, a Godot object and the 16 math structs. Unconvertible for everything else.
 ///
 /// Two callers, and they want it for the same reason from opposite directions. The debugger has a
 /// register and no declaration. `Variant(Value:any)` has an argument whose declared type is `any`,
@@ -127,9 +128,9 @@ AUTORTFM_DISABLE bool ReadMathStruct(Verse::FRunningContext Context,
 /// an empty array cannot say what it holds, a `false` cannot say whether it is a logic or an empty
 /// option, and a `[]int` cannot say which of Godot's three integer packings was meant. Those are
 /// the lanes that keep a named builder.
-AUTORTFM_DISABLE bool ReadSelfDescribingValue(Verse::FRunningContext Context,
-                                              Verse::VValue Value,
-                                              FFieldStorage& OutStorage,
-                                              vh_value& OutValue);
+AUTORTFM_DISABLE TResult<void> ReadSelfDescribingValue(Verse::FRunningContext Context,
+                                                       Verse::VValue Value,
+                                                       FFieldStorage& OutStorage,
+                                                       vh_value& OutValue);
 
 } // namespace GodotVerse
