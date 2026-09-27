@@ -32,7 +32,7 @@ HOST_PRIVATE = REPO / "host" / "Private"
 # File -> (how many NewObject calls it may make, why). A construction of anything that is not a
 # vh_object belongs here with its reason; a construction of a vh_object belongs in NewHostObject.
 ALLOWED: dict[str, tuple[int, str]] = {
-    "HostScript.cpp": (2, "NewHostObject itself: one NewObject under each of its two scopes"),
+    "HostPeers.cpp": (2, "NewHostObject itself: one NewObject under each of its two scopes"),
     "HostMarshal.cpp": (1, "NewReferenceWrapper builds a godot_ref, which is not a vh_object and has no peer"),
 }
 

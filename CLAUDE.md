@@ -339,9 +339,18 @@ the VM keys by, each a function a caller cannot go around; `HostSignals` is sign
 binding, emitting, subscribing and the waits -- with the public half still declared in
 `HostScript.h`; `HostCallbacks` is the registry of Callables handed to Godot, the one table touched
 off the game thread, reachable only under its lock (`FLockedCallbacks`, which `check`s it);
+`HostInstances` is instance dispatch -- `Instantiate` and `ReleaseInstance`, `InstanceCall`,
+`InstanceToString`, the member reads and writes, the declared-default reader, and the Callables
+that name a script method -- with `EnterVerseOn`, the one entry that pushes an instance's own task
+scope; `HostPeers` is R-NODE-3's peer and identity half -- `NewHostObject`, the one host-side
+construction of a `vh_object`, `AdoptOrMintPeer` and `ReleaseMintedPeer`, `ObjectForHandle` and
+the handle-to-class caches -- split from `HostInstances` because the natives reach it for objects
+that are not script instances at all, and a collected object's `BeginDestroy` reaches it with no
+instance in sight; the public halves of both are declared in `HostScript.h`;
 `HostVerseEntry.h` is the one `EnterVerse`; `HostScriptState.h` is the accessors the split-out
 units read HostScript.cpp's state through (`CurrentSemanticProgram`, `DescribeMemberType`,
-`RecordedSignalShapes`, `PeekFieldObject`, `DescribeBoundFunction` and the class finders);
+`RecordedSignalShapes`, `RecordedMethodTypes`, `ContentScopeOuter`, the binding roster and the
+class finders);
 `HostDebug` is the `Verse::FDebugger` and the profiler's accumulators, and nothing else in the host
 knows either exists; `HostFatal` records a fatal error before the process ends; `GodotBindings`
 and `GodotClasses` are the native Verse surface. The cooked

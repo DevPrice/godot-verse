@@ -3,6 +3,7 @@
 #pragma once
 
 #include "AutoRTFM.h"
+#include "Containers/Array.h"
 #include "Containers/StringView.h"
 #include "Containers/UnrealString.h"
 #include "Containers/Utf8String.h"
@@ -11,18 +12,15 @@
 class UClass;
 class UObject;
 
-namespace Verse {
-struct VFunction;
-}
-
 namespace uLang {
 class CClass;
 class CSemanticProgram;
 }
 
 /// What HostScript.cpp owns and the units split out of it read: the IDE's semantic program, the
-/// project's source snippets, the trace switch and the published generation's classes. Each is a
-/// function rather than an extern global, so a unit cannot write what it only has reason to read.
+/// project's source snippets, the trace switch, the published generation's classes, the recorded
+/// declared types, the content scopes' outer and the binding roster. Each is a function rather than
+/// an extern global, so a unit cannot write what it only has reason to read.
 namespace GodotVerse {
 
 /// The semantic program the IDE currently holds, or null before the IDE exists or once it is
@@ -59,18 +57,31 @@ AUTORTFM_DISABLE FMemberType DescribeMemberType(FUtf8StringView ClassName, FUtf8
 /// null for a class with no recorded tables. What a runtime host has instead of a program.
 AUTORTFM_DISABLE const TMap<FUtf8String, FPayloadShape>* RecordedSignalShapes(FUtf8StringView ClassName);
 
-/// The UObject a class-typed member holds, or null.
-///
-/// The read half of WriteFieldOf, narrowed to the one case signal binding needs: a `signal`
-/// member's own object, so the host can write the id into it.
-AUTORTFM_DISABLE UObject* PeekFieldObject(UObject* Object, FUtf8StringView FieldName);
+/// The rooted outer every content scope instantiates into, or null before EnterContentScope.
+AUTORTFM_DISABLE const UObject* ContentScopeOuter();
 
-/// The decorated name of a bound Verse method, found by asking the object for each method its
-/// class declares and comparing the function that comes back.
+/// The parameter and result types the analysis recorded for one method of a script class: out of
+/// the snapshot in an editor host and out of the cook's table in a runtime host. False for a method
+/// with no recorded signature.
 ///
-/// There is no reading the semantic program's spelling back off a VFunction -- the bytecode has
-/// erased it -- so the comparison is the lookup, which is the same thing InstanceHasFunction does
-/// to tell an override from an inherited body. Once per Subscribe, never per emission.
-AUTORTFM_DISABLE bool DescribeBoundFunction(Verse::VFunction* Function, int64& OutHandle, FUtf8String& OutDecorated);
+/// What the author declared, which the live program stops being once IR generation has run -- see
+/// InstanceCall.
+AUTORTFM_DISABLE bool RecordedMethodTypes(FUtf8StringView ClassName,
+                                          FUtf8StringView DecoratedName,
+                                          TArray<FMemberType>& OutParams,
+                                          FMemberType& OutResult);
+
+/// The bindings package's class for a script's global class name, or for a ClassDB class name, or
+/// null where no binding stands for it. Held for as long as the roster is.
+AUTORTFM_DISABLE const FUtf8String* BindingForScriptClass(FUtf8StringView ScriptClass);
+AUTORTFM_DISABLE const FUtf8String* BindingForGodotClass(FUtf8StringView GodotClass);
+
+/// Whether any binding stands for a script class, which is what makes asking Godot for an object's
+/// script worth a callback.
+AUTORTFM_DISABLE bool HasScriptClassBindings();
+
+/// The name InstantiateClass is handed to mint a binding class's peer, or null. Held for as long
+/// as the roster is.
+AUTORTFM_DISABLE const FUtf8String* MintNameForBinding(FUtf8StringView VerseClass);
 
 } // namespace GodotVerse

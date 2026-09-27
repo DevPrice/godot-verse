@@ -4,6 +4,7 @@
 
 #include "GodotClasses.h"
 #include "HostCallbacks.h"
+#include "HostInstances.h"
 #include "HostMarshal.h"
 #include "HostRuntime.h"
 #include "HostScript.h"
