@@ -1,0 +1,9 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(probe_main): 0
+[probe] 0 signal(s)
+[probe] 2 method(s)
+[probe]   Take  params=1 result=0  virtual=
+[probe]   Run  params=1 result=0  virtual=
+[probe] :0:0: error 0: Could not instantiate probe_main: no such class deriving from object at /user@localhost
+[probe] vh_instantiate(probe_main) failed
+[probe_contract] exit code: 0

@@ -1,0 +1,11 @@
+[probe] <repo>\tests\verse_probe\vm_natives_reach_reject.verse:2:9: error 3587: The identifier 'Colors' in /Verse.org does not refer to a logical scope. Possible segments are Verse, Native, Temporary, Persona, Concurrency, Diagnostics, Predicts, Random, Simulation, SpatialMath
+[probe] <repo>\tests\verse_probe\vm_natives_reach_reject.verse:16:8: error 3506: Unknown identifier `NamedColors`.
+Used inside function /user@localhost/vm_natives_reach_reject/C01.
+
+[probe] <repo>\tests\verse_probe\vm_natives_reach_reject.verse:17:8: error 3506: Unknown identifier `MakeColorFromHex`.
+Used inside function /user@localhost/vm_natives_reach_reject/C01.
+
+[probe] <repo>\tests\verse_probe\vm_natives_reach_reject.verse:21:8: error 3509: This function parameter expects a value of type []char, but this argument is an incompatible value of type tuple([]char,?Duration:type{1.000000}).
+[probe] <repo>\tests\verse_probe\vm_natives_reach_reject.verse:26:8: error 3588: Identifier vector3 could be one of many types: (/Godot.org/Godot:)vector3 or (/Verse.org/SpatialMath:)vector3
+[probe] compile: status 4, generation <gen>, 5 error(s)
+[probe_contract] exit code: 1

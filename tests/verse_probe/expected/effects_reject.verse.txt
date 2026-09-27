@@ -1,0 +1,19 @@
+[probe] <repo>\tests\verse_probe\effects_reject.verse:28:2: error 3671: `Score`'s accessors contain the following errors:
+
+Incorrect definitions:
+	ScoreGetter(:accessor)<reads>:int
+		- needs the <transacts> effect
+		- the signature of this accessor should be: ScoreGetter(:accessor)<transacts>:int
+
+[probe] <repo>\tests\verse_probe\effects_reject.verse:32:2: error 3671: `Where`'s accessors contain the following errors:
+
+Incorrect definitions:
+	WhereGetter(:accessor)<reads>:vector2
+		- needs the <transacts> effect
+		- the signature of this accessor should be: WhereGetter(:accessor)<transacts>:vector2
+	WhereGetter(:accessor,:[]char)<reads>:float
+		- needs the <transacts> effect
+		- the signature of this accessor should be: WhereGetter(:accessor,:[]char)<transacts>:float
+
+[probe] compile: status 4, generation <gen>, 2 error(s)
+[probe_contract] exit code: 1

@@ -1,0 +1,356 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(vm_tasks_probe): 1
+[probe] 0 signal(s)
+[probe] 79 method(s)
+[probe]   Arm  params=2 result=2 <suspends>  virtual=
+[probe]   Imm  params=2 result=2 <suspends>  virtual=
+[probe]   ABody  params=0 result=0 <suspends>  virtual=
+[probe]   AImmBody  params=0 result=0 <suspends>  virtual=
+[probe]   A1_Spawn  params=0 result=0  virtual=
+[probe]   A2_SpawnImmediate  params=0 result=0  virtual=
+[probe]   A3_Signal  params=0 result=0  virtual=
+[probe]   B1Driver  params=0 result=0 <suspends>  virtual=
+[probe]   B1_FirstArmImmediate  params=0 result=0  virtual=
+[probe]   B2Driver  params=0 result=0 <suspends>  virtual=
+[probe]   B2_SecondArmImmediate  params=0 result=0  virtual=
+[probe]   B3Driver  params=0 result=0 <suspends>  virtual=
+[probe]   B3_Start  params=0 result=0  virtual=
+[probe]   B3_SignalMiddle  params=0 result=0  virtual=
+[probe]   B4Fn  params=0 result=2 <suspends>  virtual=
+[probe]   B4Driver  params=0 result=0 <suspends>  virtual=
+[probe]   B4_ReturnFromArm  params=0 result=0  virtual=
+[probe]   B4_Signal  params=0 result=0  virtual=
+[probe]   NDriver  params=0 result=0 <suspends>  virtual=
+[probe]   N1_Start  params=0 result=0  virtual=
+[probe]   N2_SignalS1  params=0 result=0  virtual=
+[probe]   N3_SignalS2  params=0 result=0  virtual=
+[probe]   CDriver  params=0 result=0 <suspends>  virtual=
+[probe]   C1_Start  params=0 result=0  virtual=
+[probe]   C2_Signal  params=0 result=0  virtual=
+[probe]   C3Driver  params=0 result=0 <suspends>  virtual=
+[probe]   C3_TwoOnOneEvent  params=0 result=0  virtual=
+[probe]   C4_Signal  params=0 result=0  virtual=
+[probe]   DDriver  params=0 result=0 <suspends>  virtual=
+[probe]   D1_Start  params=0 result=0  virtual=
+[probe]   D2_SignalArm1  params=0 result=0  virtual=
+[probe]   D3_SignalArm2  params=0 result=0  virtual=
+[probe]   D4_Release  params=0 result=0  virtual=
+[probe]   DEDriver  params=0 result=0 <suspends>  virtual=
+[probe]   D5_RushThenEnd  params=0 result=0  virtual=
+[probe]   EDriver  params=0 result=0 <suspends>  virtual=
+[probe]   E1_Start  params=0 result=0  virtual=
+[probe]   E2_SignalBranch  params=0 result=0  virtual=
+[probe]   E3_SignalDriver  params=0 result=0  virtual=
+[probe]   ECDriver  params=0 result=0 <suspends>  virtual=
+[probe]   E4_BranchOutlived  params=0 result=0  virtual=
+[probe]   E5_EndDriverFirst  params=0 result=0  virtual=
+[probe]   GBody  params=0 result=0 <suspends>  virtual=
+[probe]   G1_NormalDefers  params=0 result=0  virtual=
+[probe]   FInner  params=0 result=0 <suspends>  virtual=
+[probe]   FOuter  params=0 result=0 <suspends>  virtual=
+[probe]   F1_Start  params=0 result=0  virtual=
+[probe]   FCanceller  params=0 result=0 <suspends>  virtual=
+[probe]   F2_Cancel  params=0 result=0  virtual=
+[probe]   FAwaiter  params=0 result=0 <suspends>  virtual=
+[probe]   F3_AwaitCanceled  params=0 result=0  virtual=
+[probe]   F4_SignalAfterCancel  params=0 result=0  virtual=
+[probe]   TBody  params=0 result=2 <suspends>  virtual=
+[probe]   TWaiter  params=1 result=0 <suspends>  virtual=
+[probe]   T1_Start  params=0 result=0  virtual=
+[probe]   T2_Signal  params=0 result=0  virtual=
+[probe]   T3_AwaitCompleted  params=0 result=0  virtual=
+[probe]   TCancelDone  params=0 result=0 <suspends>  virtual=
+[probe]   T4_CancelCompleted  params=0 result=0  virtual=
+[probe]   HParent  params=0 result=0 <suspends>  virtual=
+[probe]   H1_Start  params=0 result=0  virtual=
+[probe]   H2_Signal  params=0 result=0  virtual=
+[probe]   QParent  params=0 result=0 <suspends>  virtual=
+[probe]   Q1_Start  params=0 result=0  virtual=
+[probe]   QCanceller  params=1 result=0 <suspends>  virtual=
+[probe]   Q2_Cancel  params=0 result=0  virtual=
+[probe]   SSleeper  params=0 result=0 <suspends>  virtual=
+[probe]   SCanceller  params=0 result=0 <suspends>  virtual=
+[probe]   S1_SleepThenCancel  params=0 result=0  virtual=
+[probe]   SNegative  params=0 result=0 <suspends>  virtual=
+[probe]   S2_NegativeSleep  params=0 result=0  virtual=
+[probe]   RSleeper  params=0 result=0 <suspends>  virtual=
+[probe]   R1_Start  params=0 result=0  virtual=
+[probe]   R2_Raise  params=0 result=0  virtual=
+[probe]   R3_Signal  params=0 result=0  virtual=
+[probe]   RRaiser  params=0 result=0 <suspends>  virtual=
+[probe]   R4_Start  params=0 result=0  virtual=
+[probe]   R5_Signal  params=0 result=0  virtual=
+[probe]   Z_Done  params=0 result=0  virtual=
+A1 before spawn
+  A body start
+A1 after spawn
+[probe] call A1_Spawn: status 0, void
+A2 before spawn
+  A2 body runs to end
+A2 after spawn
+[probe] call A2_SpawnImmediate: status 0, void
+A3 before signal
+  A body resumed
+A3 after signal
+[probe] call A3_Signal: status 0, void
+B1 start
+  b1-arm1 runs to end
+  b1-arm1 defer
+  B1 race result 10
+B1 after spawn
+[probe] call B1_FirstArmImmediate: status 0, void
+B2 start
+  b2-arm1 start
+  b2-arm2 runs to end
+  b2-arm2 defer
+  b2-arm1 defer
+  B2 race result 20
+B2 after spawn
+[probe] call B2_SecondArmImmediate: status 0, void
+B3 start
+  b3-arm1 start
+  b3-arm2 start
+  b3-arm3 start
+B3 after spawn
+[probe] call B3_Start: status 0, void
+B3 signal arm2
+  b3-arm2 end
+  b3-arm2 defer
+  b3-arm3 defer
+  b3-arm1 defer
+  B3 race result 32
+B3 signal returned
+[probe] call B3_SignalMiddle: status 0, void
+B4 start
+  b4-arm1 start
+  b4-arm2 start
+B4 after spawn
+[probe] call B4_ReturnFromArm: status 0, void
+B4 signal arm1
+  b4-arm1 returns 7 from the function
+  b4-arm1 defer
+  b4-arm2 defer
+  B4 fn defer
+  B4 fn returned 7
+B4 signal returned
+[probe] call B4_Signal: status 0, void
+N1 start
+  N begin
+  n-r1 begin
+  n-s1 start
+  n-s2 start
+  n-r2 begin
+  n-r2 start
+N1 after spawn
+[probe] call N1_Start: status 0, void
+N2 signal s1
+  n-s1 end
+  n-s1 defer
+N2 signal returned
+[probe] call N2_SignalS1: status 0, void
+N3 signal s2
+  n-s2 end
+  n-s2 defer
+  n-r1 sync done 1 2
+  n-r2 defer
+  N end 3
+N3 signal returned
+[probe] call N3_SignalS2: status 0, void
+C1 start
+  c-arm1 runs to end
+  c-arm1 defer
+  c-arm2 start
+  c-arm3 runs to end
+  c-arm3 defer
+C1 after spawn
+[probe] call C1_Start: status 0, void
+C2 signal
+  c-arm2 end
+  c-arm2 defer
+  C result 1 2 3
+C2 signal returned
+[probe] call C2_Signal: status 0, void
+C3 start
+  c3-arm1 start
+  c3-arm2 start
+C3 after spawn
+[probe] call C3_TwoOnOneEvent: status 0, void
+C4 signal
+  c3-arm1 end
+  c3-arm1 defer
+  c3-arm2 end
+  c3-arm2 defer
+  C3 result 4 4
+C4 signal returned
+[probe] call C4_Signal: status 0, void
+D1 start
+  d-arm1 start
+  d-arm2 start
+D1 after spawn
+[probe] call D1_Start: status 0, void
+D2 signal arm1
+  d-arm1 end
+  d-arm1 defer
+  D rush result 41
+D2 signal returned
+[probe] call D2_SignalArm1: status 0, void
+D3 signal arm2
+  d-arm2 end
+  d-arm2 defer
+D3 signal returned
+[probe] call D3_SignalArm2: status 0, void
+D4 release driver
+  D driver end
+D4 signal returned
+[probe] call D4_Release: status 0, void
+D5 start
+  de-arm1 runs to end
+  de-arm1 defer
+  de-arm2 start
+  de-arm3 start
+  DE rush result 1
+  de-arm3 defer
+  de-arm2 defer
+D5 after spawn
+[probe] call D5_RushThenEnd: status 0, void
+E1 start
+  E begin
+  e-branch start
+  E after branch
+E1 after spawn
+[probe] call E1_Start: status 0, void
+E2 signal branch
+  e-branch end
+  e-branch defer
+E2 signal returned
+[probe] call E2_SignalBranch: status 0, void
+E3 signal driver
+  E driver end
+E3 signal returned
+[probe] call E3_SignalDriver: status 0, void
+E4 start
+  ec-branch start
+  EC after branch
+E4 after spawn
+[probe] call E4_BranchOutlived: status 0, void
+E5 signal driver
+  EC driver end
+  ec-branch defer
+E5 signal returned
+[probe] call E5_EndDriverFirst: status 0, void
+G1 start
+  g in block
+  g inner-block defer
+  g body end
+  g d2
+  g d1
+G1 after spawn
+[probe] call G1_NormalDefers: status 0, void
+F1 start
+  f inner waiting
+F1 after spawn
+[probe] call F1_Start: status 0, void
+F2 start
+  f cancel begin
+  f inner defer 2
+  f inner defer 1
+  f outer defer
+  f cancel returned
+  f task reads Canceled
+  f task reads Settled
+F2 after spawn
+[probe] call F2_Cancel: status 0, void
+F3 start
+  f awaiting a canceled task
+F3 after spawn
+[probe] call F3_AwaitCanceled: status 0, void
+F4 signal the canceled task's event
+F4 signal returned
+[probe] call F4_SignalAfterCancel: status 0, void
+T1 start
+  t body waiting
+  t w1 awaiting
+  t w2 awaiting
+T1 end
+[probe] call T1_Start: status 0, void
+T2 signal
+  t body end
+  t w1 got 6
+  t w2 got 6
+T2 signal returned
+[probe] call T2_Signal: status 0, void
+T3 start
+  t w3 awaiting
+  t w3 got 6
+T3 end
+[probe] call T3_AwaitCompleted: status 0, void
+T4 start
+  t cancel of a completed task returned
+  t still Completed
+T4 end
+[probe] call T4_CancelCompleted: status 0, void
+H1 start
+H1 after spawn
+[probe] call H1_Start: status 0, void
+H2 signal
+  h parent resumed
+  h child cancels parent
+  h parent continues after branch
+  h child defer
+  h parent defer
+H2 signal returned
+[probe] call H2_Signal: status 0, void
+Q1 start
+  q-kid1 start
+  q-kid2 start
+  q-kid3 start
+Q1 after spawn
+[probe] call Q1_Start: status 0, void
+Q2 start
+  q c1 cancels
+  q-kid3 defer
+  q-kid2 defer
+  q-kid1 defer
+  q parent defer
+  q c1 cancel returned
+  q c2 cancels
+  q c2 cancel returned
+Q2 end
+[probe] call Q2_Cancel: status 0, void
+S1 start
+  s sleeping
+  s sleeper defer
+  s cancel returned
+S1 end
+[probe] call S1_SleepThenCancel: status 0, void
+S2 start
+  s2 before Sleep(-1.0)
+  s2 after Sleep(-1.0)
+S2 end
+[probe] call S2_NegativeSleep: status 0, void
+R1 start
+  r sleeper waiting
+R1 end
+[probe] call R1_Start: status 0, void
+[probe] :0:0: info 0: This script instance's suspended work was cancelled by the runtime error above. Other instances are unaffected (R-ASYNC-4).
+[probe] runtime error: ErrorRequested: A runtime error was explicitly raised from user code. (User Message: 'probe raise')
+[probe]   (/Verse.org/Verse:)Err(:[]char)  [native]:0
+[probe]   (/user@localhost/vm_tasks_probe:)R2_Raise  <repo>\tests\verse_probe\vm_tasks_probe.verse:551
+[probe] call R2_Raise: status 6, void
+R3 signal
+R3 signal returned
+[probe] call R3_Signal: status 0, void
+R4 start
+R4 end
+[probe] call R4_Start: status 0, void
+[probe] :0:0: info 0: This script instance's suspended work was cancelled by the runtime error above. Other instances are unaffected (R-ASYNC-4).
+[probe] runtime error: ErrorRequested: A runtime error was explicitly raised from user code. (User Message: 'raise in a resumed awaiter')
+[probe]   (/Verse.org/Verse:)Err(:[]char)  [native]:0
+[probe]   RRaiser  <repo>\tests\verse_probe\vm_tasks_probe.verse:563
+[probe]   (/user@localhost/vm_tasks_probe:)R4_Start  <repo>\tests\verse_probe\vm_tasks_probe.verse:567
+[probe]   (/Verse.org/Verse/signalable:)Signal(:payload)  [native]:0
+[probe]   (/user@localhost/vm_tasks_probe:)R5_Signal  <repo>\tests\verse_probe\vm_tasks_probe.verse:572
+[probe] call R5_Signal: status 6, void
+Z done
+[probe] call Z_Done: status 0, void
+[probe_contract] exit code: 0

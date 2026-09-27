@@ -1,0 +1,153 @@
+[probe] <repo>\tests\verse_probe\vm_tasks_probe2.verse:51:8: warning 2000: Unreachable code - previous expression is guaranteed to exit early.
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(vm_tasks_probe2): 1
+[probe] 0 signal(s)
+[probe] 37 method(s)
+[probe]   Arm  params=2 result=2 <suspends>  virtual=
+[probe]   SyncReturnFn  params=0 result=2 <suspends>  virtual=
+[probe]   SyncReturnDriver  params=0 result=0 <suspends>  virtual=
+[probe]   A1_SyncReturn  params=0 result=0  virtual=
+[probe]   A2_Signal  params=0 result=0  virtual=
+[probe]   RushReturnFn  params=0 result=2 <suspends>  virtual=
+[probe]   RushReturnDriver  params=0 result=0 <suspends>  virtual=
+[probe]   B1_RushReturn  params=0 result=0  virtual=
+[probe]   B2_Signal  params=0 result=0  virtual=
+[probe]   B3_SignalLoser  params=0 result=0  virtual=
+[probe]   SpawnedKid  params=0 result=0 <suspends>  virtual=
+[probe]   XDriver  params=0 result=0 <suspends>  virtual=
+[probe]   C1_SpawnInArm  params=0 result=0  virtual=
+[probe]   C2_Signal  params=0 result=0  virtual=
+[probe]   C3_SignalKid  params=0 result=0  virtual=
+[probe]   Reawaiter  params=1 result=0 <suspends>  virtual=
+[probe]   D1_Start  params=0 result=0  virtual=
+[probe]   D2_SignalOnce  params=0 result=0  virtual=
+[probe]   Nester  params=0 result=0 <suspends>  virtual=
+[probe]   Plain  params=1 result=0 <suspends>  virtual=
+[probe]   D3_Nested  params=0 result=0  virtual=
+[probe]   D4_Late  params=0 result=0  virtual=
+[probe]   CancelsW2  params=0 result=0 <suspends>  virtual=
+[probe]   D5_CancelDuringSignal  params=0 result=0  virtual=
+[probe]   NarrowBody  params=0 result=0 <suspends>  virtual=
+[probe]   E1_SpawnInFailingIf  params=0 result=0  virtual=
+[probe]   Awaiter  params=0 result=0 <suspends>  virtual=
+[probe]   F1_AwaitStart  params=0 result=0  virtual=
+[probe]   F2_Set1  params=0 result=0  virtual=
+[probe]   F3_Set3  params=0 result=0  virtual=
+[probe]   Awaiter2  params=0 result=0 <suspends>  virtual=
+[probe]   F4_BatchStart  params=0 result=0  virtual=
+[probe]   F5_Batch  params=0 result=0  virtual=
+[probe]   Awaiter3  params=0 result=0 <suspends>  virtual=
+[probe]   F6_AwaitTrueAtStart  params=0 result=0  virtual=
+[probe]   F7_SetSame  params=0 result=0  virtual=
+[probe]   Z_Done  params=0 result=0  virtual=
+A1 start
+  sr-arm1 start
+  sr-arm2 start
+A1 after spawn
+[probe] call A1_SyncReturn: status 0, void
+A2 signal arm1
+  sr-arm1 returns 5
+  sr-arm1 defer
+  sr-arm2 defer
+  sr fn defer
+  sr returned 5
+A2 signal returned
+[probe] call A2_Signal: status 0, void
+B1 start
+  rr-arm1 start
+  rr-arm2 start
+B1 after spawn
+[probe] call B1_RushReturn: status 0, void
+B2 signal arm1
+  rr-arm1 returns 6
+  rr fn defer
+  rr returned 6
+B2 signal returned
+[probe] call B2_Signal: status 0, void
+B3 signal arm2
+  rr-arm2 end
+  rr-arm2 defer
+B3 signal returned
+[probe] call B3_SignalLoser: status 0, void
+C1 start
+  x spawned kid waiting
+  x-arm2 start
+C1 after spawn
+[probe] call C1_SpawnInArm: status 0, void
+C2 signal race
+  x arm1 end
+  x-arm2 defer
+  x race done
+C2 signal returned
+[probe] call C2_Signal: status 0, void
+C3 signal kid
+  x spawned kid end
+  x spawned kid defer
+C3 signal returned
+[probe] call C3_SignalKid: status 0, void
+D1 start
+D1 end
+[probe] call D1_Start: status 0, void
+D2 signal 1
+  k1 got 1
+  k2 got 1
+D2 signal 1 returned
+[probe] call D2_SignalOnce: status 0, void
+D3 start
+D3 signal
+  n1 got 1, signalling again
+  n1 nested signal returned
+  n2 got 1
+  n3 got 1
+D3 signal returned
+[probe] call D3_Nested: status 0, void
+D4 signal
+D4 signal returned
+[probe] call D4_Late: status 0, void
+D5 start
+  c2 start
+  c3 start
+D5 signal
+  c1 got 9, cancelling c2
+  c2 defer
+  c1 cancel returned
+  c3 end
+  c3 defer
+D5 signal returned
+[probe] call D5_CancelDuringSignal: status 0, void
+E1 start
+  e1 else, FailSpawned = 0
+  e1 succeeding if, FailSpawned = 1
+E1 end
+[probe] call E1_SpawnInFailingIf: status 0, void
+F1 start
+  aw start, Counter = 0
+F1 end
+[probe] call F1_AwaitStart: status 0, void
+F2 set 1
+F2 end
+[probe] call F2_Set1: status 0, void
+F3 set 3
+  aw resumed, Counter = 3
+F3 end
+[probe] call F3_Set3: status 0, void
+F4 start
+  aw2 start
+F4 end
+[probe] call F4_BatchStart: status 0, void
+F5 batch
+  f5 inside batch after set
+  aw2 resumed, Counter = 12
+F5 end
+[probe] call F5_Batch: status 0, void
+F6 start
+  aw3 start, Counter = 12
+F6 end
+[probe] call F6_AwaitTrueAtStart: status 0, void
+F7 set to the same value
+  aw3 resumed, Counter = 12
+F7 end
+[probe] call F7_SetSame: status 0, void
+Z done
+[probe] call Z_Done: status 0, void
+[probe_contract] exit code: 0

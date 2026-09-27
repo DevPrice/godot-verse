@@ -1,0 +1,4 @@
+[probe] <repo>\tests\verse_probe\signal_shadow_probe.verse:34:2: error 3593: definition Hidden cannot override an inaccessible parent definition
+[probe] <repo>\tests\verse_probe\signal_shadow_probe.verse:34:2: error 3532: Instance data member `(/user@localhost/signal_shadow_probe:)Hidden` is already defined in `signal_shadow_base`, did you mean to add the <override> specifier?
+[probe] compile: status 4, generation <gen>, 2 error(s)
+[probe_contract] exit code: 1

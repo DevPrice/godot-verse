@@ -1,0 +1,10 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(event_probe): 1
+[probe] 0 signal(s)
+[probe] 3 method(s)
+[probe]   AwaitInt  params=0 result=2 <suspends>  virtual=
+[probe]   SignalFromDefault  params=0 result=0  virtual=
+[probe]   Answer  params=0 result=0  virtual=
+[probe] call SignalFromDefault: status 0, void
+[probe] call Answer: status 0, void
+[probe_contract] exit code: 0

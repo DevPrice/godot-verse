@@ -1,0 +1,93 @@
+[probe] <repo>\tests\verse_probe\vm_values_reject.verse:15:9: error 3509: No overload of the function `operator'+'` matches the provided arguments (:type{1},:type{1.000000}). Could be any of:
+    function (/Godot.org/Godot:)operator'+'(:vector2,:vector2) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'+'(:vector2i,:vector2i) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'+'(:vector3,:vector3) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'+'(:vector3i,:vector3i) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'+'(:vector4,:vector4) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'+'(:vector4i,:vector4i) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'+'(:color,:color) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'+'(:quaternion,:quaternion) in package Engine/VerseHost
+    function (/Verse.org/Verse:)operator'+'(:int,:int) in package $BuiltIn
+    function (/Verse.org/Verse:)operator'+'(:float,:float) in package $BuiltIn
+    function (/Verse.org/Verse:)operator'+'(:[]t,:[]t) in package $BuiltIn
+    function (/Verse.org/Verse:)operator'+'(:classifiable_subset(t),:classifiable_subset(t)) in package Verse/Verse
+    function (/Verse.org/Verse:)operator'+'(:classifiable_subset_var(t),:classifiable_subset_var(t)) in package Verse/Verse
+    function (/Verse.org/Verse:)operator'+'(:diagnostic,:diagnostic) in package Verse/Verse
+    function (/Verse.org/Verse:)operator'+'(:diagnostic,:[]char) in package Verse/Verse
+    function (/Verse.org/Verse:)operator'+'(:[]char,:diagnostic) in package Verse/Verse
+[probe] <repo>\tests\verse_probe\vm_values_reject.verse:15:9: error 3509: (Also tried with extension function arguments (:vm_values_reject,:tuple(type{1},type{1.000000})))
+[probe] <repo>\tests\verse_probe\vm_values_reject.verse:18:11: error 3509: No overload of the function `operator'-'` matches the provided arguments (:type{1.000000},:type{1}). Could be any of:
+    function (/Godot.org/Godot:)operator'-'(:vector2,:vector2) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'-'(:vector2i,:vector2i) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'-'(:vector3,:vector3) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'-'(:vector3i,:vector3i) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'-'(:vector4,:vector4) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'-'(:vector4i,:vector4i) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'-'(:color,:color) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'-'(:quaternion,:quaternion) in package Engine/VerseHost
+    function (/Verse.org/Verse:)operator'-'(:int,:int) in package $BuiltIn
+    function (/Verse.org/Verse:)operator'-'(:float,:float) in package $BuiltIn
+[probe] <repo>\tests\verse_probe\vm_values_reject.verse:18:11: error 3509: (Also tried with extension function arguments (:vm_values_reject,:tuple(type{1.000000},type{1})))
+[probe] <repo>\tests\verse_probe\vm_values_reject.verse:21:11: error 3509: No overload of the function `operator'/'` matches the provided arguments (:type{1.000000},:type{2}). Could be any of:
+    function (/Godot.org/Godot:)operator'/'(:vector2,:float) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'/'(:vector2i,:int) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'/'(:vector3,:float) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'/'(:vector3i,:int) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'/'(:vector4,:float) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'/'(:vector4i,:int) in package Engine/VerseHost
+    function (/Verse.org/Verse:)operator'/'(:int,:int) in package $BuiltIn
+    function (/Verse.org/Verse:)operator'/'(:float,:float) in package $BuiltIn
+[probe] <repo>\tests\verse_probe\vm_values_reject.verse:21:11: error 3509: (Also tried with extension function arguments (:vm_values_reject,:tuple(type{1.000000},type{2})))
+[probe] <repo>\tests\verse_probe\vm_values_reject.verse:24:7: error 3509: No overload of the function `operator'<'` matches the provided arguments (:char,:char). Could be any of:
+    function (/Verse.org/Verse:)operator'<'(:int,:int) in package $BuiltIn
+    function (/Verse.org/Verse:)operator'<'(:float,:float) in package $BuiltIn
+[probe] <repo>\tests\verse_probe\vm_values_reject.verse:24:7: error 3509: (Also tried with extension function arguments (:vm_values_reject,:tuple(char,char)))
+[probe] <repo>\tests\verse_probe\vm_values_reject.verse:27:7: error 3509: No overload of the function `operator'<'` matches the provided arguments (:[]char,:[]char). Could be any of:
+    function (/Verse.org/Verse:)operator'<'(:int,:int) in package $BuiltIn
+    function (/Verse.org/Verse:)operator'<'(:float,:float) in package $BuiltIn
+[probe] <repo>\tests\verse_probe\vm_values_reject.verse:27:7: error 3509: (Also tried with extension function arguments (:vm_values_reject,:tuple([]char,[]char)))
+[probe] <repo>\tests\verse_probe\vm_values_reject.verse:33:31: error 3509: No overload of the function `operator'>'` matches the provided arguments (:rational,:rational). Could be any of:
+    function (/Verse.org/Verse:)operator'>'(:int,:int) in package $BuiltIn
+    function (/Verse.org/Verse:)operator'>'(:float,:float) in package $BuiltIn
+[probe] <repo>\tests\verse_probe\vm_values_reject.verse:33:31: error 3509: (Also tried with extension function arguments (:vm_values_reject,:tuple(rational,rational)))
+[probe] <repo>\tests\verse_probe\vm_values_reject.verse:36:38: error 3509: No overload of the function `ToString` matches the provided arguments (:rational). Could be any of:
+    function (/Godot.org/Godot:)ToString(:object) in package Engine/VerseHost
+    function (/Verse.org/Verse:)ToString(:float) in package Verse/Verse
+    function (/Verse.org/Verse:)ToString(:int) in package Verse/Verse
+    function (/Verse.org/Verse:)ToString(:[]char) in package Verse/Verse
+    function (/Verse.org/Verse:)ToString(:char) in package Verse/Verse
+    function (/Verse.org/Verse:)ToString(:char32) in package Verse/Verse
+[probe] <repo>\tests\verse_probe\vm_values_reject.verse:36:38: error 3509: (Also tried with extension function arguments (:vm_values_reject,:rational))
+[probe] <repo>\tests\verse_probe\vm_values_reject.verse:39:30: error 3509: No overload of the function `operator'+'` matches the provided arguments (:rational,:type{1}). Could be any of:
+    function (/Godot.org/Godot:)operator'+'(:vector2,:vector2) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'+'(:vector2i,:vector2i) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'+'(:vector3,:vector3) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'+'(:vector3i,:vector3i) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'+'(:vector4,:vector4) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'+'(:vector4i,:vector4i) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'+'(:color,:color) in package Engine/VerseHost
+    function (/Godot.org/Godot:)operator'+'(:quaternion,:quaternion) in package Engine/VerseHost
+    function (/Verse.org/Verse:)operator'+'(:int,:int) in package $BuiltIn
+    function (/Verse.org/Verse:)operator'+'(:float,:float) in package $BuiltIn
+    function (/Verse.org/Verse:)operator'+'(:[]t,:[]t) in package $BuiltIn
+    function (/Verse.org/Verse:)operator'+'(:classifiable_subset(t),:classifiable_subset(t)) in package Verse/Verse
+    function (/Verse.org/Verse:)operator'+'(:classifiable_subset_var(t),:classifiable_subset_var(t)) in package Verse/Verse
+    function (/Verse.org/Verse:)operator'+'(:diagnostic,:diagnostic) in package Verse/Verse
+    function (/Verse.org/Verse:)operator'+'(:diagnostic,:[]char) in package Verse/Verse
+    function (/Verse.org/Verse:)operator'+'(:[]char,:diagnostic) in package Verse/Verse
+[probe] <repo>\tests\verse_probe\vm_values_reject.verse:39:30: error 3509: (Also tried with extension function arguments (:vm_values_reject,:tuple(rational,type{1})))
+[probe] <repo>\tests\verse_probe\vm_values_reject.verse:47:7: error 3509: This function parameter expects a value of type tuple(comparable,comparable), but this argument is an incompatible value of type tuple(vm_values_reject_plain,vm_values_reject_plain).
+[probe] <repo>\tests\verse_probe\vm_values_reject.verse:58:8: error 3554: Float literal must be smaller than 1.7976931348623158e+308.
+[probe] <repo>\tests\verse_probe\vm_values_reject.verse:64:10: error 3509: No overload of the function `ToString` matches the provided arguments (:logic). Could be any of:
+    function (/Godot.org/Godot:)ToString(:object) in package Engine/VerseHost
+    function (/Verse.org/Verse:)ToString(:float) in package Verse/Verse
+    function (/Verse.org/Verse:)ToString(:int) in package Verse/Verse
+    function (/Verse.org/Verse:)ToString(:[]char) in package Verse/Verse
+    function (/Verse.org/Verse:)ToString(:char) in package Verse/Verse
+    function (/Verse.org/Verse:)ToString(:char32) in package Verse/Verse
+[probe] <repo>\tests\verse_probe\vm_values_reject.verse:64:10: error 3509: (Also tried with extension function arguments (:vm_values_reject,:logic))
+[probe] <repo>\tests\verse_probe\vm_values_reject.verse:67:13: error 3506: Unknown member `ToString` in `type{1.500000}`.
+Used inside function /user@localhost/vm_values_reject/FloatMethodToString.
+
+[probe] compile: status 4, generation <gen>, 21 error(s)
+[probe_contract] exit code: 1

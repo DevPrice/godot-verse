@@ -1,0 +1,15 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(subscribable_event_probe): 1
+[probe] 0 signal(s)
+[probe] 5 method(s)
+[probe]   AsListenable  params=0 result=0  virtual=
+[probe]   OnScored  params=1 result=0  virtual=
+[probe]   SubscribeLocally  params=0 result=0  virtual=
+[probe]   SignalFromDefault  params=0 result=0  virtual=
+[probe]   Answer  params=0 result=0  virtual=
+[probe] call AsListenable: status 0, void
+[probe] call SubscribeLocally: status 0, void
+[probe] call SignalFromDefault: status 0, void
+subscribable_event_probe compiled
+[probe] call Answer: status 0, void
+[probe_contract] exit code: 0

@@ -1,0 +1,3 @@
+[probe] <repo>\tests\verse_probe\final_reject.verse:20:26: error 3569: Class `final_derived` cannot be a subclass of the class `final_base` which has the `final` attribute.
+[probe] compile: status 4, generation <gen>, 1 error(s)
+[probe_contract] exit code: 1

@@ -1,0 +1,17 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(effects_probe): 1
+[probe] 0 signal(s)
+[probe] 6 method(s)
+[probe]   PureRead  params=0 result=2  virtual=
+[probe]   FromTransacts  params=0 result=2  virtual=
+[probe]   ReadsCallsReads  params=0 result=2  virtual=
+[probe]   FallibleRead  params=0 result=2 <decides>  virtual=
+[probe]   GuardsInReads  params=0 result=2  virtual=
+[probe]   Answer  params=0 result=2  virtual=
+[probe] call PureRead: status 0, int 7
+[probe] call FromTransacts: status 0, int 7
+[probe] call ReadsCallsReads: status 0, int 8
+[probe] call FallibleRead: status 0, int 7
+[probe] call GuardsInReads: status 0, int 7
+[probe] call Answer: status 0, int 22
+[probe_contract] exit code: 0

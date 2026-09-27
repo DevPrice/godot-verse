@@ -1,0 +1,76 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(vm_ops_probe): 1
+[probe] 0 signal(s)
+[probe] 10 method(s)
+[probe]   P01_IntBoundaries  params=0 result=0  virtual=
+[probe]   P02_FullContext  params=0 result=0  virtual=
+[probe]   P03_FastForms  params=0 result=0  virtual=
+[probe]   P04_Length  params=0 result=0  virtual=
+[probe]   P05_CallSet  params=0 result=0  virtual=
+[probe]   ProfValue  params=0 result=2  virtual=
+[probe]   ProfReturn  params=0 result=2  virtual=
+[probe]   P06_Profile  params=0 result=0  virtual=
+[probe]   P07_FloatCast  params=0 result=0  virtual=
+[probe]   P08_Concat  params=0 result=0  virtual=
+P01 max+1-1 = max: succeeds
+P01 min-1+1 = -9223372036854775808
+P01 min*-1 = max+1: succeeds
+P01 (-min)+min = 0
+P01 A[(max+1)-max] = 20
+P01 A[(max+3)-(max+1)] = 30
+P01 map key via heap = one
+P01 2^31 = 2147483648, -2^31-1 = -2147483649
+P01 A[2^32-(2^32-1)] = 20
+P01 A[2^32] fails
+P01 max*max > max: succeeds
+P01 floor((max*max)/max) = 9223372036854775807
+P01 -(min) - 1 = max: succeeds
+P01 min * 1.0 = -9223372036854775808.000000
+P01 max * 1.0 = 9223372036854775808.000000
+P01 0 * -1.5 = 0.000000
+[probe] call P01_IntBoundaries: status 0, void
+P02 full NaN<=NaN succeeds, NaN>=NaN succeeds, NaN<NaN fails, NaN<=1.0 fails, 1.0>=NaN fails
+P02 full (3 < 5) answers 3
+P02 full (4 <> 5) answers 4
+P02 full (2.5 >= 2.5) answers 2.500000
+P02 full 1<>1.0 succeeds, 1=1.0 fails, [1,2]<>[1,2,3] succeeds, [1,2]<>[1,2] fails
+P02 full 2^63 > 2^63-1 succeeds, 1<2<2 fails
+P02 full option-3 query = 3
+P02 full false? fails; Touch = 15
+[probe] call P02_FullContext: status 0, void
+P03 fast NaN<=NaN succeeds, NaN>=NaN succeeds, NaN<NaN fails, NaN<=1.0 fails
+P03 char a = char32 a fails, <> succeeds
+P03 2 = 4/2 succeeds, 4/2 = 2 succeeds, 2 = 5/2 fails
+P03 option-1 = option-1.0 fails
+[probe] call P03_FastForms: status 0, void
+P04 var array Length = 3
+P04 var string Length = 4
+P04 var map Length = 2
+P04 var false Length = 0
+[probe] call P04_Length: status 0, void
+P05 set A[-1] fails, A[3] fails, A[2^63] fails, A[2^63-2^63+2] succeeds
+P05 A[2] = 9
+P05 float map Length = 2
+P05 entry NaN => nan-b
+P05 entry 0.000000 => neg
+[probe] call P05_CallSet: status 0, void
+[probe] call ProfValue: status 0, int 42
+[probe] call ProfReturn: status 0, int 5
+P06 profile value = 42
+P06 profile with return = 5
+P06 T = 6
+[probe] call P06_Profile: status 0, void
+P07 unit[0.500000] = ok 0.500000
+P07 unit[0.000000] = ok 0.000000
+P07 unit[0.000000] = ok 0.000000
+P07 unit[1.000000] = ok 1.000000
+P07 unit[2.000000] = fail
+P07 unit[-1.000000] = fail
+P07 unit[NaN] = fail
+P07 unit[Inf] = fail
+[probe] call P07_FloatCast: status 0, void
+P08 "" + "" Length = 0
+P08 false + "x" = x, "x" + false = x
+P08 false + false Length = 0
+[probe] call P08_Concat: status 0, void
+[probe_contract] exit code: 0

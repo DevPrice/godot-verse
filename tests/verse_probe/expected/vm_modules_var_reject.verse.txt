@@ -1,0 +1,4 @@
+[probe] <repo>\tests\verse_probe\vm_modules_var_reject.verse:12:1: error 3502: Module-scoped `var` must have `weak_map` type.
+[probe] <repo>\tests\verse_probe\vm_modules_var_reject.verse:15:34: error 3502: Module-scoped `var` may only be partially read or written, e.g. `ModuleVar[Player]` or `set ModuleVar[Player] = ...`.
+[probe] compile: status 4, generation <gen>, 2 error(s)
+[probe_contract] exit code: 1

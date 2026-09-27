@@ -1,0 +1,17 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(reads_property): 1
+[probe] 0 signal(s)
+[probe] 2 method(s)
+[probe]   MirrorRead  params=0 result=8  virtual=
+[probe]   MirrorReadX  params=0 result=3  virtual=
+[probe] runtime error: ErrRuntime_NativeInternal: An internal runtime error occurred in native code that was called from Verse. There is no other information available. (Called `get_position` on Godot object 7, which Godot has already freed. Test IsInstanceValid[...] before reaching through a reference the scene may have dropped.)
+[probe]   (/Godot.org/Godot:)VhCallValue(:int,:[]char,:[](/Godot.org/Godot:)variant)  [native]:0
+[probe]   (/Godot.org/Godot/node2d:)PositionGetter(:(/Verse.org/Verse:)accessor)  GodotClasses.native.verse:40344
+[probe]   (/user@localhost/reads_property:)MirrorRead  <repo>\tests\verse_probe\reads_property.verse:9
+[probe] call MirrorRead: status 6, void
+[probe] runtime error: ErrRuntime_NativeInternal: An internal runtime error occurred in native code that was called from Verse. There is no other information available. (Called `get_position` on Godot object 7, which Godot has already freed. Test IsInstanceValid[...] before reaching through a reference the scene may have dropped.)
+[probe]   (/Godot.org/Godot:)VhCallValue(:int,:[]char,:[](/Godot.org/Godot:)variant)  [native]:0
+[probe]   (/Godot.org/Godot/node2d:)PositionGetter(:(/Verse.org/Verse:)accessor,:[]char)  GodotClasses.native.verse:40347
+[probe]   (/user@localhost/reads_property:)MirrorReadX  <repo>\tests\verse_probe\reads_property.verse:11
+[probe] call MirrorReadX: status 6, void
+[probe_contract] exit code: 0

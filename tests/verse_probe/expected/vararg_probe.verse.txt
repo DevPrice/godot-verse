@@ -1,0 +1,18 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(vararg_probe): 1
+[probe] 0 signal(s)
+[probe] 9 method(s)
+[probe]   Fire  params=1 result=2  virtual=
+[probe]   Fire  params=2 result=2  virtual=
+[probe]   JoinWithPlus  params=2 result=6  virtual=
+[probe]   JoinWithConcatenate  params=2 result=6  virtual=
+[probe]   JoinWithFor  params=2 result=6  virtual=
+[probe]   AskArity  params=0 result=2  virtual=
+[probe]   AskJoinPlus  params=0 result=2  virtual=
+[probe]   AskJoinConcatenate  params=0 result=2  virtual=
+[probe]   AskJoinFor  params=0 result=2  virtual=
+[probe] call AskArity: status 0, int 8
+[probe] call AskJoinPlus: status 0, int 3
+[probe] call AskJoinConcatenate: status 0, int 2
+[probe] call AskJoinFor: status 0, int 3
+[probe_contract] exit code: 0

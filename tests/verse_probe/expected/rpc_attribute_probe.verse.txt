@@ -1,0 +1,7 @@
+[probe] <repo>\tests\verse_probe\rpc_attribute_probe.verse:18:42: error 3552: Attributes cannot be used as data types. Attribute types are meant to be used in attribute expressions: @attribute or <attribute>
+[probe] <repo>\tests\verse_probe\rpc_attribute_probe.verse:27:6: error 3502: Referencing an overloaded function without immediately calling it is not yet implemented; (/user@localhost:)rpc, (/user@localhost:)rpc, (/user@localhost:)rpc, or (/user@localhost:)rpc
+[probe] <repo>\tests\verse_probe\rpc_attribute_probe.verse:30:6: error 3502: Referencing an overloaded function without immediately calling it is not yet implemented; (/user@localhost:)rpc, (/user@localhost:)rpc, (/user@localhost:)rpc, or (/user@localhost:)rpc
+[probe] <repo>\tests\verse_probe\rpc_attribute_probe.verse:33:6: error 3502: Referencing an overloaded function without immediately calling it is not yet implemented; (/user@localhost:)rpc, (/user@localhost:)rpc, (/user@localhost:)rpc, or (/user@localhost:)rpc
+[probe] <repo>\tests\verse_probe\rpc_attribute_probe.verse:36:6: error 3502: Referencing an overloaded function without immediately calling it is not yet implemented; (/user@localhost:)rpc, (/user@localhost:)rpc, (/user@localhost:)rpc, or (/user@localhost:)rpc
+[probe] compile: status 4, generation <gen>, 5 error(s)
+[probe_contract] exit code: 1

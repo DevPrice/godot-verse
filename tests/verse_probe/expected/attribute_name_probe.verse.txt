@@ -1,0 +1,5 @@
+[probe] <repo>\tests\verse_probe\attribute_name_probe.verse:26:16: error 3532: The class (/user@localhost:)sig in package GodotScripts_1 is ambiguous with these definitions:
+    function (/user@localhost:)sig(:t) in package GodotScripts_1
+    function (/user@localhost:)sig() in package GodotScripts_1
+[probe] compile: status 4, generation <gen>, 1 error(s)
+[probe_contract] exit code: 1

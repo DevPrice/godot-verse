@@ -1,0 +1,14 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(decides_virtual_probe): 1
+[probe] 0 signal(s)
+[probe] 5 method(s)
+[probe]   Bump  params=0 result=0  virtual=
+[probe]   Handled  params=1 result=0 <decides>  virtual=
+[probe]   AlwaysDeclines  params=0 result=0 <decides>  virtual=
+[probe]   AlwaysSucceeds  params=0 result=0 <decides>  virtual=
+[probe]   Answer  params=0 result=2  virtual=
+[probe] call Bump: status 0, void
+[probe] call AlwaysDeclines: status 8, void
+[probe] call AlwaysSucceeds: status 0, void
+[probe] call Answer: status 0, int 1
+[probe_contract] exit code: 0

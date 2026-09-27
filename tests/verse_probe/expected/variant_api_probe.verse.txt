@@ -1,0 +1,17 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(variant_api_probe): 1
+[probe] 0 signal(s)
+[probe] 6 method(s)
+[probe]   AskReceiverRead  params=0 result=2  virtual=
+[probe]   AskGeneratedReader  params=0 result=2  virtual=
+[probe]   AskWrongLane  params=0 result=2  virtual=
+[probe]   AskMakeInt  params=0 result=2  virtual=
+[probe]   AskMakeVector  params=0 result=2  virtual=
+[probe]   AskMakeString  params=0 result=2  virtual=
+[probe] call AskReceiverRead: status 0, int 7
+[probe] call AskGeneratedReader: status 0, int 8
+[probe] call AskWrongLane: status 0, int -1
+[probe] call AskMakeInt: status 0, int 11
+[probe] call AskMakeVector: status 0, int 3
+[probe] call AskMakeString: status 0, int 4
+[probe_contract] exit code: 0

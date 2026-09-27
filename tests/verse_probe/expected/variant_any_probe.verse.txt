@@ -1,0 +1,25 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(variant_any_probe): 1
+[probe] 0 signal(s)
+[probe] 10 method(s)
+[probe]   AskInt  params=0 result=2  virtual=
+[probe]   AskFloat  params=0 result=2  virtual=
+[probe]   AskLogic  params=0 result=2  virtual=
+[probe]   AskString  params=0 result=2  virtual=
+[probe]   AskVector2  params=0 result=2  virtual=
+[probe]   AskColor  params=0 result=2  virtual=
+[probe]   AskObject  params=0 result=2  virtual=
+[probe]   AskEmptyArray  params=0 result=2  virtual=
+[probe]   AskIntArray  params=0 result=2  virtual=
+[probe]   AskMap  params=0 result=2  virtual=
+[probe] call AskInt: status 0, int 7
+[probe] call AskFloat: status 0, int 5
+[probe] call AskLogic: status 0, int 1
+[probe] call AskString: status 0, int 4
+[probe] call AskVector2: status 0, int 4
+[probe] call AskColor: status 0, int 4
+[probe] call AskObject: status 0, int 1
+[probe] call AskEmptyArray: status 0, int 0
+[probe] call AskIntArray: status 0, int 0
+[probe] call AskMap: status 0, int 0
+[probe_contract] exit code: 0

@@ -1,0 +1,59 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(vm_natives_edges_probe): 1
+[probe] 0 signal(s)
+[probe] 12 method(s)
+[probe]   NegZero  params=0 result=3  virtual=
+[probe]   Sign  params=1 result=5  virtual=
+[probe]   A01_NegativeZero  params=0 result=0  virtual=
+[probe]   A02_RoundAt2p63  params=0 result=0  virtual=
+[probe]   RoundOne  params=2 result=0  virtual=
+[probe]   A02b_RoundBeyond  params=0 result=0  virtual=
+[probe]   A02c_NaNDomains  params=0 result=0  virtual=
+[probe]   A03_CeilAt2p63  params=0 result=0  virtual=
+[probe]   A04_BigBits  params=0 result=0  virtual=
+[probe]   A05_CharStrings  params=0 result=0  virtual=
+[probe]   A06_LocalizeFloats  params=0 result=0  virtual=
+[probe]   A07_RandomSpread  params=0 result=0  virtual=
+[probe] call NegZero: status 0, float 0.000000
+runtime -0.0 sign seen by ArcTan: positive
+ToString(runtime -0.0) = 0.000000
+Sqrt(-0.0) sign: positive, Tan(-0.0) sign: positive, Sin(-0.0) sign: positive, Abs(-0.0) sign: positive
+ArcTan(-0.0, -0.0) = 0.000000, ArcTan(-0.0, 0.0) = 0.000000
+Lerp(0.0, Inf, 0.0) = NaN, Lerp(1.0, 2.0, NaN) = NaN
+[probe] call A01_NegativeZero: status 0, void
+Round[2^63] = -9223372036854775808
+Round[-2^63] = -9223372036854775808
+Round[9.2e18] = 9200000000000000000
+Int[-2^63] = -9223372036854775808
+[probe] call A02_RoundAt2p63: status 0, void
+Round[9.3e18] = 0
+Round[1.2e19] = 0
+Round[1.8e19] = 0
+Round[1.9e19] = 0
+Round[3e19] = 0
+Round[1e30] = 0
+Round[-9.3e18] = 0
+Round[-1.2e19] = 0
+Round[-2e19] = 0
+Round[-1e30] = 0
+[probe] call A02b_RoundBeyond: status 0, void
+ArcSin(NaN) = 1.570796, ArcCos(NaN) = 0.000000, ArcTan(NaN, 0.0) = NaN, Sqrt(NaN) = NaN
+ToString(-0.0000001) = -0.000000, ToString(-0.0000005) = -0.000000, ToString(0.0000005) = 0.000000
+[probe] call A02c_NaNDomains: status 0, void
+[probe] runtime error: ErrRuntime_IntegerBoundsExceeded: A value does not fall inside the representable range of a Verse integer. (The value 9223372036854775808.000000 cannot be converted to an integer because it does not fall inside the representable range of a Verse integer.)
+[probe]   (/Verse.org/Verse:)Ceil(:float)  [native]:0
+[probe]   (/user@localhost/vm_natives_edges_probe:)A03_CeilAt2p63  <repo>\tests\verse_probe\vm_natives_edges_probe.verse:54
+[probe] call A03_CeilAt2p63: status 6, void
+BitAnd(-1, 2^63) = 2^63: yes
+BitNot(2^63) < 0: yes, BitNot(2^63) + 2^63 = -1: yes
+BitXor(2^63, 2^63) = 0: yes
+Floor(2^63/3) > 0: yes
+[probe] call A04_BigBits: status 0, void
+ToString(0o80).Length = 1
+ToString(0u10ffff).Length = 4
+[probe] call A05_CharStrings: status 0, void
+[0.5] [2] [-1,234.5] [0] [0] [,100,000,000,000,000,000,000.0] [NaN] [inf]
+[probe] call A06_LocalizeFloats: status 0, void
+GetRandomInt(0, 2) over 300 draws, every value seen: yes
+[probe] call A07_RandomSpread: status 0, void
+[probe_contract] exit code: 0

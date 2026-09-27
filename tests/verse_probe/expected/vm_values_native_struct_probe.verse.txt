@@ -1,0 +1,13 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(vm_values_native_struct_probe): 1
+[probe] 0 signal(s)
+[probe] 1 method(s)
+[probe]   NativeStructEquality  params=0 result=0  virtual=
+ns: vector2 NaN = vector2 NaN: succeeds
+ns: vector2 0 = vector2 -0: succeeds
+ns: vector2 same = same: succeeds
+ns: local struct NaN = NaN: succeeds
+ns: local struct 0 = -0: succeeds
+ns: vector2 key 0 finds -0 = c
+[probe] call NativeStructEquality: status 0, void
+[probe_contract] exit code: 0

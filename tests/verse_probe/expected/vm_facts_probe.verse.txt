@@ -1,0 +1,75 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(vm_facts_probe): 1
+[probe] 0 signal(s)
+[probe] 9 method(s)
+[probe]   ReportNanComparisons  params=0 result=0  virtual=
+[probe]   ReportModQuotient  params=0 result=0  virtual=
+[probe]   ReportFloatToString  params=0 result=0  virtual=
+[probe]   ReportOneFloat  params=2 result=0  virtual=
+[probe]   ReportIntBasic  params=0 result=0  virtual=
+[probe]   ReportOneInt  params=2 result=0  virtual=
+[probe]   ReportIntOverflowCompare  params=0 result=0  virtual=
+[probe]   ReportIntOverflowToString  params=0 result=0  virtual=
+[probe]   ReportRounding  params=0 result=0  virtual=
+NaN <= NaN: succeeds
+NaN >= NaN: succeeds
+NaN <  NaN: fails
+NaN >  NaN: fails
+NaN =  NaN: succeeds
+NaN <> NaN: fails
+NaN <= 1.0: fails
+NaN >= 1.0: fails
+NaN <  1.0: fails
+NaN >  1.0: fails
+NaN =  1.0: fails
+NaN <> 1.0: succeeds
+[probe] call ReportNanComparisons: status 0, void
+Mod[7, 2] = 1
+Mod[-7, 2] = 1
+Mod[7, -2] = 1
+Mod[-7, -2] = 1
+Mod[7, 0] fails
+Quotient[7, 2] = 3
+Quotient[-7, 2] = -4
+Quotient[7, -2] = -3
+Quotient[-7, -2] = 4
+Quotient[7, 0] fails
+[probe] call ReportModQuotient: status 0, void
+1.0: ToString() = 1.000000, interpolation = 1.000000
+0.1: ToString() = 0.100000, interpolation = 0.100000
+1.5: ToString() = 1.500000, interpolation = 1.500000
+-0.0: ToString() = 0.000000, interpolation = 0.000000
+1.0e20: ToString() = 100000000000000000000.000000, interpolation = 100000000000000000000.000000
+123456789.125: ToString() = 123456789.125000, interpolation = 123456789.125000
+1.0/3.0: ToString() = 0.333333, interpolation = 0.333333
+Inf: ToString() = Inf, interpolation = Inf
+-Inf: ToString() = -Inf, interpolation = -Inf
+NaN: ToString() = NaN, interpolation = NaN
+[probe] call ReportFloatToString: status 0, void
+0: ToString() = 0, interpolation = 0
+-5: ToString() = -5, interpolation = -5
+2^62: ToString() = 4611686018427387904, interpolation = 4611686018427387904
+2^63-1 (int64 max): ToString() = 9223372036854775807, interpolation = 9223372036854775807
+[probe] call ReportIntBasic: status 0, void
+2^63-1 + 1 > int64 max: succeeds
+2^63-1 + 1 < 0: fails
+2^63-1 + 1 = int64 max: fails
+(2^63-1)*2 > int64 max: succeeds
+[probe] call ReportIntOverflowCompare: status 0, void
+[probe] runtime error: ErrRuntime_GeneratedNativeInternal: An internal runtime error occurred in (generated) native code that was called from Verse. There is no other information available. (Value exceeds the range of a 64 bit integer.)
+[probe]   (/Verse.org/Verse:)ToString(:int)  [native]:0
+[probe]   (/user@localhost/vm_facts_probe:)ReportIntOverflowToString  <repo>\tests\verse_probe\vm_facts_probe.verse:95
+[probe] call ReportIntOverflowToString: status 6, void
+-0.0 =  0.0: succeeds
+-0.0 <= 0.0: succeeds
+-0.0 <  0.0: fails
+Round[2.5] = 2
+Round[-2.5] = -2
+Round[0.5] = 0
+Round[-0.5] = 0
+Floor[-0.5] = -1
+Floor[0.5] = 0
+Ceil[-0.5] = 0
+Ceil[0.5] = 1
+[probe] call ReportRounding: status 0, void
+[probe_contract] exit code: 0

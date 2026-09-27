@@ -1,0 +1,21 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(wide_callback): 1
+[probe] 0 signal(s)
+[probe] 10 method(s)
+[probe]   Store  params=1 result=0  virtual=
+[probe]   SubscribeWide  params=1 result=0  virtual=
+[probe]   NarrowHandler  params=1 result=0  virtual=
+[probe]   WideHandler  params=1 result=0  virtual=
+[probe]   Waiter  params=0 result=0 <suspends>  virtual=
+[probe]   NarrowIntoWide  params=0 result=0  virtual=
+[probe]   WideIntoWide  params=0 result=0  virtual=
+[probe]   FireHandler  params=0 result=0  virtual=
+[probe]   Fire  params=0 result=0  virtual=
+[probe]   Report  params=0 result=2  virtual=
+[probe] call NarrowIntoWide: status 0, void
+[probe] call WideIntoWide: status 0, void
+[probe] call FireHandler: status 0, void
+waiter resumed
+[probe] call Fire: status 0, void
+[probe] call Report: status 0, int 9
+[probe_contract] exit code: 0

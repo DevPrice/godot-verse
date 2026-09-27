@@ -1,0 +1,12 @@
+[probe] <repo>\tests\verse_probe\vm_tasks_reject.verse:34:16: error 3656: The suspends and decides effects are mutually exclusive and may not be used together.
+[probe] <repo>\tests\verse_probe\vm_tasks_reject.verse:19:12: error 3512: This invocation calls a function (`(/user@localhost/vm_tasks_reject:)Waits`) that has effects that are not allowed by its context:
+    suspends
+    no_rollback
+[probe] <repo>\tests\verse_probe\vm_tasks_reject.verse:25:12: error 3512: This invocation calls a function (`(/Verse.org/Verse/event:)Await`) that has the 'suspends' effect, which is not allowed by its context.
+[probe] <repo>\tests\verse_probe\vm_tasks_reject.verse:30:7: error 3512: This 'race' macro has the 'suspends' effect, which is not allowed by its context.
+[probe] <repo>\tests\verse_probe\vm_tasks_reject.verse:30:17: error 3512: This invocation calls a function (`(/user@localhost/vm_tasks_reject:)Waits`) that has the 'no_rollback' effect, which is not allowed by its context.
+[probe] <repo>\tests\verse_probe\vm_tasks_reject.verse:30:26: error 3512: This invocation calls a function (`(/user@localhost/vm_tasks_reject:)Waits`) that has the 'no_rollback' effect, which is not allowed by its context.
+[probe] <repo>\tests\verse_probe\vm_tasks_reject.verse:39:23: error 3512: This invocation calls a function (`(/user@localhost/vm_tasks_reject:)Waits`) that has the 'no_rollback' effect, which is not allowed by its context.
+[probe] <repo>\tests\verse_probe\vm_tasks_reject.verse:44:3: error 3512: This 'branch' macro has the 'suspends' effect, which is not allowed by its context.
+[probe] compile: status 4, generation <gen>, 8 error(s)
+[probe_contract] exit code: 1

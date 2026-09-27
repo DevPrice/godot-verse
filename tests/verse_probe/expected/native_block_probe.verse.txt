@@ -1,0 +1,8 @@
+[probe] <repo>\tests\verse_probe\native_block_probe.verse:62:32: error 3506: Unknown identifier `VhProbeBlock`.
+Used inside function /user@localhost/native_block_probe/N1.
+
+[probe] <repo>\tests\verse_probe\native_block_probe.verse:64:32: error 3506: Unknown identifier `VhProbeBlock`.
+Used inside function /user@localhost/native_block_probe/N2.
+
+[probe] compile: status 4, generation <gen>, 2 error(s)
+[probe_contract] exit code: 1

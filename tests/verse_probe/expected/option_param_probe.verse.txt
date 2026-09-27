@@ -1,0 +1,3 @@
+[probe] <repo>\tests\verse_probe\option_param_probe.verse:34:20: error 3509: This function parameter expects a value of type ?node2d, but this argument is an incompatible value of type node2d. Did you mean `option`?
+[probe] compile: status 4, generation <gen>, 1 error(s)
+[probe_contract] exit code: 1

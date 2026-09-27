@@ -1,0 +1,33 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(singleton_effect_probe): 1
+[probe] 0 signal(s)
+[probe] 6 method(s)
+[probe]   InReads  params=0 result=2  virtual=
+[probe]   Chained  params=0 result=5  virtual=
+[probe]   InTransacts  params=0 result=2  virtual=
+[probe]   Plain  params=0 result=2  virtual=
+[probe]   EditorInReads  params=0 result=2  virtual=
+[probe]   EditorName  params=0 result=5 <decides>  virtual=
+[probe] runtime error: ErrorRequested: A runtime error was explicitly raised from user code. (User Message: 'Godot has no Engine singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error')
+[probe]   (/Verse.org/Verse:)Err(:[]char)  [native]:0
+[probe]   (/Godot.org/Godot:)GetEngine  GodotClasses.native.verse:57009
+[probe]   (/user@localhost/singleton_effect_probe:)InReads  <repo>\tests\verse_probe\singleton_effect_probe.verse:60
+[probe] call InReads: status 6, void
+[probe] runtime error: ErrorRequested: A runtime error was explicitly raised from user code. (User Message: 'Godot has no Engine singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error')
+[probe]   (/Verse.org/Verse:)Err(:[]char)  [native]:0
+[probe]   (/Godot.org/Godot:)GetEngine  GodotClasses.native.verse:57009
+[probe]   (/user@localhost/singleton_effect_probe:)Chained  <repo>\tests\verse_probe\singleton_effect_probe.verse:65
+[probe] call Chained: status 6, void
+[probe] runtime error: ErrorRequested: A runtime error was explicitly raised from user code. (User Message: 'Godot has no Engine singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error')
+[probe]   (/Verse.org/Verse:)Err(:[]char)  [native]:0
+[probe]   (/Godot.org/Godot:)GetEngine  GodotClasses.native.verse:57009
+[probe]   (/user@localhost/singleton_effect_probe:)InTransacts  <repo>\tests\verse_probe\singleton_effect_probe.verse:68
+[probe] call InTransacts: status 6, void
+[probe] runtime error: ErrorRequested: A runtime error was explicitly raised from user code. (User Message: 'Godot has no Engine singleton; it is registered before any scene loads, so this is a bridge failure rather than a script error')
+[probe]   (/Verse.org/Verse:)Err(:[]char)  [native]:0
+[probe]   (/Godot.org/Godot:)GetEngine  GodotClasses.native.verse:57009
+[probe]   (/user@localhost/singleton_effect_probe:)Plain  <repo>\tests\verse_probe\singleton_effect_probe.verse:71
+[probe] call Plain: status 6, void
+[probe] call EditorInReads: status 0, int 0
+[probe] call EditorName: status 8, void
+[probe_contract] exit code: 0

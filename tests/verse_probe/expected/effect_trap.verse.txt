@@ -1,0 +1,5 @@
+[probe] <repo>\tests\verse_probe\effect_trap.verse:22:39: error 3512: This invocation calls a function (`(/user@localhost/effect_trap:)Helper`) that has the 'no_rollback' effect, which is not allowed by its context.
+[probe] <repo>\tests\verse_probe\effect_trap.verse:27:17: error 3512: This invocation calls a function (`(/user@localhost/effect_trap:)Maybe`) that has the 'no_rollback' effect, which is not allowed by its context.
+[probe] <repo>\tests\verse_probe\effect_trap.verse:35:38: error 3512: This invocation calls a function (`(/Godot.org/Godot/node:)QueueFree`) that has the 'transacts' effect, which is not allowed by its context.
+[probe] compile: status 4, generation <gen>, 3 error(s)
+[probe_contract] exit code: 1

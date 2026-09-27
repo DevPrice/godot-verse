@@ -1,0 +1,68 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(vm_failure_probe): 1
+[probe] 0 signal(s)
+[probe] 15 method(s)
+[probe]   VarOnFailureAndSuccess  params=0 result=0  virtual=
+[probe]   Nesting  params=0 result=0  virtual=
+[probe]   HeapWrites  params=0 result=0  virtual=
+[probe]   DeferredEffects  params=0 result=0  virtual=
+[probe]   FailureAcrossCall  params=0 result=0  virtual=
+[probe]   Bump  params=1 result=0 <decides>  virtual=
+[probe]   FailureForms  params=0 result=0  virtual=
+[probe]   DeclinesAtTop  params=0 result=0 <decides>  virtual=
+[probe]   DeclinesAtTopAfter  params=0 result=0  virtual=
+[probe]   RuntimeErrorWrites  params=0 result=0  virtual=
+[probe]   RuntimeErrorAfter  params=0 result=0  virtual=
+[probe]   RuntimeErrorInCondition  params=0 result=0  virtual=
+[probe]   RaiseInside  params=0 result=0 <decides>  virtual=
+[probe]   RuntimeErrorNextEntry  params=0 result=0  virtual=
+[probe]   RuntimeErrorEmptyMessage  params=0 result=0  virtual=
+VarOnFailure: X = 0
+VarOnSuccess: X = 2
+[probe] call VarOnFailureAndSuccess: status 0, void
+Nesting, inner fails, outer succeeds: X = 1
+Nesting, inner succeeds, outer fails: Y = 0
+[probe] call Nesting: status 0, void
+HeapWrites: field after failure = 0
+HeapWrites: element after failure = 1
+HeapWrites: length after failed append = 3
+HeapWrites: map length after failed insert = 1
+HeapWrites: map value after failed replace = 10
+[probe] call HeapWrites: status 0, void
+DeferredEffects: before
+DeferredEffects: inside a condition that succeeds
+DeferredEffects: after
+[probe] call DeferredEffects: status 0, void
+FailureAcrossCall: Counter after a failed call = 0
+FailureAcrossCall: Counter after a succeeding call = 1
+[probe] call FailureAcrossCall: status 0, void
+FailureForms: A[7] or -1 = -1
+FailureForms: X after `not` of a failing write = 0
+FailureForms: option of a failing write is empty yes, X = 0
+FailureForms: for with a filter kept 2 of 3
+[probe] call FailureForms: status 0, void
+[probe] call DeclinesAtTop: status 8, void
+DeclinesAtTopAfter: Survivor = 0
+[probe] call DeclinesAtTopAfter: status 0, void
+[probe] runtime error: ErrorRequested: A runtime error was explicitly raised from user code. (User Message: 'probe runtime error')
+[probe]   (/Verse.org/Verse:)Err(:[]char)  [native]:0
+[probe]   (/user@localhost/vm_failure_probe:)RuntimeErrorWrites  <repo>\tests\verse_probe\vm_failure_probe.verse:111
+[probe] call RuntimeErrorWrites: status 6, void
+RuntimeErrorAfter: Survivor = 0
+[probe] call RuntimeErrorAfter: status 0, void
+[probe] runtime error: ErrorRequested: A runtime error was explicitly raised from user code. (User Message: 'probe runtime error inside a failure context')
+[probe]   (/Verse.org/Verse:)Err(:[]char)  [native]:0
+[probe]   (/user@localhost/vm_failure_probe:)RaiseInside  <repo>\tests\verse_probe\vm_failure_probe.verse:123
+[probe]   (/user@localhost/vm_failure_probe:)RuntimeErrorInCondition  <repo>\tests\verse_probe\vm_failure_probe.verse:117
+[probe] call RuntimeErrorInCondition: status 6, void
+[probe] runtime error: ErrorRequested: A runtime error was explicitly raised from user code. (User Message: 'probe runtime error inside a failure context')
+[probe]   (/Verse.org/Verse:)Err(:[]char)  [native]:0
+[probe]   (/user@localhost/vm_failure_probe:)RaiseInside  <repo>\tests\verse_probe\vm_failure_probe.verse:123
+[probe] call RaiseInside: status 6, void
+RuntimeErrorNextEntry: the next entry runs
+[probe] call RuntimeErrorNextEntry: status 0, void
+[probe] runtime error: ErrorRequested: A runtime error was explicitly raised from user code. (User Message: '')
+[probe]   (/Verse.org/Verse:)Err(:[]char)  [native]:0
+[probe]   (/user@localhost/vm_failure_probe:)RuntimeErrorEmptyMessage  <repo>\tests\verse_probe\vm_failure_probe.verse:130
+[probe] call RuntimeErrorEmptyMessage: status 6, void
+[probe_contract] exit code: 0

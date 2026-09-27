@@ -495,8 +495,24 @@ and `audit_const_overrides.py --check` against a Godot *source* checkout's `../g
 when its input is absent (`docs/architecture-review.md` item 4 step 5). `gen_verse_api.py` itself
 fails at generation time on any hand table row — `CONST_OVERRIDES`, `PREDICATE_EXTRA`,
 `METHOD_RENAMES` and the rest — that no longer names anything in `extension_api.json`, which
-`tests/verse_api_gen` exercises directly rather than through this layer. Later work adds asserted
-`tests/verse_probe` fixtures here beside the two `--check` runs.
+`tests/verse_api_gen` exercises directly rather than through this layer. The third step is every
+`tests/verse_probe` fixture, held to a golden transcript under `tests/verse_probe/expected/` by
+`tools/run_probe_contracts.py` (item 4 step 1): `verse_probe` itself still asserts nothing, so this
+is what re-runs it and fails when the compiler or the VM answers differently than the recording did.
+Needs only the host, so it is skipped on the same UE-checkout test the other two steps use, plus
+`bin/verse_probe.exe`.
+
+A probe golden is normalized before it is written and before it is compared, the same way both
+times, so a worktree's own absolute path never shows up as a diff: the repo root and the engine
+checkout become `<repo>`/`<engine>`, a hex address becomes `<addr>` (only
+`vm_values_false_probe.verse`'s fatal-assertion callstack has any), and a generation number becomes
+`<gen>`. Two fixtures are excluded rather than recorded -- `vm_tasks_subscribe_probe.verse` (several
+`Subscribe` handlers on one signal deliver in a different order every process) and
+`vm_values_probe.verse` (`CrossKind`'s false-string/empty-string map key lookup answers differently
+run to run) -- both measured nondeterministic across three runs of the same unchanged binary, with
+the reason recorded in `tools/run_probe_contracts.py`'s own manifest rather than papered over with a
+looser check. `--record` rewrites every golden; run it after a change to `host/Verse` that is meant
+to change what a fixture answers.
 
 **integration** — three headless Godot projects. `tests/integration` for behaviour;
 `tests/coverage_diagnostic` for the R-SCN-2 diagnostics, which is its own project because its one
@@ -617,15 +633,18 @@ The binaries still run standalone, which is what to reach for when bisecting one
 
 ### Instruments, which are not tests
 
-**`tests/verse_probe`** (`tools/build_verse_probe.py`) asserts nothing. It compiles whatever
+**`tests/verse_probe`** (`tools/build_verse_probe.py`) asserts nothing itself. It compiles whatever
 `.verse` files it is handed as one project, prints every diagnostic, and calls a class's
 zero-argument methods — which makes a language question ("does a two-parameter function satisfy a
 tuple-parameter callback?") something you *run* rather than something you read out of
 `SemanticAnalyzer.cpp`. Six of Phase 4's design decisions and all twelve of Phase 5 §2's answers came
-out of it; the eight fixtures beside `example.verse` are kept so every claim can be re-run rather
+out of it; the fixtures beside `example.verse` are kept so every claim can be re-run rather
 than recalled. `async_reject.verse` compiles **nothing** on purpose — it is the file of refusals, and
-the *text* of each refusal is its result. Take the path as absolute; the probe resolves nothing
-relative to `bin/`:
+the *text* of each refusal is its result. **The `contract` layer is what asserts them now**
+(`tools/run_probe_contracts.py`, docs/architecture-review.md item 4 step 1): every fixture's
+transcript is held to a golden recording, so a fixture can still be read by hand exactly as before,
+but an engine drop that changes what one answers now fails a test rather than going unnoticed. Take
+the path as absolute; the probe resolves nothing relative to `bin/`:
 
     bin/verse_probe.exe <engine>/Engine/Binaries/Win64/verse_host.dll <engine>/Engine \
         tests/verse_probe/example.verse --class example

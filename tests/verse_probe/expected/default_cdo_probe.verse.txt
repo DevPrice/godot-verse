@@ -1,0 +1,3 @@
+[probe] <repo>\tests\verse_probe\default_cdo_probe.verse:50:27: error 3502: Accessing instance member `Seed` from this scope is not yet implemented.
+[probe] compile: status 4, generation <gen>, 1 error(s)
+[probe_contract] exit code: 1

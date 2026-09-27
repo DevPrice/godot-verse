@@ -1,0 +1,29 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(async_probe): 1
+[probe] 0 signal(s)
+[probe] 11 method(s)
+[probe]   WaitsNarrow  params=0 result=0 <suspends>  virtual=
+[probe]   WaitsSwapped  params=0 result=0 <suspends>  virtual=
+[probe]   WaitsReads  params=0 result=2 <suspends>  virtual=
+[probe]   WaitsWide  params=0 result=0 <suspends>  virtual=
+[probe]   SpawnFromTransacts  params=0 result=0  virtual=
+[probe]   SpawnSwappedFromTransacts  params=0 result=0  virtual=
+[probe]   SpawnWideFromDefault  params=0 result=0  virtual=
+[probe]   SpawnBlock  params=0 result=0  virtual=
+[probe]   RaceAndSync  params=0 result=0 <suspends>  virtual=
+[probe]   Branches  params=0 result=0 <suspends>  virtual=
+[probe]   Answer  params=0 result=0  virtual=
+WaitsNarrow ran
+[probe] call SpawnFromTransacts: status 0, void
+WaitsSwapped ran
+[probe] call SpawnSwappedFromTransacts: status 0, void
+WaitsWide ran
+[probe] call SpawnWideFromDefault: status 0, void
+first
+WaitsNarrow ran
+[probe] call SpawnBlock: status 0, void
+WaitsNarrow ran
+first
+WaitsNarrow ran
+[probe] call Answer: status 0, void
+[probe_contract] exit code: 0

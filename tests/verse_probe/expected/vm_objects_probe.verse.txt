@@ -1,0 +1,81 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(vm_objects_probe): 1
+[probe] 0 signal(s)
+[probe] 15 method(s)
+[probe]   O1  params=0 result=0  virtual=
+[probe]   O2  params=0 result=0  virtual=
+[probe]   O3  params=0 result=0  virtual=
+[probe]   O4  params=0 result=0  virtual=
+[probe]   O5  params=0 result=0  virtual=
+[probe]   O6  params=0 result=0  virtual=
+[probe]   O7  params=0 result=0  virtual=
+[probe]   O8  params=0 result=0  virtual=
+[probe]   O9  params=0 result=0  virtual=
+[probe]   O10  params=0 result=0  virtual=
+[probe]   O11  params=0 result=0  virtual=
+[probe]   O13  params=0 result=0  virtual=
+[probe]   O14  params=0 result=0  virtual=
+[probe]   O16  params=0 result=0  virtual=
+[probe]   O12  params=0 result=0  virtual=
+  base block: Name=base X=1 Count=0
+  vm_objects_probe block
+  base block: Name=base X=1 Count=0
+  base block: Name=derived X=2 Count=0
+  derived block: Count=1 Extra=5
+O1 base.X=1 derived.X=2
+  base block: Name=derived X=7 Count=0
+  derived block: Count=1 Extra=5
+  base block: Name=base X=8 Count=0
+O1 derived(X:=7).X=7 base(X:=8).X=8
+[probe] call O1: status 0, void
+O2 start
+  eval Extra
+  eval X
+  base block: Name=derived X=3 Count=0
+  derived block: Count=1 Extra=6
+O2 Count=11 X=3 Extra=6 Name=derived
+[probe] call O2: status 0, void
+  base block: Name=derived X=2 Count=0
+  derived block: Count=1 Extra=5
+O3 derived.Describe then base.Describe(derived) / base
+[probe] call O3: status 0, void
+  base block: Name=derived X=2 Count=0
+  derived block: Count=1 Extra=5
+O4 derived.Describe then base.Describe(derived)
+[probe] call O4: status 0, void
+O5 P.X=9 Q.X=1
+[probe] call O5: status 0, void
+O6 same-fields=eq different=ne defaulted-vs-supplied=eq
+[probe] call O6: status 0, void
+O7 self=eq twin=ne
+[probe] call O7: status 0, void
+  base block: Name=derived X=2 Count=0
+  derived block: Count=1 Extra=5
+  base block: Name=base X=1 Count=0
+  base block: Name=base X=1 Count=0
+O8 derived[derived]=ok 5 derived[base]=fail iface[both]=ok both.IfaceName Tag=4 iface[derived]=fail
+[probe] call O8: status 0, void
+O9 green=green eq green=blue ne
+[probe] call O9: status 0, void
+O10 start
+  MakeDerived body N=4
+  eval MakeDerived Extra
+  MakeBase body N=40
+  base block: Name=derived X=2 Count=0
+  derived block: Count=1 Extra=5
+O10 X=2 Extra=5 Count=11
+[probe] call O10: status 0, void
+O11 HostBlockRuns=1
+O11 Held.Count=1
+O11 Held.X=1 Held.Name=base
+[probe] call O11: status 0, void
+O13 small[7]=ok 7 small[15]=fail
+[probe] call O13: status 0, void
+O14 same=eq different=ne
+[probe] call O14: status 0, void
+O16 late derived
+[probe] call O16: status 0, void
+  base block: Name=base X=1 Count=0
+O12 Tag=4 Count=1
+[probe] call O12: status 0, void
+[probe_contract] exit code: 0

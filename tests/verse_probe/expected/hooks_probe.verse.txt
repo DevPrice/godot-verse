@@ -1,0 +1,17 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(hooks_probe): 1
+[probe] 0 signal(s)
+[probe] 8 method(s)
+[probe]   _Get  params=1 result=11  virtual=_get
+[probe]   _Set  params=2 result=0 <decides>  virtual=_set
+[probe]   _GetPropertyList  params=0 result=10  virtual=_get_property_list
+[probe]   _ValidateProperty  params=1 result=0  virtual=_validate_property
+[probe]   Bump  params=0 result=0  virtual=
+[probe]   AskGet  params=0 result=2  virtual=
+[probe]   AskMissing  params=0 result=2  virtual=
+[probe]   ListLength  params=0 result=2  virtual=
+[probe] call Bump: status 0, void
+[probe] call AskGet: status 0, int 0
+[probe] call AskMissing: status 0, int 0
+[probe] call ListLength: status 0, int 0
+[probe_contract] exit code: 0

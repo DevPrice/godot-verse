@@ -1,0 +1,2 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe_contract] exit code: 0

@@ -1,0 +1,6 @@
+[probe] <repo>\tests\verse_probe\vm_unification_reject.verse:27:10: error 3502: Accessing instance member `A` from this scope is not yet implemented.
+[probe] <repo>\tests\verse_probe\vm_unification_reject.verse:31:10: error 3502: Accessing instance member `A` from this scope is not yet implemented.
+[probe] <repo>\tests\verse_probe\vm_unification_reject.verse:34:19: error 3502: Accessing a variable from the initializer of a variable that precedes it in the same snippet, or is located in a different snippet, isn't implemented yet. You can fix this by either (1) changing the order of definitions in the same snippet, or (2) moving definitions from another snippet to this one, or (3) place the definitions in the other snippet into a submodule.
+[probe] <repo>\tests\verse_probe\vm_unification_reject.verse:21:3: error 3601: Data definitions at this scope must be initialized with a value.
+[probe] compile: status 4, generation <gen>, 4 error(s)
+[probe_contract] exit code: 1

@@ -1,0 +1,11 @@
+[probe] <repo>\tests\verse_probe\vm_objects_reject.verse:16:14: error 3506: Unknown identifier `union`.
+Used inside module /user@localhost.
+
+[probe] <repo>\tests\verse_probe\vm_objects_reject.verse:21:2: error 3610: 'block' macro may only be used at class or function scope.
+[probe] <repo>\tests\verse_probe\vm_objects_reject.verse:26:2: error 3610: 'block' macro may only be used at class or function scope.
+[probe] <repo>\tests\verse_probe\vm_objects_reject.verse:36:16: error 3509: Dynamic cast to `int` takes an int as its parameter, instead got any
+[probe] <repo>\tests\verse_probe\vm_objects_reject.verse:42:9: error 3509: Cannot assign to this value because `(/user@localhost/rej_point:)X` is not declared with `var`; add `var` to that declaration to make it assignable.
+[probe] <repo>\tests\verse_probe\vm_objects_reject.verse:47:23: error 3509: Dynamic cast any to `rej_struct`: argument type `any` must be a class.
+[probe] <repo>\tests\verse_probe\vm_objects_reject.verse:47:23: error 3552: Cast target `rej_struct` must be an interface or a class.
+[probe] compile: status 4, generation <gen>, 7 error(s)
+[probe_contract] exit code: 1

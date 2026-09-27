@@ -1,0 +1,10 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(probe_main): 0
+[probe] 0 signal(s)
+[probe] 3 method(s)
+[probe]   TakesMaybeObject  params=1 result=2  virtual=
+[probe]   PassRewrapped  params=1 result=2  virtual=
+[probe]   PassMaybeSubclass  params=1 result=2  virtual=
+[probe] :0:0: error 0: Could not instantiate probe_main: no such class deriving from object at /user@localhost
+[probe] vh_instantiate(probe_main) failed
+[probe_contract] exit code: 0

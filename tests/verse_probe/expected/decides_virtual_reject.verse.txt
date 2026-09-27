@@ -1,0 +1,9 @@
+[probe] <repo>\tests\verse_probe\decides_virtual_reject.verse:87:2: error 3532: Function (/user@localhost/decides_reject_logic:)Handled must have a distinct domain from these other functions with the same name:
+    function (/user@localhost/decides_reject_base:)Handled(:int) in package GodotScripts_1
+[probe] <repo>\tests\verse_probe\decides_virtual_reject.verse:87:2: error 3523: Function (/user@localhost/decides_reject_logic:)Handled has an <override> attribute, but could not find a parent function to override (perhaps the parent function's access specifiers are too restrictive?).
+[probe] <repo>\tests\verse_probe\decides_virtual_reject.verse:37:14: error 3512: This invocation calls a function (`(/user@localhost/decides_reject_base:)Handled`) that has the 'no_rollback' effect, which is not allowed by its context.
+[probe] <repo>\tests\verse_probe\decides_virtual_reject.verse:68:7: error 3512: This invocation calls a function (`(/user@localhost/decides_narrow_probe:)Bump`) that has the 'no_rollback' effect, which is not allowed by its context.
+[probe] <repo>\tests\verse_probe\decides_virtual_reject.verse:87:2: error 3532: The function (/user@localhost/decides_reject_logic:)Handled(:int) in package GodotScripts_1 is ambiguous with this definition:
+    function (/user@localhost/decides_reject_base:)Handled(:int) in package GodotScripts_1
+[probe] compile: status 4, generation <gen>, 5 error(s)
+[probe_contract] exit code: 1

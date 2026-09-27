@@ -1,0 +1,35 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(vararg_arity_probe): 1
+[probe] 0 signal(s)
+[probe] 20 method(s)
+[probe]   Fire  params=1 result=2  virtual=
+[probe]   Fire  params=2 result=2  virtual=
+[probe]   Fire  params=2 result=2  virtual=
+[probe]   Fire  params=3 result=2  virtual=
+[probe]   Fire  params=4 result=2  virtual=
+[probe]   Only  params=1 result=2  virtual=
+[probe]   Only  params=1 result=2  virtual=
+[probe]   Aim  params=2 result=2  virtual=
+[probe]   Aim  params=3 result=2  virtual=
+[probe]   Aim  params=3 result=2  virtual=
+[probe]   AskNoTail  params=0 result=2  virtual=
+[probe]   AskArray  params=0 result=2  virtual=
+[probe]   AskEmptyArray  params=0 result=2  virtual=
+[probe]   AskOne  params=0 result=2  virtual=
+[probe]   AskTwo  params=0 result=2  virtual=
+[probe]   AskThree  params=0 result=2  virtual=
+[probe]   AskAimArray  params=0 result=2  virtual=
+[probe]   AskAimOne  params=0 result=2  virtual=
+[probe]   AskOnlyArray  params=0 result=2  virtual=
+[probe]   AskOnlyOne  params=0 result=2  virtual=
+[probe] call AskNoTail: status 0, int 3
+[probe] call AskArray: status 0, int 5
+[probe] call AskEmptyArray: status 0, int 3
+[probe] call AskOne: status 0, int 100
+[probe] call AskTwo: status 0, int 200
+[probe] call AskThree: status 0, int 300
+[probe] call AskAimArray: status 0, int 8
+[probe] call AskAimOne: status 0, int 107
+[probe] call AskOnlyArray: status 0, int 2
+[probe] call AskOnlyOne: status 0, int 100
+[probe_contract] exit code: 0

@@ -1,0 +1,16 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(overload_probe): 1
+[probe] 0 signal(s)
+[probe] 9 method(s)
+[probe]   CallA  params=1 result=2  virtual=
+[probe]   CallA  params=2 result=2  virtual=
+[probe]   CallB  params=1 result=2  virtual=
+[probe]   CallB  params=1 result=2  virtual=
+[probe]   CallC  params=2 result=2  virtual=
+[probe]   CallC  params=2 result=2  virtual=
+[probe]   CallD  params=2 result=2  virtual=
+[probe]   UseD  params=0 result=2  virtual=
+[probe]   Answer  params=0 result=2  virtual=
+[probe] call UseD: status 0, int 0
+[probe] call Answer: status 0, int 42
+[probe_contract] exit code: 0

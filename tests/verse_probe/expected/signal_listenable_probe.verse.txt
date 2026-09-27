@@ -1,0 +1,5 @@
+[probe] <repo>\tests\verse_probe\signal_listenable_probe.verse:70:13: error 3518: Multiple overloads of the function match the provided arguments (:type{9}). Could be any of:
+    function (/Godot.org/Godot:)operator'.Emit'(:event(t),:t) in package Engine/VerseHost
+    function (/user@localhost:)operator'.Emit'(:event(t),:t) in package GodotScripts_1
+[probe] compile: status 4, generation <gen>, 1 error(s)
+[probe_contract] exit code: 1

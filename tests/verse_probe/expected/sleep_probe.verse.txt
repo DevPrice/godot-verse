@@ -1,0 +1,32 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(sleep_probe): 1
+[probe] 0 signal(s)
+[probe] 12 method(s)
+[probe]   Waker  params=0 result=0 <suspends>  virtual=
+[probe]   StartSleep  params=0 result=0  virtual=
+[probe]   ReportWoke  params=0 result=2  virtual=
+[probe]   Loser  params=0 result=0 <suspends>  virtual=
+[probe]   Winner  params=0 result=0 <suspends>  virtual=
+[probe]   Racer  params=0 result=0 <suspends>  virtual=
+[probe]   StartRace  params=0 result=0  virtual=
+[probe]   ReportDeferred  params=0 result=2  virtual=
+[probe]   ReportRaced  params=0 result=2  virtual=
+[probe]   Narrow  params=1 result=0  virtual=
+[probe]   Wide  params=1 result=0  virtual=
+[probe]   Connect  params=0 result=0  virtual=
+StartSleep returned
+[probe] call StartSleep: status 0, void
+Sleep(0.0) resumed
+[probe] call ReportWoke: status 0, int 1
+StartRace returned
+[probe] call StartRace: status 0, void
+winner finished
+loser's defer ran
+race returned
+[probe] call ReportDeferred: status 0, int 1
+[probe] call ReportRaced: status 0, int 1
+[probe] :0:0: error 0: Subscribe was called on an unbound `signal`, which names nothing.
+[probe] :0:0: error 0: Subscribe was called on an unbound `signal`, which names nothing.
+both handlers satisfied Subscribe
+[probe] call Connect: status 0, void
+[probe_contract] exit code: 0

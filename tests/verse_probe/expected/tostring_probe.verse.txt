@@ -1,0 +1,16 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(tostring_probe): 1
+[probe] 0 signal(s)
+[probe] 3 method(s)
+[probe]   ViaMethodCall  params=0 result=5  virtual=
+[probe]   ViaInterpolation  params=0 result=5  virtual=
+[probe]   Run  params=0 result=0  virtual=
+[probe] call ViaMethodCall: status 0, string "probe with 7"
+[probe] runtime error: ErrRuntime_NativeInternal: An internal runtime error occurred in native code that was called from Verse. There is no other information available. (Called `to_string` on Godot object 7, which Godot has already freed. Test IsInstanceValid[...] before reaching through a reference the scene may have dropped.)
+[probe]   (/Godot.org/Godot:)VhCallValue(:int,:[]char,:[](/Godot.org/Godot:)variant)  [native]:0
+[probe]   (/Godot.org/Godot:)ToString(:(/Godot.org/Godot:)object)  GodotApi.native.verse:77
+[probe]   (/user@localhost/tostring_probe:)ViaInterpolation  <repo>\tests\verse_probe\tostring_probe.verse:49
+[probe] call ViaInterpolation: status 6, void
+ViaMethodCall() = probe with 7
+[probe] call Run: status 0, void
+[probe_contract] exit code: 0

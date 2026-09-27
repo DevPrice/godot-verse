@@ -1,0 +1,7 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(doc_attribute_probe): 1
+[probe] 0 signal(s)
+[probe] 1 method(s)
+[probe]   Run  params=0 result=2  virtual=
+[probe] call Run: status 0, int 1
+[probe_contract] exit code: 0

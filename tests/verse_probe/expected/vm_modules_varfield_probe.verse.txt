@@ -1,0 +1,3 @@
+[probe] <repo>\tests\verse_probe\vm_modules_varfield_probe.verse:12:2: error 3512: This mutable data definition has the 'allocates' effect, which is not allowed by its context.
+[probe] compile: status 4, generation <gen>, 1 error(s)
+[probe_contract] exit code: 1

@@ -1,0 +1,72 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(vm_tasks_probe3): 1
+[probe] 0 signal(s)
+[probe] 16 method(s)
+[probe]   Arm  params=2 result=2 <suspends>  virtual=
+[probe]   Watch  params=2 result=0 <suspends>  virtual=
+[probe]   PParent  params=0 result=2 <suspends>  virtual=
+[probe]   A1_Start  params=0 result=0  virtual=
+[probe]   A2_Go  params=0 result=0  virtual=
+[probe]   QParent  params=0 result=2 <suspends>  virtual=
+[probe]   B1_Start  params=0 result=0  virtual=
+[probe]   B2_Signal  params=0 result=0  virtual=
+[probe]   B3_Phase  params=0 result=0  virtual=
+[probe]   TTarget  params=0 result=2 <suspends>  virtual=
+[probe]   TCanceller  params=0 result=0 <suspends>  virtual=
+[probe]   D1_Start  params=0 result=0  virtual=
+[probe]   D2_Signal  params=0 result=0  virtual=
+[probe]   RDriver  params=0 result=0 <suspends>  virtual=
+[probe]   C1_Start  params=0 result=0  virtual=
+[probe]   C2_Signal  params=0 result=0  virtual=
+A1 start
+  p parent waits on its event
+  p-watcher awaiting
+A1 end
+[probe] call A1_Start: status 0, void
+A2 go
+  p child signals the parent's event
+  p parent body ends
+  p parent defer
+  p child after signal
+  p child defer
+  p-watcher got 7
+A2 signal returned
+[probe] call A2_Go: status 0, void
+B1 start
+  q-watcher awaiting
+B1 end
+[probe] call B1_Start: status 0, void
+B2 signal
+  q parent resumed
+  q child cancels the parent
+  q parent body ends without suspending
+  q parent defer
+  q child defer
+B2 signal returned
+[probe] call B2_Signal: status 0, void
+B3 q task reads Canceled
+[probe] call B3_Phase: status 0, void
+D1 start
+D1 end
+[probe] call D1_Start: status 0, void
+D2 signal
+  t target signals the watcher's event
+  t canceller resumed, cancelling its resumer
+  t target continues after Signal
+  t target defer
+  t canceller: cancel returned
+D2 signal returned
+[probe] call D2_Signal: status 0, void
+C1 start
+  r-arm1 start
+  r-arm2 start
+C1 end
+[probe] call C1_Start: status 0, void
+C2 signal
+  r-arm1 end
+  r-arm1 defer
+  r-arm2 defer
+  race result 3
+C2 signal returned
+[probe] call C2_Signal: status 0, void
+[probe_contract] exit code: 0

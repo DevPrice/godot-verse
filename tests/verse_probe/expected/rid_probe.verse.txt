@@ -1,0 +1,17 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(rid_probe): 1
+[probe] 0 signal(s)
+[probe] 6 method(s)
+[probe]   AskRoundTrip  params=0 result=2  virtual=
+[probe]   AskWrongLane  params=0 result=2  virtual=
+[probe]   AskNotAnInt  params=0 result=2  virtual=
+[probe]   AskEmpty  params=0 result=2  virtual=
+[probe]   AskMakeVariant  params=0 result=2  virtual=
+[probe]   AskMakeVariantIsRid  params=0 result=2  virtual=
+[probe] call AskRoundTrip: status 0, int 7
+[probe] call AskWrongLane: status 0, int -1
+[probe] call AskNotAnInt: status 0, int -1
+[probe] call AskEmpty: status 0, int 0
+[probe] call AskMakeVariant: status 0, int 7
+[probe] call AskMakeVariantIsRid: status 0, int -1
+[probe_contract] exit code: 0

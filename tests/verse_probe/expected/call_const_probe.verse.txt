@@ -1,0 +1,62 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(call_const_probe): 1
+[probe] 0 signal(s)
+[probe] 10 method(s)
+[probe]   AskZero  params=0 result=2  virtual=
+[probe]   AskOne  params=0 result=2  virtual=
+[probe]   AskTwo  params=0 result=2  virtual=
+[probe]   AskThree  params=0 result=2  virtual=
+[probe]   AskFour  params=0 result=2  virtual=
+[probe]   AskLoose  params=0 result=2  virtual=
+[probe]   AskV  params=1 result=2  virtual=
+[probe]   AskChained  params=0 result=2  virtual=
+[probe]   AskFromTransacts  params=0 result=2  virtual=
+[probe]   AskMutating  params=0 result=2  virtual=
+[probe] runtime error: ErrRuntime_NativeInternal: An internal runtime error occurred in native code that was called from Verse. There is no other information available. (Called `call` on Godot object 7, which Godot has already freed. Test IsInstanceValid[...] before reaching through a reference the scene may have dropped.)
+[probe]   (/Godot.org/Godot:)VhCallValueConst(:int,:[]char,:[](/Godot.org/Godot:)variant)  [native]:0
+[probe]   (/Godot.org/Godot:)operator'.CallConst'(:(/Godot.org/Godot:)object,:[]char)  GodotApi.native.verse:647
+[probe]   (/user@localhost/call_const_probe:)AskZero  <repo>\tests\verse_probe\call_const_probe.verse:29
+[probe] call AskZero: status 6, void
+[probe] runtime error: ErrRuntime_NativeInternal: An internal runtime error occurred in native code that was called from Verse. There is no other information available. (Called `call` on Godot object 7, which Godot has already freed. Test IsInstanceValid[...] before reaching through a reference the scene may have dropped.)
+[probe]   (/Godot.org/Godot:)VhCallValueConst(:int,:[]char,:[](/Godot.org/Godot:)variant)  [native]:0
+[probe]   (/Godot.org/Godot:)operator'.CallConst'(:(/Godot.org/Godot:)object,:tuple([]char,(/Godot.org/Godot:)variant))  GodotApi.native.verse:650
+[probe]   (/user@localhost/call_const_probe:)AskOne  <repo>\tests\verse_probe\call_const_probe.verse:31
+[probe] call AskOne: status 6, void
+[probe] runtime error: ErrRuntime_NativeInternal: An internal runtime error occurred in native code that was called from Verse. There is no other information available. (Called `call` on Godot object 7, which Godot has already freed. Test IsInstanceValid[...] before reaching through a reference the scene may have dropped.)
+[probe]   (/Godot.org/Godot:)VhCallValueConst(:int,:[]char,:[](/Godot.org/Godot:)variant)  [native]:0
+[probe]   (/Godot.org/Godot:)operator'.CallConst'(:(/Godot.org/Godot:)object,:tuple([]char,(/Godot.org/Godot:)variant,(/Godot.org/Godot:)variant))  GodotApi.native.verse:653
+[probe]   (/user@localhost/call_const_probe:)AskTwo  <repo>\tests\verse_probe\call_const_probe.verse:33
+[probe] call AskTwo: status 6, void
+[probe] runtime error: ErrRuntime_NativeInternal: An internal runtime error occurred in native code that was called from Verse. There is no other information available. (Called `call` on Godot object 7, which Godot has already freed. Test IsInstanceValid[...] before reaching through a reference the scene may have dropped.)
+[probe]   (/Godot.org/Godot:)VhCallValueConst(:int,:[]char,:[](/Godot.org/Godot:)variant)  [native]:0
+[probe]   (/Godot.org/Godot:)operator'.CallConst'(:(/Godot.org/Godot:)object,:tuple([]char,(/Godot.org/Godot:)variant,(/Godot.org/Godot:)variant,(/Godot.org/Godot:)variant))  GodotApi.native.verse:656
+[probe]   (/user@localhost/call_const_probe:)AskThree  <repo>\tests\verse_probe\call_const_probe.verse:36
+[probe] call AskThree: status 6, void
+[probe] runtime error: ErrRuntime_NativeInternal: An internal runtime error occurred in native code that was called from Verse. There is no other information available. (Called `call` on Godot object 7, which Godot has already freed. Test IsInstanceValid[...] before reaching through a reference the scene may have dropped.)
+[probe]   (/Godot.org/Godot:)VhCallValueConst(:int,:[]char,:[](/Godot.org/Godot:)variant)  [native]:0
+[probe]   (/Godot.org/Godot:)operator'.CallConst'(:(/Godot.org/Godot:)object,:tuple([]char,(/Godot.org/Godot:)variant,(/Godot.org/Godot:)variant,(/Godot.org/Godot:)variant,(/Godot.org/Godot:)variant))  GodotApi.native.verse:659
+[probe]   (/user@localhost/call_const_probe:)AskFour  <repo>\tests\verse_probe\call_const_probe.verse:39
+[probe] call AskFour: status 6, void
+[probe] runtime error: ErrRuntime_NativeInternal: An internal runtime error occurred in native code that was called from Verse. There is no other information available. (Called `call` on Godot object 7, which Godot has already freed. Test IsInstanceValid[...] before reaching through a reference the scene may have dropped.)
+[probe]   (/Godot.org/Godot:)VhCallValueConst(:int,:[]char,:[](/Godot.org/Godot:)variant)  [native]:0
+[probe]   (/Godot.org/Godot:)operator'.CallConst'(:(/Godot.org/Godot:)object,:tuple([]char,[](/Godot.org/Godot:)variant))  GodotApi.native.verse:665
+[probe]   (/user@localhost/call_const_probe:)AskLoose  <repo>\tests\verse_probe\call_const_probe.verse:43
+[probe] call AskLoose: status 6, void
+[probe] runtime error: ErrRuntime_NativeInternal: An internal runtime error occurred in native code that was called from Verse. There is no other information available. (Called `call` on Godot object 7, which Godot has already freed. Test IsInstanceValid[...] before reaching through a reference the scene may have dropped.)
+[probe]   (/Godot.org/Godot:)VhCallValueConst(:int,:[]char,:[](/Godot.org/Godot:)variant)  [native]:0
+[probe]   (/Godot.org/Godot:)operator'.CallConst'(:(/Godot.org/Godot:)object,:[]char)  GodotApi.native.verse:647
+[probe]   (/user@localhost/call_const_probe:)AskZero  <repo>\tests\verse_probe\call_const_probe.verse:29
+[probe]   (/user@localhost/call_const_probe:)AskChained  <repo>\tests\verse_probe\call_const_probe.verse:52
+[probe] call AskChained: status 6, void
+[probe] runtime error: ErrRuntime_NativeInternal: An internal runtime error occurred in native code that was called from Verse. There is no other information available. (Called `call` on Godot object 7, which Godot has already freed. Test IsInstanceValid[...] before reaching through a reference the scene may have dropped.)
+[probe]   (/Godot.org/Godot:)VhCallValueConst(:int,:[]char,:[](/Godot.org/Godot:)variant)  [native]:0
+[probe]   (/Godot.org/Godot:)operator'.CallConst'(:(/Godot.org/Godot:)object,:[]char)  GodotApi.native.verse:647
+[probe]   (/user@localhost/call_const_probe:)AskZero  <repo>\tests\verse_probe\call_const_probe.verse:29
+[probe]   (/user@localhost/call_const_probe:)AskFromTransacts  <repo>\tests\verse_probe\call_const_probe.verse:56
+[probe] call AskFromTransacts: status 6, void
+[probe] runtime error: ErrRuntime_NativeInternal: An internal runtime error occurred in native code that was called from Verse. There is no other information available. (Called `call` on Godot object 7, which Godot has already freed. Test IsInstanceValid[...] before reaching through a reference the scene may have dropped.)
+[probe]   (/Godot.org/Godot:)VhCallValue(:int,:[]char,:[](/Godot.org/Godot:)variant)  [native]:0
+[probe]   (/Godot.org/Godot/object:)Call(:[]char)  GodotClasses.native.verse:28595
+[probe]   (/user@localhost/call_const_probe:)AskMutating  <repo>\tests\verse_probe\call_const_probe.verse:59
+[probe] call AskMutating: status 6, void
+[probe_contract] exit code: 0

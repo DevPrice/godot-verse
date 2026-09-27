@@ -1,0 +1,40 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(vm_ops_live_probe): 1
+[probe] 0 signal(s)
+[probe] 12 method(s)
+[probe]   L01_Bind  params=0 result=0  virtual=
+[probe]   L02_WriteSource  params=0 result=0  virtual=
+[probe]   L03_OverwriteBound  params=0 result=0  virtual=
+[probe]   L04_WriteSourceAgain  params=0 result=0  virtual=
+[probe]   L05_BindElement  params=0 result=0  virtual=
+[probe]   L06_WriteSourceForElement  params=0 result=0  virtual=
+[probe]   L07_OverwriteBoundElement  params=0 result=0  virtual=
+[probe]   L08_WriteSourceAgainForElement  params=0 result=0  virtual=
+[probe]   ElemAwaiter  params=0 result=0 <suspends>  virtual=
+[probe]   A01_AwaitElement  params=0 result=0  virtual=
+[probe]   A02_WriteOtherElement  params=0 result=0  virtual=
+[probe]   A03_WriteElement  params=0 result=0  virtual=
+L01 bound: Dst = 1
+[probe] call L01_Bind: status 0, void
+L02 Src = 5: Dst = 5
+[probe] call L02_WriteSource: status 0, void
+L03 Dst set to 100: Dst = 100
+[probe] call L03_OverwriteBound: status 0, void
+L04 Src = 7: Dst = 100
+[probe] call L04_WriteSourceAgain: status 0, void
+L05 Arr[1] = 7
+[probe] call L05_BindElement: status 0, void
+L06 Src = 9: Arr[1] = 9
+[probe] call L06_WriteSourceForElement: status 0, void
+L07 Arr[1] set to 100: Arr[1] = 100
+[probe] call L07_OverwriteBoundElement: status 0, void
+L08 Src = 11: Arr[1] = 11
+[probe] call L08_WriteSourceAgainForElement: status 0, void
+A01 spawned
+[probe] call A01_AwaitElement: status 0, void
+A02 wrote Elems[1]
+[probe] call A02_WriteOtherElement: status 0, void
+  A awaiter resumed, Elems[0] = 3
+A03 wrote Elems[0]
+[probe] call A03_WriteElement: status 0, void
+[probe_contract] exit code: 0

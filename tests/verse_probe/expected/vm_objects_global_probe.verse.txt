@@ -1,0 +1,8 @@
+[probe] runtime error: ErrRuntime_UnimplementedGlobalVariable: Allocating a global var is not yet implemented. (Can't allocate mutable var field (/user@localhost/glob_var:)N while initializing module.)
+[probe]   glob_var_ConstructorProcedure  <repo>\tests\verse_probe\vm_objects_global_probe.verse:19
+[probe]   GodotScripts_1  :22
+[probe]     :24
+[probe]   __SpawnReturnImpl__  __SpawnReturnImpl__:0
+[probe] :0:0: error 9003: Runtime error while evaluating module.
+[probe] compile: status 4, generation <gen>, 1 error(s)
+[probe_contract] exit code: 1

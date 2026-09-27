@@ -1,0 +1,23 @@
+[probe] <repo>\tests\verse_probe\async_reject.verse:34:2: error 3532: Function (/user@localhost/async_reject:)_Ready must have a distinct domain from these other functions with the same name:
+    function (/Godot.org/Godot/node:)_Ready() in package Engine/VerseHost
+[probe] <repo>\tests\verse_probe\async_reject.verse:34:2: error 3523: Function (/user@localhost/async_reject:)_Ready has an <override> attribute, but could not find a parent function to override (perhaps the parent function's access specifiers are too restrictive?).
+[probe] <repo>\tests\verse_probe\async_reject.verse:45:11: error 3512: This invocation calls a function (`(/Verse.org/Verse/event:)Await`) that has the 'no_rollback' effect, which is not allowed by its context.
+[probe] <repo>\tests\verse_probe\async_reject.verse:54:3: error 3512: This 'spawn' macro has effects that are not allowed by its context:
+    writes
+    allocates
+[probe] <repo>\tests\verse_probe\async_reject.verse:54:18: error 3512: This invocation calls a function (`(/user@localhost/async_reject:)WaitsWide`) that has effects that are not allowed by its context:
+    transacts
+    no_rollback
+[probe] <repo>\tests\verse_probe\async_reject.verse:63:18: error 3512: This invocation calls a function (`(/user@localhost/async_reject:)WaitsWide`) that has the 'no_rollback' effect, which is not allowed by its context.
+[probe] <repo>\tests\verse_probe\async_reject.verse:67:12: error 3512: This invocation calls a function (`(/user@localhost/async_reject:)WaitsWide`) that has the 'no_rollback' effect, which is not allowed by its context.
+[probe] <repo>\tests\verse_probe\async_reject.verse:72:12: error 3512: This invocation calls a function (`(/user@localhost/async_reject:)WaitsWide`) that has effects that are not allowed by its context:
+    suspends
+    no_rollback
+[probe] <repo>\tests\verse_probe\async_reject.verse:79:18: error 3512: This invocation calls a function (`(/user@localhost/async_reject:)WaitsWide`) that has effects that are not allowed by its context:
+    transacts
+    suspends
+    no_rollback
+[probe] <repo>\tests\verse_probe\async_reject.verse:34:2: error 3532: The function (/user@localhost/async_reject:)_Ready() in package GodotScripts_1 is ambiguous with this definition:
+    function (/Godot.org/Godot/node:)_Ready() in package Engine/VerseHost
+[probe] compile: status 4, generation <gen>, 10 error(s)
+[probe_contract] exit code: 1

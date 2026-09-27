@@ -1,0 +1,34 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(vm_unification_probe): 1
+[probe] 0 signal(s)
+[probe] 4 method(s)
+[probe]   UnifyConcrete  params=0 result=0  virtual=
+[probe]   UnifyAggregates  params=0 result=0  virtual=
+[probe]   DefinitionIsTest  params=0 result=0  virtual=
+[probe]   ConstructionOrder  params=0 result=0  virtual=
+UnifyConcrete: X = 5 succeeds
+UnifyConcrete: X = 6 fails
+UnifyConcrete: array = array succeeds
+UnifyConcrete: array = longer array fails
+UnifyConcrete: string = string succeeds
+UnifyConcrete: string = other string fails
+UnifyConcrete: option = option succeeds
+UnifyConcrete: option = other option fails
+UnifyConcrete: int = float-valued int succeeds
+UnifyConcrete: 0.0 = -0.0 succeeds
+[probe] call UnifyConcrete: status 0, void
+UnifyAggregates: struct = equal struct succeeds
+UnifyAggregates: struct = unequal struct fails
+UnifyAggregates: object = itself succeeds
+UnifyAggregates: object = another object fails
+UnifyAggregates: tuple = equal tuple succeeds
+UnifyAggregates: map = equal map succeeds
+UnifyAggregates: map = same pairs other order fails
+[probe] call UnifyAggregates: status 0, void
+DefinitionIsTest: Y = 7, X = Y succeeds
+[probe] call DefinitionIsTest: status 0, void
+probe_fields block: First = 3, Second = 4
+probe_needs block: Given = 11
+ConstructionOrder: F.Second = 4, N.Given = 11
+[probe] call ConstructionOrder: status 0, void
+[probe_contract] exit code: 0

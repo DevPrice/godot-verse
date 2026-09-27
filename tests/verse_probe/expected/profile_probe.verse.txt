@@ -1,0 +1,9 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(profile_probe): 1
+[probe] 0 signal(s)
+[probe] 2 method(s)
+[probe]   Work  params=0 result=2  virtual=
+[probe]   Nested  params=0 result=2  virtual=
+[probe] call Work: status 0, int 4950
+[probe] call Nested: status 0, int 7
+[probe_contract] exit code: 0

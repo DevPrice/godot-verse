@@ -1,0 +1,5 @@
+[probe] <repo>\tests\verse_probe\vm_failure_reject.verse:30:2: error 3607: Structs may not contain mutable members.
+[probe] <repo>\tests\verse_probe\vm_failure_reject.verse:20:1: error 3502: Module-scoped `var` must have `weak_map` type.
+[probe] <repo>\tests\verse_probe\vm_failure_reject.verse:26:30: error 3512: This archetype instantiation constructs a class that has the 'transacts' effect, which is not allowed by its context.
+[probe] compile: status 4, generation <gen>, 3 error(s)
+[probe_contract] exit code: 1

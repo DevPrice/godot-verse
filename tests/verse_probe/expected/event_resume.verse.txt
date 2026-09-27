@@ -1,0 +1,15 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(event_resume): 1
+[probe] 0 signal(s)
+[probe] 4 method(s)
+[probe]   WaiterWide  params=0 result=0 <suspends>  virtual=
+[probe]   StartWide  params=0 result=0  virtual=
+[probe]   Fire  params=0 result=0  virtual=
+[probe]   Report  params=0 result=2  virtual=
+StartWide returned
+[probe] call StartWide: status 0, void
+wide waiter resumed
+Fire returned
+[probe] call Fire: status 0, void
+[probe] call Report: status 0, int 42
+[probe_contract] exit code: 0

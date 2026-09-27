@@ -1,0 +1,72 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(vm_calls_probe): 1
+[probe] 0 signal(s)
+[probe] 12 method(s)
+[probe]   SuperSkipsALevel  params=0 result=0  virtual=
+[probe]   LocalFunction  params=0 result=0  virtual=
+[probe]   TupleBoxing  params=0 result=0  virtual=
+[probe]   NamedAndDefaults  params=0 result=0  virtual=
+[probe]   EvaluationOrder  params=0 result=0  virtual=
+[probe]   NestedParameters  params=0 result=0  virtual=
+[probe]   IndexAndLookup  params=0 result=0  virtual=
+[probe]   FunctionValues  params=0 result=0  virtual=
+[probe]   MethodValues  params=0 result=0  virtual=
+[probe]   RecursionShallow  params=0 result=0  virtual=
+[probe]   RecursionDeep  params=0 result=0  virtual=
+[probe]   RecursionVeryDeep  params=0 result=0  virtual=
+leaf then derived.Describe then base.Describe on l
+[probe] call SuperSkipsALevel: status 0, void
+AddBase(2) = 42
+Apply(AddBase, 3) = 43
+[probe] call LocalFunction: status 0, void
+TakesTuple(3, 5) = 35
+TakesTuple(T) = 46
+TakesTwo(1, 2) = 12
+TakesTwo(U) = 78
+[probe] call TupleBoxing: status 0, void
+Defaults(1) = 110
+Defaults(1, ?B := 2) = 102
+DefaultFromEarlier(3) = 306
+TwoNamed() = 12
+TwoNamed(?Y := 5, ?X := 6) = 65
+[probe] call NamedAndDefaults: status 0, void
+positional:
+  eval a
+  eval b
+  eval c
+  = 123
+named, one supplied:
+  eval a
+  eval argument C
+  eval default B
+  = 173
+named, written out of order:
+  eval argument Y
+  eval argument X
+  = 65
+[probe] call EvaluationOrder: status 0, void
+Nested(1, (2, 3)) = 123
+Nested(1, P) = 145
+NestedNamed(1, 2) = 121
+NestedNamed(1, (4, ?C := 5)) = 145
+[probe] call NestedParameters: status 0, void
+A[1] = 20
+A[3] fails
+A[-1] fails
+M[two] = 2
+M[three] fails
+[probe] call IndexAndLookup: status 0, void
+Apply(Double, 21) = 42
+5.Twice() = 10
+[probe] call FunctionValues: status 0, void
+derived.Describe then base.Describe on d
+derived.Describe then base.Describe on d
+through a value: derived.Describe then base.Describe on d
+[probe] call MethodValues: status 0, void
+Depth(1000) = 1000
+[probe] call RecursionShallow: status 0, void
+Depth(100000) = 100000
+[probe] call RecursionDeep: status 0, void
+Depth(2000000) = 2000000
+[probe] call RecursionVeryDeep: status 0, void
+[probe_contract] exit code: 0

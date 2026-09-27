@@ -1,0 +1,6 @@
+[probe] <repo>\tests\verse_probe\option_overload_probe.verse:30:13: error 3509: No overload of the function `Take` matches the provided arguments (:true). Could be any of:
+    function (/user@localhost/probe_main:)Take(:node2d) in package GodotScripts_1
+    function (/user@localhost/probe_main:)Take(:?node2d) in package GodotScripts_1
+[probe] <repo>\tests\verse_probe\option_overload_probe.verse:30:13: error 3509: (Also tried with extension function arguments (:probe_main,:true))
+[probe] compile: status 4, generation <gen>, 2 error(s)
+[probe_contract] exit code: 1

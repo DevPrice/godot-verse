@@ -1,0 +1,19 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(narrow_suspends): 1
+[probe] 0 signal(s)
+[probe] 7 method(s)
+[probe]   WaitsNarrow  params=0 result=0 <suspends>  virtual=
+[probe]   WaitsNarrowSwapped  params=0 result=0 <suspends>  virtual=
+[probe]   WaitsReads  params=0 result=2 <suspends>  virtual=
+[probe]   SpawnNarrowFromTransacts  params=0 result=0  virtual=
+[probe]   SpawnSwappedFromTransacts  params=0 result=0  virtual=
+[probe]   RacesNarrow  params=0 result=0 <suspends>  virtual=
+[probe]   Answer  params=0 result=0  virtual=
+WaitsNarrow ran
+[probe] call SpawnNarrowFromTransacts: status 0, void
+WaitsNarrowSwapped ran
+[probe] call SpawnSwappedFromTransacts: status 0, void
+WaitsNarrow ran
+WaitsNarrowSwapped ran
+[probe] call Answer: status 0, void
+[probe_contract] exit code: 0

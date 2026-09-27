@@ -6,7 +6,7 @@ R-QUAL-3. The three layers R-QUAL-1 names, in the order a failure is cheapest to
 
   units        the lexer, the class-declaration scanner and the GDScript converter, which need neither Godot nor UE
   abi          host_smoke, which drives the whole C ABI with no Godot, and the cooker
-  contract     re-derives gen_verse_keywords.py's and audit_const_overrides.py's hand tables against a UE or Godot source checkout and fails on a difference (docs/architecture-review.md item 4 step 5)
+  contract     re-derives gen_verse_keywords.py's and audit_const_overrides.py's hand tables against a UE or Godot source checkout, and every tests/verse_probe fixture against a golden transcript (docs/architecture-review.md item 4 steps 1 and 5)
   integration  a headless Godot with Verse scripts attached, asserting on behaviour
   export       a headless Godot export, asserting on the tree it produced
   web          a Web export on the vm backend (nothreads), run in headless Chrome
@@ -1777,13 +1777,18 @@ def _layer_list(text: str) -> list[str]:
     return layers
 
 
-def run_contract(results: Results, engine: Path | None) -> None:
+def run_contract(results: Results, engine: Path | None, do_build: bool) -> None:
     """docs/architecture-review.md item 4 step 5: the tables gen_verse_keywords.py and
     audit_const_overrides.py hand-maintain, re-derived from their stated engine or Godot source and
     checked against what is committed, rather than trusted to still match a source tree that moved
     on. Each case is skipped, not failed, when its input is absent, because neither a UE checkout
-    nor a Godot *source* checkout is otherwise needed to run this script at all. Later work adds
-    asserted `tests/verse_probe` fixtures to this layer beside these two.
+    nor a Godot *source* checkout is otherwise needed to run this script at all.
+
+    The third step is every `tests/verse_probe` fixture, held to a golden transcript under
+    `tests/verse_probe/expected/` by `tools/run_probe_contracts.py` (item 4 step 1): `verse_probe`
+    itself still asserts nothing, so this is what re-runs it and fails when the compiler or the VM
+    answers differently than the recorded transcript. It needs only the host, so it is skipped on
+    the same UE-checkout test the abi layer uses, plus `bin/verse_probe.exe`.
     """
     if engine is None:
         results.skip("gen_verse_keywords --check", "no Unreal checkout -- set UE_ROOT or pass --engine")
@@ -1801,6 +1806,24 @@ def run_contract(results: Results, engine: Path | None) -> None:
             [sys.executable, str(REPO / "tools" / "audit_const_overrides.py"),
              "--godot", str(godot_src), "--check"],
             results)
+
+    if engine is None:
+        results.skip("probe_contract", "no Unreal checkout -- set UE_ROOT or pass --engine")
+        return
+    host_dll = engine / "Engine" / "Binaries" / "Win64" / "verse_host.dll"
+    if not host_dll.is_file():
+        results.skip("probe_contract", f"{host_dll} not built -- run tools/build_host.py")
+        return
+    if do_build and not build("build_verse_probe.py"):
+        results.record("probe_contract", False)
+        return
+    probe = REPO / "bin" / "verse_probe.exe"
+    if not probe.is_file():
+        results.skip("probe_contract", "not built -- run tools/build_verse_probe.py")
+        return
+    run("probe_contract",
+        [sys.executable, str(REPO / "tools" / "run_probe_contracts.py"), "--engine", str(engine)],
+        results, cases="probe_contract")
 
 
 def main() -> None:
@@ -1835,7 +1858,7 @@ def main() -> None:
         run_abi(results, engine, args.build)
     if "contract" in only:
         results.layer = "contract"
-        run_contract(results, engine)
+        run_contract(results, engine, args.build)
     if "integration" in only:
         results.layer = "integration"
         run_integration(results, engine, godot)

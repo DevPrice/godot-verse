@@ -1,0 +1,13 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(class_block_self_probe): 1
+[probe] 0 signal(s)
+[probe] 4 method(s)
+[probe]   S1  params=0 result=2  virtual=
+[probe]   S3  params=0 result=2  virtual=
+[probe]   S4  params=0 result=2  virtual=
+[probe]   Answer  params=0 result=2  virtual=
+[probe] call S1: status 0, int 1
+[probe] call S3: status 0, int 2
+[probe] call S4: status 0, int 99
+[probe] call Answer: status 0, int 42
+[probe_contract] exit code: 0

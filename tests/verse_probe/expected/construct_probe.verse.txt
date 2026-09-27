@@ -1,0 +1,4 @@
+[probe] <repo>\tests\verse_probe\construct_probe.verse:53:8: error 3593: Invalid access of internal data `(/Godot.org/Godot/vh_object:)Handle` from control scope `/user@localhost/construct_probe/C2`. 
+[probe] <repo>\tests\verse_probe\construct_probe.verse:54:5: error 3593: Invalid access of internal data `(/Godot.org/Godot/vh_object:)Handle` from control scope `/user@localhost/construct_probe/C2`. 
+[probe] compile: status 4, generation <gen>, 2 error(s)
+[probe_contract] exit code: 1

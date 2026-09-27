@@ -1,0 +1,56 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(export_signal_probe): 1
+[probe] 6 signal(s)
+[probe]   Bare  args=0  reject=0
+[probe]   Scored  args=1  reject=0
+[probe]     arg 0: Int type=2 tag=2
+[probe]   Struck  args=2  reject=0
+[probe]     arg 0: Arg0 type=2 tag=2
+[probe]     arg 1: Arg1 type=5 tag=4
+[probe]   Reported  args=2  reject=0
+[probe]     arg 0: Damage type=2 tag=2
+[probe]     arg 1: By type=5 tag=4
+[probe]   Legacy  args=1  reject=0
+[probe]     arg 0: Int type=2 tag=2
+[probe]   Forgotten  args=1  reject=6
+[probe]     arg 0: Int type=2 tag=2
+[probe] 7 method(s)
+[probe]   EmitBare  params=0 result=0  virtual=
+[probe]   EmitScored  params=0 result=0  virtual=
+[probe]   EmitReported  params=0 result=0  virtual=
+[probe]   OnScored  params=1 result=0  virtual=
+[probe]   SubscribeScored  params=0 result=0  virtual=
+[probe]   AsAwaitable  params=0 result=0  virtual=
+[probe]   Answer  params=0 result=0  virtual=
+[probe] :0:0: error 0: The signal `Bare` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: The signal `Scored` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: The signal `Struck` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: The signal `Reported` was registered but could not be connected, so awaiting it would never resume.
+[probe] call EmitBare: status 0, void
+[probe] :0:0: error 0: The signal `Bare` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: The signal `Scored` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: The signal `Struck` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: The signal `Reported` was registered but could not be connected, so awaiting it would never resume.
+[probe] call EmitScored: status 0, void
+[probe] :0:0: error 0: The signal `Bare` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: The signal `Scored` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: The signal `Struck` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: The signal `Reported` was registered but could not be connected, so awaiting it would never resume.
+[probe] call EmitReported: status 0, void
+[probe] :0:0: error 0: The signal `Bare` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: The signal `Scored` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: The signal `Struck` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: The signal `Reported` was registered but could not be connected, so awaiting it would never resume.
+[probe] call SubscribeScored: status 0, void
+[probe] :0:0: error 0: The signal `Bare` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: The signal `Scored` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: The signal `Struck` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: The signal `Reported` was registered but could not be connected, so awaiting it would never resume.
+[probe] call AsAwaitable: status 0, void
+[probe] :0:0: error 0: The signal `Bare` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: The signal `Scored` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: The signal `Struck` was registered but could not be connected, so awaiting it would never resume.
+[probe] :0:0: error 0: The signal `Reported` was registered but could not be connected, so awaiting it would never resume.
+export_signal_probe compiled
+[probe] call Answer: status 0, void
+[probe_contract] exit code: 0

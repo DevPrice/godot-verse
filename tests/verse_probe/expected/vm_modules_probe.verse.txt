@@ -1,0 +1,13 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(vm_modules_probe): 1
+[probe] 0 signal(s)
+[probe] 1 method(s)
+[probe]   ReadData  params=0 result=0  virtual=
+FirstData = 1
+SecondData = 2
+Greeting = hello
+Numbers.Length = 3
+UsesInner = 101
+GlobalHolder.Held = 9, Label = held
+[probe] call ReadData: status 0, void
+[probe_contract] exit code: 0

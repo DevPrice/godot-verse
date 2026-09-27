@@ -1,0 +1,11 @@
+[probe] compile: status 0, generation <gen>, 0 error(s)
+[probe] vh_has_class(effects_variance): 1
+[probe] 0 signal(s)
+[probe] 4 method(s)
+[probe]   Narrow  params=1 result=2  virtual=
+[probe]   NarrowDecides  params=1 result=2 <decides>  virtual=
+[probe]   Build  params=0 result=2  virtual=
+[probe]   Answer  params=0 result=2  virtual=
+[probe] call Build: status 0, int 2
+[probe] call Answer: status 0, int 2
+[probe_contract] exit code: 0
