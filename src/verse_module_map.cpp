@@ -1,5 +1,7 @@
 #include "verse_module_map.h"
 
+#include "verse_diagnostics.h"
+
 #include <algorithm>
 
 namespace {
@@ -72,12 +74,7 @@ VerseModuleMap verse_build_module_map(const std::vector<std::string> &p_source_p
 		const std::string directory = directory_of(marker);
 		const std::string name = stem_of(file_of(marker));
 		if (!verse_is_valid_module_name(name)) {
-			map.diagnostics.push_back({ marker,
-					std::string("\"") + name
-							+ "\" is not a Verse module name, so this directory is not a module and its "
-							  "scripts stay in the one above it. A module name is a letter or underscore "
-							  "followed by letters, digits or underscores -- gameplay.vmodule, not "
-							  "my-stuff.vmodule." });
+			map.diagnostics.push_back({ marker, verse_diag_text(verse_diag::VG5001, { { "name", name } }) });
 			continue;
 		}
 		name_by_directory.emplace(directory, name);

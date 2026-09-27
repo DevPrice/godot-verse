@@ -1,6 +1,7 @@
 #include "verse_export_plugin.h"
 
 #include "verse_export_paths.h"
+#include "verse_diagnostic_prose.h"
 #include "verse_bindings_gen.h"
 #include "verse_host_paths.h"
 #include "verse_script_language.h"
@@ -138,8 +139,7 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 	if (p_features.has("web") && backend != "vm") {
 		refused = true;
 		say(EditorExportPlatform::EXPORT_MESSAGE_ERROR,
-				String("Verse needs the vm backend on Web, and this preset reads verse/runtime/backend as \"") + backend +
-						String("\": the UE host is a native DLL a browser cannot load. Set verse/runtime/backend.web to \"vm\" in Project Settings, or remove the override that changed it."));
+				verse_diagnostic(verse_diag::VG6101, { { "backend", backend } }));
 		return;
 	}
 	if (backend == "vm") {
@@ -158,7 +158,7 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 					rewritten_gdextension_original = original;
 				} else {
 					say(EditorExportPlatform::EXPORT_MESSAGE_WARNING,
-							String("Could not rewrite ") + gdextension_path + String(" to drop the host DLL for the vm backend; the export will carry it anyway."));
+							verse_diagnostic(verse_diag::VG6102, { { "path", gdextension_path } }));
 				}
 			}
 		}
@@ -168,9 +168,7 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 		if (p_features.has(String(platform))) {
 			refused = true;
 			say(EditorExportPlatform::EXPORT_MESSAGE_ERROR,
-					String("Verse does not export to ") + String(platform) +
-							String(" yet, and this project has Verse scripts in it. "
-								   "See docs/phase-7-design.md §14."));
+					verse_diagnostic(verse_diag::VG6103, { { "platform", String(platform) } }));
 			return;
 		}
 	}
@@ -179,7 +177,7 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 	if (platform_tag.is_empty()) {
 		refused = true;
 		say(EditorExportPlatform::EXPORT_MESSAGE_ERROR,
-				"Verse cannot tell which platform this export is for; no platform feature tag was set.");
+				verse_diagnostic(verse_diag::VG6104));
 		return;
 	}
 
@@ -189,8 +187,7 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 	if (language->build_project() != OK) {
 		refused = true;
 		say(EditorExportPlatform::EXPORT_MESSAGE_ERROR,
-				"The Verse project did not compile, so nothing was cooked. Fix the errors in the "
-				"Output panel and export again.");
+				verse_diagnostic(verse_diag::VG6105));
 		return;
 	}
 
@@ -198,9 +195,7 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 	if (cooker.is_empty() || !FileAccess::file_exists(cooker)) {
 		refused = true;
 		say(EditorExportPlatform::EXPORT_MESSAGE_ERROR,
-				String("The Verse cooker is not at ") + (cooker.is_empty() ? String("<unset>") : cooker) +
-						String(". Build it with `python tools/build_host.py --target VerseHostCooker`, "
-							   "or set Editor Settings > Verse > Host > Cooker Path to it."));
+				verse_diagnostic(verse_diag::VG6106, { { "path", cooker.is_empty() ? String("<unset>") : cooker } }));
 		return;
 	}
 
@@ -233,7 +228,7 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 		if (file.is_null()) {
 			refused = true;
 			temp_dir = String();
-			say(EditorExportPlatform::EXPORT_MESSAGE_ERROR, String("Could not write ") + manifest);
+			say(EditorExportPlatform::EXPORT_MESSAGE_ERROR, verse_diagnostic(verse_diag::VG6107, { { "path", manifest } }));
 			return;
 		}
 		file->store_string(String("\n").join(lines) + String("\n"));
@@ -251,7 +246,7 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 		if (file.is_null()) {
 			refused = true;
 			temp_dir = String();
-			say(EditorExportPlatform::EXPORT_MESSAGE_ERROR, String("Could not write ") + bindings_path);
+			say(EditorExportPlatform::EXPORT_MESSAGE_ERROR, verse_diagnostic(verse_diag::VG6107, { { "path", bindings_path } }));
 			return;
 		}
 		file->store_string(String(bindings.source.c_str()));
@@ -278,7 +273,7 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 		if (file.is_null()) {
 			refused = true;
 			temp_dir = String();
-			say(EditorExportPlatform::EXPORT_MESSAGE_ERROR, String("Could not write ") + table_path);
+			say(EditorExportPlatform::EXPORT_MESSAGE_ERROR, verse_diagnostic(verse_diag::VG6107, { { "path", table_path } }));
 			return;
 		}
 		file->store_string(String("\n").join(rows) + String("\n"));
@@ -321,9 +316,8 @@ void VerseExportPlugin::_export_begin(const PackedStringArray &p_features, bool 
 		refused = true;
 		temp_dir = String();
 		say(EditorExportPlatform::EXPORT_MESSAGE_ERROR,
-				String("verse_cook exited ") + String::num_int64(status) +
-						String("; the export carries no Verse. To see the engine's own log, run it by hand: \"") +
-						cooker + String("\" \"") + manifest + String("\" \"") + work + String("\" --verbose"));
+				verse_diagnostic(verse_diag::VG6108, { { "status", String::num_int64(status) }, { "cooker", cooker },
+						{ "manifest", manifest }, { "work", work } }));
 		return;
 	}
 

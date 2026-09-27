@@ -1449,7 +1449,8 @@ bool LoadRefused(const std::vector<uint8_t> &p_bytes, const char *p_phrase) {
 	Program program;
 	std::string error;
 	const bool loaded = load_program(heap, p_bytes.data(), p_bytes.size(), "mem/program.vbc", program, error);
-	return !loaded && error.rfind("mem/program.vbc ", 0) == 0 && error.find(p_phrase) != std::string::npos;
+	// Every refusal is a VG70xx sentence about the file, so the ID leads and the path follows it.
+	return !loaded && error.rfind("VG70", 0) == 0 && error.find(": mem/program.vbc ") == 6 && error.find(p_phrase) != std::string::npos;
 }
 
 std::vector<uint8_t> WithExtraOp(uint64_t p_opcode) {
@@ -1505,7 +1506,7 @@ void LoaderCases(Cases &r_cases) {
 			native != nullptr && !native->bound && program.native_count == 1 && program.unbound_native_count == 1 &&
 					native->positional_count == 1 && native->implementation(native_call) == Outcome::Error &&
 					native_call.error.diagnostic == "ErrRuntime_NativeInternal" &&
-					native_call.error.message == "The native function (/Verse.org/Verse/(/Verse.org/Verse:)NoSuchNative(:float):)Native is not implemented by this runtime.");
+					native_call.error.message == "VG7102: The native function (/Verse.org/Verse/(/Verse.org/Verse:)NoSuchNative(:float):)Native is not implemented by this runtime.");
 
 	const NativeProcedureCell *missing = program.missing_procedure != nullptr ? static_cast<const NativeProcedureCell *>(program.missing_procedure->callee) : nullptr;
 	NativeCall missing_call(heap);
@@ -1601,20 +1602,20 @@ void BootCases(Cases &r_cases) {
 
 	g_files.clear();
 	r_cases.check("sidecar: a missing sidecar is refused with its sentence",
-			Boot(error) == VH_ERR_INIT && error == "Verse data not found at mem/Cooked/verse_classes.json. The export is incomplete; export the project again.");
+			Boot(error) == VH_ERR_INIT && error == "VG7002: Verse data not found at mem/Cooked/verse_classes.json. The export is incomplete; export the project again.");
 	g_files["mem/verse_classes.json"] = "{\"version\": 8,}";
-	r_cases.check("sidecar: invalid JSON is refused with its sentence", Boot(error) == VH_ERR_INIT && error == "mem/verse_classes.json is not valid JSON");
+	r_cases.check("sidecar: invalid JSON is refused with its sentence", Boot(error) == VH_ERR_INIT && error == "VG7007: mem/verse_classes.json is not valid JSON");
 	g_files["mem/verse_classes.json"] = SidecarText(7, VH_ABI_VERSION, "d78f612c313953e9");
 	r_cases.check("sidecar: another version is refused with its sentence",
-			Boot(error) == VH_ERR_INIT && error == "mem/verse_classes.json was written by sidecar version 7; this host reads version 8. Re-export the project.");
+			Boot(error) == VH_ERR_INIT && error == "VG7005: mem/verse_classes.json was written by sidecar version 7; this host reads version 8. Re-export the project.");
 	g_files["mem/verse_classes.json"] = SidecarText(8, 11000, "abcdef0123");
 	r_cases.check("sidecar: another abi is refused with the stamp sentence",
 			Boot(error) == VH_ERR_INIT && error.find("cooked by a different build of godot-verse (cooked 11000/abcdef0, host " + std::to_string(VH_ABI_VERSION) + "/verse_vm)") != std::string::npos);
 	g_files["mem/verse_classes.json"] = "{\"version\": 8, \"abi\": " + std::to_string(VH_ABI_VERSION) + "}";
-	r_cases.check("sidecar: a missing field is refused naming the file", Boot(error) == VH_ERR_INIT && error.rfind("mem/verse_classes.json is not a valid class sidecar: ", 0) == 0);
+	r_cases.check("sidecar: a missing field is refused naming the file", Boot(error) == VH_ERR_INIT && error.rfind("VG7006: mem/verse_classes.json is not a valid class sidecar: ", 0) == 0);
 	g_files["mem/verse_classes.json"] = SidecarText(8, VH_ABI_VERSION, "d78f612c313953e9");
 	r_cases.check("loader: a missing program.vbc is refused with the missing-data sentence",
-			Boot(error) == VH_ERR_INIT && error == "Verse data not found at mem/program.vbc. The export is incomplete; export the project again.");
+			Boot(error) == VH_ERR_INIT && error == "VG7002: Verse data not found at mem/program.vbc. The export is incomplete; export the project again.");
 	g_files["mem/program.vbc"] = program_text;
 	g_files["mem/verse_classes.json"] = SidecarText(8, VH_ABI_VERSION, "0000000");
 	r_cases.check("loader: a program.vbc from another cook than the sidecar is refused", Boot(error) == VH_ERR_INIT && error.find("were written by different cooks") != std::string::npos);
@@ -1667,7 +1668,7 @@ void BootCases(Cases &r_cases) {
 	g_files.erase("mem/program.vbc");
 	g_diagnostic.clear();
 	r_cases.check("abi: a refusal is a status and an error diagnostic carrying the sentence",
-			vh_init(&desc) == VH_ERR_INIT && g_diagnostic == "Verse data not found at mem/program.vbc. The export is incomplete; export the project again.");
+			vh_init(&desc) == VH_ERR_INIT && g_diagnostic == "VG7002: Verse data not found at mem/program.vbc. The export is incomplete; export the project again.");
 	vm_set_file_reader(nullptr);
 }
 

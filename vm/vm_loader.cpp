@@ -9,6 +9,8 @@
 #include "vm_number.h"
 #include "vm_values.h"
 
+#include "verse_diagnostics.h"
+
 namespace vm {
 
 namespace {
@@ -136,15 +138,15 @@ private:
 	};
 	std::vector<RawClassEntry> raw_classes;
 
-	bool refuse(const std::string &p_sentence) {
+	bool refuse(const std::string &p_error) {
 		if (error.empty()) {
-			error = path + " " + p_sentence;
+			error = p_error;
 		}
 		return false;
 	}
 
 	bool malformed(const std::string &p_what) {
-		return refuse("is malformed: " + p_what + ".");
+		return refuse(verse_diag_text(verse_diag::VG7015, { { "path", path }, { "what", p_what } }));
 	}
 
 	// Every reader failure is a truncation or a runaway varint; either way the file is refused.
@@ -152,7 +154,7 @@ private:
 		if (reader.ok()) {
 			return true;
 		}
-		return refuse("is truncated or malformed: " + reader.error + ".");
+		return refuse(verse_diag_text(verse_diag::VG7016, { { "path", path }, { "what", reader.error } }));
 	}
 
 	size_t remaining() const { return reader.size - reader.offset; }
@@ -333,14 +335,15 @@ private:
 		const uint8_t magic[4] = { vbc_read_u8(reader), vbc_read_u8(reader), vbc_read_u8(reader), vbc_read_u8(reader) };
 		if (!reader.ok() || std::memcmp(magic, "VBC1", 4) != 0) {
 			error.clear();
-			return refuse("is not a Verse program: it does not begin with VBC1.");
+			return refuse(verse_diag_text(verse_diag::VG7010, { { "path", path } }));
 		}
 		const uint64_t version = vbc_read_uv(reader);
 		if (!check_reader()) {
 			return false;
 		}
 		if (version != kFormatVersion) {
-			return refuse("is format version " + std::to_string(version) + "; this runtime reads version " + std::to_string(kFormatVersion) + ". Export the project again.");
+			return refuse(verse_diag_text(verse_diag::VG7011, { { "path", path }, { "version", std::to_string(version) },
+																   { "wanted", std::to_string(kFormatVersion) } }));
 		}
 		program.abi = vbc_read_uv(reader);
 		program.host_id = vbc_read_str(reader);
@@ -351,7 +354,7 @@ private:
 			return false;
 		}
 		if (digest != vbc::kVbcOpsSchemaDigest) {
-			return refuse("was written for another Verse op set (schema " + digest + "); this runtime reads schema " + vbc::kVbcOpsSchemaDigest + ". Export the project again with a matching build.");
+			return refuse(verse_diag_text(verse_diag::VG7012, { { "path", path }, { "schema", digest }, { "wanted", vbc::kVbcOpsSchemaDigest } }));
 		}
 		return true;
 	}
@@ -711,7 +714,7 @@ private:
 			return malformed("procedure " + p_procedure->name->text + " holds the inline-cache op " + desc.name + ", which is never serialized");
 		}
 		if (is_refused_op(op)) {
-			return refuse("uses the op " + std::string(desc.name) + " in " + p_procedure->name->text + ", which this runtime does not implement.");
+			return refuse(verse_diag_text(verse_diag::VG7013, { { "path", path }, { "op", desc.name }, { "procedure", p_procedure->name->text } }));
 		}
 
 		size_t slots = 0;
@@ -1124,7 +1127,7 @@ private:
 		const uint8_t marker = vbc_read_u8(reader);
 		if (!reader.ok() || marker != kEndMarker) {
 			error.clear();
-			return refuse("is truncated or malformed: its end marker is missing.");
+			return refuse(verse_diag_text(verse_diag::VG7016, { { "path", path }, { "what", "its end marker is missing" } }));
 		}
 		if (reader.offset != reader.size) {
 			return malformed(std::to_string(reader.size - reader.offset) + " bytes follow the end marker");
@@ -1251,10 +1254,10 @@ private:
 			}
 		}
 		if (program.task_class == nullptr) {
-			return refuse("names no task_class definition, which this runtime needs. Export the project again.");
+			return refuse(verse_diag_text(verse_diag::VG7014, { { "path", path }, { "definition", "task_class" } }));
 		}
 		if (program.accessor_enumerator == nullptr) {
-			return refuse("names no accessor_enumerator definition, which this runtime needs. Export the project again.");
+			return refuse(verse_diag_text(verse_diag::VG7014, { { "path", path }, { "definition", "accessor_enumerator" } }));
 		}
 		heap.add_permanent_root(Value::from_cell(program.task_class));
 		heap.add_permanent_root(Value::from_cell(program.accessor_enumerator));

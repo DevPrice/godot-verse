@@ -1,5 +1,6 @@
 #include "verse_project_state.h"
 
+#include "verse_diagnostic_prose.h"
 #include "verse_runtime.h"
 #include "verse_script.h"
 #include "verse_script_language.h"
@@ -165,10 +166,7 @@ Error VerseProjectState::build_project() {
 		}
 		// Nothing was published, so whatever ran before this still runs (R-ITER-5). The
 		// diagnostics above say what is wrong; this says what that costs.
-		UtilityFunctions::push_warning(
-				"Verse: the project did not build, so no new code was published. The editor's analysis -- "
-				"diagnostics, completion and the shape of the exported properties -- is live either way; "
-				"fix the errors and build again to replace what is running.");
+		UtilityFunctions::push_warning(String("Verse: ") + verse_diagnostic(verse_diag::VG5009));
 		return status;
 	}
 

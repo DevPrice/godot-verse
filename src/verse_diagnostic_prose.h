@@ -1,6 +1,10 @@
 #pragma once
 
+#include "verse_diagnostics.h"
 #include "verse_host_abi.h"
+
+#include <initializer_list>
+#include <utility>
 
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_string_array.hpp>
@@ -11,6 +15,11 @@
 //
 // The sentences themselves are include/verse_diagnostics.h's, which vm/ runs too; these are its
 // godot::String face, so the two backends cannot word one rejection two ways.
+
+// A registry row (include/verse_diagnostics.def) as a godot::String, its ID first and its
+// placeholders filled by name. Every sentence src/ authors goes through here or the three below.
+godot::String verse_diagnostic(verse_diag p_id,
+		std::initializer_list<std::pair<const char *, godot::String>> p_args = {});
 
 // What a rejected export has to say for itself. p_native_class is only ever read for
 // VH_EXPORT_BINDING_CLASS_UNSUPPORTED, and empty otherwise.

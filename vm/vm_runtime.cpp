@@ -8,6 +8,8 @@
 #include "vm_file_reader.h"
 #include "vm_marshal.h"
 
+#include "verse_diagnostics.h"
+
 namespace vm {
 
 namespace {
@@ -32,14 +34,14 @@ std::string parent_directory(std::string p_directory) {
 }
 
 std::string missing_data(const std::string &p_path) {
-	return "Verse data not found at " + p_path + ". The export is incomplete; export the project again.";
+	return verse_diag_text(verse_diag::VG7002, { { "path", p_path } });
 }
 
 // spec/sidecar.md's stamp sentence. This runtime has no host id of its own: it compares `abi` only,
 // and names itself where the UE host names its build digest.
 std::string stamp_mismatch(int64_t p_cooked_abi, const std::string &p_cooked_host_id) {
-	return "This game's Verse data was cooked by a different build of godot-verse (cooked " + std::to_string(p_cooked_abi) + "/" +
-			p_cooked_host_id.substr(0, 7) + ", host " + std::to_string(VH_ABI_VERSION) + "/verse_vm). Export the project again.";
+	return verse_diag_text(verse_diag::VG7003, { { "cooked", std::to_string(p_cooked_abi) + "/" + p_cooked_host_id.substr(0, 7) },
+													 { "host", std::to_string(VH_ABI_VERSION) } });
 }
 
 const ClassCell *superclass_of(const ClassCell *p_class) {
@@ -125,7 +127,7 @@ int32_t Runtime::boot(const std::string &p_cooked_dir, std::string &r_error) {
 		return VH_ERR_INIT;
 	}
 	if (program.host_id != sidecar.host_id || program.generation != uint64_t(sidecar.generation)) {
-		r_error = program_path + " and " + sidecar_path + " were written by different cooks. Export the project again.";
+		r_error = verse_diag_text(verse_diag::VG7004, { { "program", program_path }, { "sidecar", sidecar_path } });
 		return VH_ERR_INIT;
 	}
 	interpreter.sidecar = &sidecar;
@@ -151,7 +153,7 @@ bool Runtime::on_init_thread() const {
 }
 
 void Runtime::refuse_thread(const std::string &p_what) const {
-	report_error(p_what + " was called from a thread other than the one Verse runs on, so it did not run. Call it from the main thread.");
+	report_error(verse_diag_text(verse_diag::VG4011, { { "entry", p_what } }));
 }
 
 HostArena &Runtime::result_arena(size_t p_depth) {

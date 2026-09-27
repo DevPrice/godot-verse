@@ -1,5 +1,7 @@
 #include "verse_host_paths.h"
 
+#include "verse_diagnostic_prose.h"
+
 #include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/classes/editor_settings.hpp>
 #include <godot_cpp/classes/engine.hpp>
@@ -81,10 +83,7 @@ String from_project_settings(const char *p_name) {
 	static bool warned = false;
 	if (!warned) {
 		warned = true;
-		UtilityFunctions::push_warning(String("Verse: ") + p_name +
-				String(" is set in project.godot, which commits one machine's paths to everyone "
-					   "who clones this project. Move it to Editor Settings > Verse > Host, or set "
-					   "UE_ROOT, and delete the [verse] section. It is still read for now."));
+		UtilityFunctions::push_warning(String("Verse: ") + verse_diagnostic(verse_diag::VG4102, { { "setting", String(p_name) } }));
 	}
 	return settings->globalize_path(value);
 }
@@ -151,10 +150,7 @@ String verse_host_paths::cooker_exe() {
 }
 
 String verse_host_paths::unconfigured_message() {
-	return String("no Unreal checkout is configured, so there is no host to load. Set UE_ROOT to "
-				  "the checkout that built ") +
-			HOST_DLL_NAME +
-			String(", or set Editor Settings > Verse > Host > Engine Dir to the same directory.");
+	return verse_diagnostic(verse_diag::VG4101, { { "dll", String(HOST_DLL_NAME) } });
 }
 
 void verse_host_paths::sync_environment_for_play() {

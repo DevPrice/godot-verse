@@ -4,6 +4,8 @@
 
 #include "vm_json.h"
 
+#include "verse_diagnostics.h"
+
 namespace vm {
 
 namespace {
@@ -36,7 +38,8 @@ public:
 			return fail("it carries no integer `version`");
 		}
 		if (r_sidecar.version != kSidecarVersion) {
-			error = path + " was written by sidecar version " + std::to_string(r_sidecar.version) + "; this host reads version " + std::to_string(kSidecarVersion) + ". Re-export the project.";
+			error = verse_diag_text(verse_diag::VG7005, { { "path", path }, { "version", std::to_string(r_sidecar.version) },
+															{ "wanted", std::to_string(kSidecarVersion) } });
 			return false;
 		}
 		if (!get_int64(p_root, "abi", r_sidecar.abi, "the top level") || !get_string(p_root, "hostId", r_sidecar.host_id, "the top level") ||
@@ -79,7 +82,7 @@ private:
 
 	bool fail(const std::string &p_what) {
 		if (error.empty()) {
-			error = path + " is not a valid class sidecar: " + p_what + ".";
+			error = verse_diag_text(verse_diag::VG7006, { { "path", path }, { "what", p_what } });
 		}
 		return false;
 	}
@@ -639,7 +642,7 @@ bool sidecar_parse(std::string_view p_text, const std::string &p_path, Sidecar &
 	JsonValue root;
 	std::string json_error;
 	if (!json_parse(p_text, root, json_error)) {
-		r_error = p_path + " is not valid JSON";
+		r_error = verse_diag_text(verse_diag::VG7007, { { "path", p_path } });
 		return false;
 	}
 	SidecarReader reader(p_path, r_error);

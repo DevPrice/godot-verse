@@ -3,6 +3,7 @@
 // the four vh_check_project*, vh_lookup_symbol, vh_complete_symbol, vh_resolve_unknown_name,
 // vh_class_members, vh_class_override_candidates and vh_signature_at. vh_check_project_busy answers
 // 0, having no status to refuse through.
+#include "verse_diagnostics.h"
 #include "verse_host_abi.h"
 
 #include <algorithm>
@@ -192,7 +193,7 @@ int32_t vh_init(const vh_init_desc *Desc) {
 	std::string error;
 	int32_t status = VH_ERR_INIT;
 	if (desc.CookedDirUtf8 == nullptr) {
-		error = "This runtime runs cooked Verse only, and vh_init was given no cooked directory.";
+		error = verse_diag_text(verse_diag::VG7001);
 	} else {
 		status = runtime->boot(desc.CookedDirUtf8, error);
 	}
@@ -494,7 +495,7 @@ int32_t vh_instance_call(vh_instance *Instance, const char *DecoratedName, const
 			vm::RaisedError raised;
 			raised.error.diagnostic = "ErrRuntime_Internal";
 			raised.error.description = "An internal runtime error occurred. There is no other information available.";
-			raised.error.message = std::string("The result of ") + DecoratedName + " could not be handed to the host: " + why + ".";
+			raised.error.message = verse_diag_text(verse_diag::VG7101, { { "function", DecoratedName }, { "why", why } });
 			g_runtime->report_raised(raised);
 			collect_after_entry();
 			return VH_ERR_RUNTIME;

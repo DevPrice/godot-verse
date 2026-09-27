@@ -11,6 +11,8 @@
 #include "vm_number.h"
 #include "vm_values.h"
 
+#include "verse_diagnostics.h"
+
 #if defined(_MSC_VER)
 #define VM_NOINLINE __declspec(noinline)
 #else
@@ -538,7 +540,7 @@ Interpreter::Step Interpreter::park() {
 	++park_count;
 	raised.error.diagnostic = kInternal;
 	raised.error.description = kInternalDescription;
-	raised.error.message = "Stage-1 interpreter cannot wait: " + location_of(frame, pc) + " needs a value that is not yet known";
+	raised.error.message = verse_diag_text(verse_diag::VG7105, { { "where", location_of(frame, pc) } });
 	capture_frames(nullptr);
 	return stop(Outcome::Error);
 }
@@ -547,7 +549,7 @@ Interpreter::Step Interpreter::park() {
 Interpreter::Step Interpreter::invariant(const std::string &p_what) {
 	raised.error.diagnostic = kInternal;
 	raised.error.description = kInternalDescription;
-	raised.error.message = "VM invariant violated: " + p_what + " at " + location_of(frame, pc);
+	raised.error.message = verse_diag_text(verse_diag::VG7103, { { "what", p_what }, { "where", location_of(frame, pc) } });
 	capture_frames(nullptr);
 	return stop(Outcome::Error);
 }
@@ -572,7 +574,7 @@ Interpreter::Step Interpreter::stop(Outcome p_outcome) {
 Interpreter::Step Interpreter::not_yet(const std::string &p_what) {
 	raised.error.diagnostic = kInternal;
 	raised.error.description = kInternalDescription;
-	raised.error.message = "This runtime cannot run " + p_what + " yet: " + location_of(frame, pc);
+	raised.error.message = verse_diag_text(verse_diag::VG7104, { { "what", p_what }, { "where", location_of(frame, pc) } });
 	capture_frames(nullptr);
 	return stop(Outcome::Unsupported);
 }

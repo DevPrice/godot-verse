@@ -31,6 +31,10 @@ VERSE_DIAG(VG1006, "_validate warning and build log (VH_EXPORT_BINDING_CLASS_UNS
 	"reached through a generated binding yet.")
 VERSE_DIAG(VG1007, "_validate warning and build log (VH_EXPORT_UNSUPPORTED_TYPE)",
 	"{name} has a type godot-verse cannot carry to the inspector yet, so it is not exported.")
+VERSE_DIAG(VG1008, "_validate warning and build log (B19 Stage C: an export the inspector draws and cannot save)",
+	"{name} can be assigned in the inspector but not saved. Its class is not the one named after its "
+	"file, so it has no script -- and a value survives a save only through one. Saving writes an empty "
+	"sub-resource and the member reloads empty. Move the class into a file of its own.")
 
 // VG2xxx: signals. VG20xx is a declaration Godot is never told about (R-SIG-1).
 VERSE_DIAG(VG2001, "_validate warning and build log (VH_SIGNAL_IS_VAR); vm/ runtime raise",
@@ -58,6 +62,41 @@ VERSE_DIAG(VG2006, "_validate warning and build log (VH_SIGNAL_NEEDS_ATTRIBUTE);
 VERSE_DIAG(VG2007, "_validate warning; vm/ runtime raise (a reject code this build does not know)",
 	"{name} cannot be registered with Godot, so nothing can connect to it.")
 
+// VG21xx: a signal used at run time in a way that cannot reach Godot. vm/ raises these; the UE host
+// raises its own unprefixed copies (host/Private), which this registry does not reach.
+VERSE_DIAG(VG2101, "vm/ runtime raise: Emit on a signal refused at analysis ({reason} is its VG20xx sentence)",
+	"The signal `{signal}` was never registered with Godot: {reason} Nothing was emitted.")
+VERSE_DIAG(VG2102, "vm/ runtime raise: Subscribe on a signal refused at analysis",
+	"Cannot subscribe to `{signal}`: {reason}")
+VERSE_DIAG(VG2103, "vm/ runtime raise: Await on a signal refused at analysis",
+	"Cannot await `{signal}`: {reason}")
+VERSE_DIAG(VG2104, "vm/ runtime raise: Emit with a payload the recorded shape cannot carry",
+	"The payload of signal `{signal}` has no representation on the Godot wire, so nothing was emitted.")
+VERSE_DIAG(VG2105, "vm/ runtime raise: Emit on a `signal` no member binding names",
+	"A signal was emitted through an unbound `signal`. One a script built for itself rather than "
+	"declared as a member of a class Godot instantiated names nothing, the way `godot_array{}` does.")
+VERSE_DIAG(VG2106, "vm/ runtime raise: Subscribe on a `signal` no member binding names",
+	"Subscribe was called on an unbound `signal`, which names nothing.")
+VERSE_DIAG(VG2107, "vm/ runtime raise: Emit on an `event` that is not an @export_signal member",
+	"Emit was called on an `event` that is not an `@export_signal` member of a class Godot "
+	"instantiated, so it names no Godot signal. An event a script builds for itself is a Verse event "
+	"and nothing more -- `Signal` is how tasks are resumed through one.")
+VERSE_DIAG(VG2108, "vm/ runtime raise: Subscribe on an `event` that is not an @export_signal member",
+	"Subscribe was called on an `event` that is not an `@export_signal` member of a class Godot "
+	"instantiated, so it names no Godot signal.")
+VERSE_DIAG(VG2109, "vm/ runtime raise: Await on a `signal` no member binding names",
+	"Await was called on an unbound `signal`, which names nothing and so will never be emitted.")
+VERSE_DIAG(VG2110, "vm/ runtime raise: Await on a signal_ref that names nothing",
+	"Await was called on a Signal value that names no object and signal.")
+VERSE_DIAG(VG2111, "vm/ runtime raise: Subscribe on a signal_ref that names nothing",
+	"Subscribe was called on a Signal value that names no object and signal.")
+VERSE_DIAG(VG2112, "vm/ runtime raise: Subscribe given a function that is not a bound method",
+	"Subscribe was given a Verse function that is not a method bound to a live script instance, which "
+	"is the only shape a Godot Callable can carry without outliving what it names.")
+VERSE_DIAG(VG2113, "vm/ runtime error: an @export_signal event's delivery connection was refused",
+	"The signal `{signal}` was registered but could not be connected, so awaiting it would never "
+	"resume.")
+
 // VG3xxx: `@rpc` configurations Godot is never given (R-EXP-9).
 VERSE_DIAG(VG3001, "_validate warning and build log (VH_RPC_UNKNOWN_ARGUMENT)",
 	"{name}: `{word}` is not an @rpc word. It must be one of \"call_local\"/\"call_remote\" (local "
@@ -81,3 +120,252 @@ VERSE_DIAG(VG4003, "vm/ runtime raise (VH_CALL_BAD_ARITY)",
 VERSE_DIAG(VG4004, "vm/ runtime raise (VH_CALL_NO_SUCH_MEMBER)",
 	"{verb} `{member}` on Godot object {handle}, which has no such member. The generated Verse mirror "
 	"and this build of Godot disagree; regenerate with tools/gen_verse_api.py.")
+VERSE_DIAG(VG4005, "vm/ runtime raise: a container reference of 0",
+	"{verb} a Godot container that names nothing. A container built in Verse -- `godot_array{}` and the "
+	"like -- holds no Godot value; one has to come back from Godot.")
+VERSE_DIAG(VG4006, "vm/ runtime raise: a container reference the ref table no longer holds",
+	"{verb} a Godot container the bridge no longer holds (reference {ref}). A reference is released "
+	"when the Verse value holding it is collected, so this is a handle kept past the object that owned "
+	"it.")
+VERSE_DIAG(VG4007, "vm/ runtime raise: a variant of a lane the declared type does not read",
+	"Godot returned a value tagged {tag} where the Verse bridge expected `{expected}`. The type table in "
+	"tools/gen_verse_api.py and this build of Godot disagree.")
+VERSE_DIAG(VG4008, "vm/ runtime raise: a Godot call with no CallMethod callback installed",
+	"Called `{member}` on Godot object {handle}, but this embedder cannot call Godot methods.")
+VERSE_DIAG(VG4009, "vm/ runtime raise: a method call on a Godot value reference",
+	"Godot has no method `{member}` on the value reference {ref} names.")
+VERSE_DIAG(VG4010, "vm/ runtime raise: an archetype of a class Godot will not instantiate",
+	"Godot would not make a `{class}`, so this class has no object to be. A Godot class that is "
+	"abstract, or that the engine only ever hands out as a singleton, cannot be constructed -- derive "
+	"from one that can, or reach the singleton through its accessor.")
+VERSE_DIAG(VG4011, "vm/ runtime error: an entry point called off the thread Verse runs on (R-ASYNC-8)",
+	"{entry} was called from a thread other than the one Verse runs on, so it did not run. Call it from "
+	"the main thread.")
+
+// VG41xx: finding, loading and starting the host (src/verse_runtime.cpp and its neighbours).
+VERSE_DIAG(VG4101, "push_error, when no Unreal checkout is configured (verse_host_paths::unconfigured_message)",
+	"no Unreal checkout is configured, so there is no host to load. Set UE_ROOT to the checkout that "
+	"built {dll}, or set Editor Settings > Verse > Host > Engine Dir to the same directory.")
+VERSE_DIAG(VG4102, "push_warning, once: a host path read from the legacy project setting",
+	"{setting} is set in project.godot, which commits one machine's paths to everyone who clones this "
+	"project. Move it to Editor Settings > Verse > Host, or set UE_ROOT, and delete the [verse] "
+	"section. It is still read for now.")
+VERSE_DIAG(VG4103, "push_warning: the vm backend asked for in a build without the interpreter",
+	"verse/runtime/backend is 'vm', but this build has no interpreter compiled in (build with `scons "
+	"verse_vm=yes`); using the host instead.")
+VERSE_DIAG(VG4104, "exported game's refusal to start: a Web game on the host backend",
+	"Verse needs the vm backend on Web, and this game was exported with verse/runtime/backend.web set "
+	"to \"{backend}\": the UE host is a native DLL a browser cannot load.")
+VERSE_DIAG(VG4105, "push_error: the host library did not load",
+	"failed to load host library: {error}")
+VERSE_DIAG(VG4106, "exported game's refusal to start: the host library did not load",
+	"Verse could not load {dll}: {error}")
+VERSE_DIAG(VG4107, "push_error: the editor was handed a host of another kind",
+	"{dll} is {kind}; the Godot editor needs the editor host. Build it with `python "
+	"tools/build_host.py`.")
+VERSE_DIAG(VG4108, "push_error: an exported game was handed a host of another kind",
+	"{dll} is {kind}; an exported game needs the runtime host. Build it with `python "
+	"tools/build_host.py --target VerseHostRuntime`.")
+VERSE_DIAG(VG4109, "exported game's refusal to start: a host of another kind",
+	"Verse shipped the wrong host: {dll} is {kind}.")
+VERSE_DIAG(VG4110, "push_error, at the next host load: the last run left a fatal-error record (B43)",
+	"The previous run ended in a Verse host fatal error. What it recorded:\n{record}")
+VERSE_DIAG(VG4111, "push_error: vh_init refused",
+	"vh_init failed with status {status}")
+VERSE_DIAG(VG4112, "exported game's refusal to start: vh_init refused and said nothing",
+	"Verse could not start (vh_init returned {status}).")
+VERSE_DIAG(VG4113, "push_error, when Play ends: the game left a fatal-error record (B43)",
+	"The game ended in a Verse host fatal error:\n{record}")
+VERSE_DIAG(VG4114, "push_warning, once: a .verse loaded with no VerseRuntime singleton",
+	"VerseRuntime singleton is not available")
+
+// VG42xx: the per-frame pump and how a runtime error is reported.
+VERSE_DIAG(VG4201, "push_warning: vh_tick asked for with no host",
+	"tick called with no host loaded")
+VERSE_DIAG(VG4202, "push_warning, rate limited: the frame budget ran out (R-ASYNC-6)",
+	"the frame budget ({budget} ms, verse/runtime/frame_budget_ms) ran out with {jobs} queued job(s) "
+	"left. They run next frame. The budget governs queued work only -- a task awaiting a Godot signal "
+	"resumes inside the emission and is not budgeted.")
+VERSE_DIAG(VG4203, "printed under a runtime error's stack: repeats suppressed (R-DIAG-3)",
+	"{count} more stack trace(s) from this error were dropped.")
+VERSE_DIAG(VG4204, "printed under every runtime error's stack",
+	"The call that raised this was rolled back, so what it changed before the error is undone, except "
+	"by the Godot methods listed in docs/nonatomic-methods.md. An error in a function Godot calls every "
+	"frame can repeat for that reason.")
+
+// VG5xxx: building and analysing the project. VG50xx is about names, modules and the build itself.
+VERSE_DIAG(VG5001, "push_error, per build: a .vmodule marker whose name is not an identifier",
+	"\"{name}\" is not a Verse module name, so this directory is not a module and its scripts stay in "
+	"the one above it. A module name is a letter or underscore followed by letters, digits or "
+	"underscores -- gameplay.vmodule, not my-stuff.vmodule.")
+VERSE_DIAG(VG5002, "push_error, per build: two files declare one name in one module",
+	"{path} and {other} both declare `{name}` in {module}. A name may only be declared once per "
+	"module. Put one of them in a module of its own -- right-click its directory in the FileSystem dock "
+	"and choose \"Make Verse Module\" -- or rename one of the files.")
+VERSE_DIAG(VG5003, "push_error, per build: two @global_class classes register one Godot name",
+	"{path} and {other} both register the Godot class name `{name}`. ClassDB is one flat namespace and "
+	"a module is deliberately not part of it, so two @global_class classes may not share a name however "
+	"far apart they are. Rename one of the files.")
+VERSE_DIAG(VG5004, "_validate warning and build log: @global_class on a class not named after its file (B19 Stage B)",
+	"`@global_class` on `{name}` registers nothing. Godot collects one global class per script file, "
+	"and only `{stem}` -- the class named after this file -- can be that class. Move `{name}` into a "
+	"file of its own to register it, or drop the attribute: a member typed as `{name}` still exports, "
+	"filtered by its nearest Godot base class.")
+VERSE_DIAG(VG5005, "_validate error and build log: a class extending a script's generated binding (R-INT-10)",
+	"`{name}` extends `{base}`, which is the generated binding for a class a *script* declares. That "
+	"cannot work: Godot gives an object exactly one script instance, so the inherited methods would "
+	"forward to a `{base}` that is not there -- `{name}`'s own script is the only one the node has "
+	"(R-INT-6, R-INT-10). Extend the binding's own Godot base instead and hold the other node, or move "
+	"the shared code into Verse.")
+VERSE_DIAG(VG5006, "push_warning, per build: a script base more than one file answers to",
+	"{path} derives from `{base}`, and more than one script answers to that name ({candidates}). The "
+	"build resolves it through modules; the class picker cannot, so until this build finishes it "
+	"offers Node as this script's base type.")
+VERSE_DIAG(VG5007, "push_warning: a build's errors withheld over an incomplete binding roster (B36)",
+	"this build ran against an incomplete binding roster, so its errors are withheld for one pass. "
+	"{classes} is declared with no members, because the script it stands for names a Verse class -- "
+	"loading it to describe it while a .verse is loading would be a cyclic load, so it is held back "
+	"instead. A Verse file that names one of its *methods* does not compile on this pass, and a node "
+	"that loses its script over it is reported by GDScript as a null value with nothing said about "
+	"Verse. The next build describes it in full; what no build can repair is a node the scene has "
+	"already finished instantiating. Reach the method through `Call`/`Callv` (R-INT-2) rather than "
+	"naming it, and the cycle is broken.")
+VERSE_DIAG(VG5008, "_validate warning on line 1: another file does not compile",
+	"This file compiles, but {files} {verb}, so the project will not build and Play will be refused. "
+	"Open {pronoun} to see why, or Project > Tools > Build Verse to log every error at once.")
+VERSE_DIAG(VG5009, "push_warning: a build failed and published nothing (R-ITER-5)",
+	"the project did not build, so no new code was published. The editor's analysis -- diagnostics, "
+	"completion and the shape of the exported properties -- is live either way; fix the errors and "
+	"build again to replace what is running.")
+
+// VG51xx: appended to the compiler's unknown-identifier error when the name is a Godot member the
+// mirror deliberately does not carry (R-SCN-2). One per reason in src/verse_api_skipped.h.
+VERSE_DIAG(VG5101, "appended to glitch 3506 (superseded_by_property)",
+	"Godot has {member}, but it is reachable as the property {detail}.")
+VERSE_DIAG(VG5102, "appended to glitch 3506 (property_renamed)",
+	"Godot has {member}, but a Verse function already answers to that name, so it is the property "
+	"{detail}.")
+VERSE_DIAG(VG5103, "appended to glitch 3506 (method_renamed)",
+	"Godot has {member}, but it is reachable as {detail}.")
+VERSE_DIAG(VG5104, "appended to glitch 3506 (superseded_by_free_function)",
+	"Godot has {member}, but it is reachable as {detail}, which is also what string interpolation uses.")
+VERSE_DIAG(VG5105, "appended to glitch 3506 (property_*)",
+	"Godot has {member}, but it cannot be a property, so Godot's own {detail} carry it instead.")
+VERSE_DIAG(VG5106, "appended to glitch 3506 (virtual_no_default)",
+	"Godot has {member}, but it is a Godot virtual returning {detail}, and an unoverridden virtual has "
+	"to answer a value there is no way to write (R-NODE-7).")
+VERSE_DIAG(VG5107, "appended to glitch 3506 (static)",
+	"Godot has {member}, but it is static, and a static call has no Verse spelling yet (R-NODE-4).")
+VERSE_DIAG(VG5108, "appended to glitch 3506 (vararg)",
+	"Godot has {member}, but it takes a variable number of arguments, which the bridge cannot carry.")
+VERSE_DIAG(VG5109, "appended to glitch 3506 (unmarshallable_pointer)",
+	"Godot has {member}, but it takes a raw C pointer, which no scripting language can pass.")
+VERSE_DIAG(VG5110, "appended to glitch 3506 (unsupported_type)",
+	"Godot has {member}, but nothing can carry its {detail} across the boundary.")
+VERSE_DIAG(VG5111, "appended to glitch 3506 (shadow)",
+	"Godot has {member}, but a name it shares with an inherited member won.")
+VERSE_DIAG(VG5112, "appended to glitch 3506 (math_not_written)",
+	"Godot has {member}, but the math types are ordinary Verse rather than calls into Godot, and this "
+	"one has not been written yet -- host/Verse/GodotMath.native.verse is where it goes.")
+VERSE_DIAG(VG5113, "appended to glitch 3506 (utility_has_verse_spelling)",
+	"Godot has {member}, but Verse spells it {detail}.")
+VERSE_DIAG(VG5114, "appended to glitch 3506 (utility_variant_only)",
+	"Godot has {member}, but its parameter or result is a Variant, which a script cannot spell -- the "
+	"packers are module-scoped by R-TYPE-7, so there is no signature for it to have.")
+VERSE_DIAG(VG5115, "appended to glitch 3506 (utility_not_dispatched)",
+	"Godot has {member}, but it has no Verse counterpart and is not dispatched to Godot yet.")
+VERSE_DIAG(VG5116, "appended to glitch 3506 (math_operator_not_written)",
+	"Godot has {member}, but this operator has not been written for those operands yet -- the math "
+	"types are ordinary Verse, and host/Verse/GodotMath.native.verse is where it goes.")
+VERSE_DIAG(VG5117, "appended to glitch 3506 (a skip reason this build does not know)",
+	"Godot has {member}, but it was skipped: {reason}.")
+
+// VG52xx: appended to the compiler's unknown-identifier error when the name is declared in a module
+// this file does not import (R-TOOL-12).
+VERSE_DIAG(VG5201, "appended to glitch 3506: one module declares the name",
+	"It is declared in a module this file does not import; add {using} at the top of the file.")
+VERSE_DIAG(VG5202, "appended to glitch 3506: several modules declare the name",
+	"It is declared in more than one module, so which was meant is yours to say; add {using} at the "
+	"top of the file.")
+
+// VG6xxx: editor tooling. VG60xx the debugger, VG61xx the export plugin, VG62xx "Make Verse Module",
+// VG63xx "Convert to Verse".
+VERSE_DIAG(VG6001, "push_warning, once: Godot's debugger cannot attach while Epic's holds the VM",
+	"Godot's debugger is active, but the Verse VM already has a debugger attached -- "
+	"verse/host/enable_debugger opened Epic's socket debugger at startup. Breakpoints in the script "
+	"editor will not fire. Turn that setting off to debug through Godot instead.")
+VERSE_DIAG(VG6101, "export error: a Web preset that resolves the backend to the host",
+	"Verse needs the vm backend on Web, and this preset reads verse/runtime/backend as \"{backend}\": "
+	"the UE host is a native DLL a browser cannot load. Set verse/runtime/backend.web to \"vm\" in "
+	"Project Settings, or remove the override that changed it.")
+VERSE_DIAG(VG6102, "export warning: the .gdextension could not be rewritten for the vm backend",
+	"Could not rewrite {path} to drop the host DLL for the vm backend; the export will carry it anyway.")
+VERSE_DIAG(VG6103, "export error: a platform this bridge does not reach",
+	"Verse does not export to {platform} yet, and this project has Verse scripts in it. See "
+	"docs/phase-7-design.md \xc2\xa7" "14.")
+VERSE_DIAG(VG6104, "export error: no platform feature tag",
+	"Verse cannot tell which platform this export is for; no platform feature tag was set.")
+VERSE_DIAG(VG6105, "export error: the editor's own build failed",
+	"The Verse project did not compile, so nothing was cooked. Fix the errors in the Output panel and "
+	"export again.")
+VERSE_DIAG(VG6106, "export error: verse_cook.exe is not where the settings say",
+	"The Verse cooker is not at {path}. Build it with `python tools/build_host.py --target "
+	"VerseHostCooker`, or set Editor Settings > Verse > Host > Cooker Path to it.")
+VERSE_DIAG(VG6107, "export error: a file the cook needs could not be written",
+	"Could not write {path}")
+VERSE_DIAG(VG6108, "export error: verse_cook.exe failed",
+	"verse_cook exited {status}; the export carries no Verse. To see the engine's own log, run it by "
+	"hand: \"{cooker}\" \"{manifest}\" \"{work}\" --verbose")
+VERSE_DIAG(VG6201, "push_warning: Make Verse Module on a directory that already is one",
+	"{marker} already exists, so this directory is already a Verse module.")
+VERSE_DIAG(VG6202, "push_error: Make Verse Module could not write the marker",
+	"Could not create {marker}.")
+VERSE_DIAG(VG6203, "push_warning: Make Verse Module named the marker something that is not a module name",
+	"{marker} is named after its directory, and `{name}` is not a Verse module name. Rename the file -- "
+	"a letter or underscore followed by letters, digits or underscores -- and the directory can keep the "
+	"name it has.")
+VERSE_DIAG(VG6301, "push_error: Convert to Verse could not write a converted file",
+	"could not write {path}.")
+
+// VG7xxx: the interpreter, vm/. VG70xx is loading what the cooker wrote; VG71xx is running it.
+VERSE_DIAG(VG7001, "vh_init refusal: the interpreter was given no cooked directory",
+	"This runtime runs cooked Verse only, and vh_init was given no cooked directory.")
+VERSE_DIAG(VG7002, "vh_init refusal: the sidecar or program.vbc is absent",
+	"Verse data not found at {path}. The export is incomplete; export the project again.")
+VERSE_DIAG(VG7003, "vh_init refusal: the cook's ABI stamp is not this build's",
+	"This game's Verse data was cooked by a different build of godot-verse (cooked {cooked}, host "
+	"{host}/verse_vm). Export the project again.")
+VERSE_DIAG(VG7004, "vh_init refusal: program.vbc and the sidecar came from two cooks",
+	"{program} and {sidecar} were written by different cooks. Export the project again.")
+VERSE_DIAG(VG7005, "vh_init refusal: a sidecar of another version",
+	"{path} was written by sidecar version {version}; this host reads version {wanted}. Re-export the "
+	"project.")
+VERSE_DIAG(VG7006, "vh_init refusal: the sidecar parsed and is not a sidecar",
+	"{path} is not a valid class sidecar: {what}.")
+VERSE_DIAG(VG7007, "vh_init refusal: the sidecar is not JSON",
+	"{path} is not valid JSON")
+VERSE_DIAG(VG7010, "vh_init refusal: program.vbc is not a program",
+	"{path} is not a Verse program: it does not begin with VBC1.")
+VERSE_DIAG(VG7011, "vh_init refusal: program.vbc of another format version",
+	"{path} is format version {version}; this runtime reads version {wanted}. Export the project again.")
+VERSE_DIAG(VG7012, "vh_init refusal: program.vbc written for another op set",
+	"{path} was written for another Verse op set (schema {schema}); this runtime reads schema {wanted}. "
+	"Export the project again with a matching build.")
+VERSE_DIAG(VG7013, "vh_init refusal: program.vbc uses an op this runtime does not implement",
+	"{path} uses the op {op} in {procedure}, which this runtime does not implement.")
+VERSE_DIAG(VG7014, "vh_init refusal: program.vbc lacks a definition the runtime needs",
+	"{path} names no {definition} definition, which this runtime needs. Export the project again.")
+VERSE_DIAG(VG7015, "vh_init refusal: program.vbc is malformed",
+	"{path} is malformed: {what}.")
+VERSE_DIAG(VG7016, "vh_init refusal: program.vbc is cut short",
+	"{path} is truncated or malformed: {what}.")
+VERSE_DIAG(VG7101, "vm/ runtime error: a result the wire cannot carry",
+	"The result of {function} could not be handed to the host: {why}.")
+VERSE_DIAG(VG7102, "vm/ runtime error: a native this runtime does not implement",
+	"The native function {native} is not implemented by this runtime.")
+VERSE_DIAG(VG7103, "vm/ runtime error: the interpreter found its own state inconsistent",
+	"VM invariant violated: {what} at {where}")
+VERSE_DIAG(VG7104, "vm/ runtime error: a construct this runtime cannot run",
+	"This runtime cannot run {what} yet: {where}")
+VERSE_DIAG(VG7105, "vm/ runtime error: a stage-1 wait on an unknown value",
+	"Stage-1 interpreter cannot wait: {where} needs a value that is not yet known")

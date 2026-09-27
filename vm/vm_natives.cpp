@@ -17,6 +17,8 @@
 #include "vm_sidecar.h"
 #include "vm_values.h"
 
+#include "verse_diagnostics.h"
+
 namespace vm {
 
 Value argument(const NativeCall &p_call, uint32_t p_index) {
@@ -253,8 +255,7 @@ Outcome adopt_or_mint_native(NativeCall &r_call) {
 	if (handle == 0) {
 		r_call.error.diagnostic = "ErrRuntime_NativeInternal";
 		r_call.error.description = "An internal runtime error occurred in native code that was called from Verse. There is no other information available.";
-		r_call.error.message = "Godot would not make a `" + name +
-				"`, so this class has no object to be. A Godot class that is abstract, or that the engine only ever hands out as a singleton, cannot be constructed -- derive from one that can, or reach the singleton through its accessor.";
+		r_call.error.message = verse_diag_text(verse_diag::VG4010, { { "class", name } });
 		return Outcome::Error;
 	}
 	interpreter->record_mint(handle, object.as_cell());
@@ -1454,7 +1455,7 @@ NativeFn native_implementation(std::string_view p_binding_key) {
 Outcome native_not_implemented(NativeCall &r_call) {
 	r_call.error.diagnostic = "ErrRuntime_NativeInternal";
 	r_call.error.description = "An internal runtime error occurred in native code that was called from Verse. There is no other information available.";
-	r_call.error.message = "The native function " + r_call.procedure->binding_key->text + " is not implemented by this runtime.";
+	r_call.error.message = verse_diag_text(verse_diag::VG7102, { { "native", r_call.procedure->binding_key->text } });
 	return Outcome::Error;
 }
 

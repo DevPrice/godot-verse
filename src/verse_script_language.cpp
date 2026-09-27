@@ -391,11 +391,9 @@ static Dictionary project_build_warning(const PackedStringArray &p_paths) {
 	warning["rightmost_column"] = 1;
 	warning["code"] = 0;
 	warning["string_code"] = String("VERSE_PROJECT_BUILD");
-	warning["message"] = String("This file compiles, but ") + named
-			+ String(p_paths.size() == 1 ? " does not" : " do not")
-			+ String(", so the project will not build and Play will be refused. Open ")
-			+ String(p_paths.size() == 1 ? "it" : "them")
-			+ String(" to see why, or Project > Tools > Build Verse to log every error at once.");
+	warning["message"] = verse_diagnostic(verse_diag::VG5008, { { "files", named },
+			{ "verb", String(p_paths.size() == 1 ? "does not" : "do not") },
+			{ "pronoun", String(p_paths.size() == 1 ? "it" : "them") } });
 	return warning;
 }
 
@@ -415,12 +413,7 @@ static Dictionary project_build_warning(const PackedStringArray &p_paths) {
 // build, which is the half a test can read -- a `_validate` warning is returned to the editor's C++
 // and never reaches the log.
 static String inert_global_class_message(const String &p_class_name, const String &p_file_stem) {
-	return String("`@global_class` on `") + p_class_name
-			+ String("` registers nothing. Godot collects one global class per script file, and only `")
-			+ p_file_stem + String("` -- the class named after this file -- can be that class. Move `")
-			+ p_class_name + String("` into a file of its own to register it, or drop the attribute: a ")
-			+ String("member typed as `") + p_class_name
-			+ String("` still exports, filtered by its nearest Godot base class.");
+	return verse_diagnostic(verse_diag::VG5004, { { "name", p_class_name }, { "stem", p_file_stem } });
 }
 
 // R-INT-10. One sentence, written twice: as an error the editor draws at the class's own line,
@@ -428,13 +421,7 @@ static String inert_global_class_message(const String &p_class_name, const Strin
 // `inert_global_class_message` below is the other worked example of -- a `_validate` error reaches
 // the gutter and no log, so a diagnostic that has to be both seen and tested needs two reporters.
 static String script_binding_base_message(const String &p_class_name, const String &p_base) {
-	return String("`") + p_class_name + String("` extends `") + p_base
-			+ String("`, which is the generated binding for a class a *script* declares. That cannot work: ")
-			+ String("Godot gives an object exactly one script instance, so the inherited methods would ")
-			+ String("forward to a `") + p_base + String("` that is not there -- `") + p_class_name
-			+ String("`'s own script is the only one the node has (R-INT-6, R-INT-10). Extend the ")
-			+ String("binding's own Godot base instead and hold the other node, or move the shared code ")
-			+ String("into Verse.");
+	return verse_diagnostic(verse_diag::VG5005, { { "name", p_class_name }, { "base", p_base } });
 }
 
 static Dictionary script_binding_base_error(const String &p_message, int64_t p_line) {
@@ -1261,13 +1248,9 @@ void VerseScriptLanguage::report_name_collisions(const PackedStringArray &p_sour
 		if (claimed != owner_by_module_class.end()) {
 			// The one diagnostic that has to teach the feature: it is the only place an author
 			// finds out the marker exists, and its fix is the context-menu action.
-			UtilityFunctions::push_error(path + String(" and ") + claimed->second
-					+ String(" both declare `") + String(decl.name.c_str()) + String("` in ")
-					+ (module.is_empty() ? String("the root module")
-										 : String("module `") + module + String("`"))
-					+ String(". A name may only be declared once per module. Put one of them in a module of ")
-					+ String("its own -- right-click its directory in the FileSystem dock and choose ")
-					+ String("\"Make Verse Module\" -- or rename one of the files."));
+			UtilityFunctions::push_error(verse_diagnostic(verse_diag::VG5002, { { "path", path },
+					{ "other", claimed->second }, { "name", String(decl.name.c_str()) },
+					{ "module", module.is_empty() ? String("the root module") : String("module `") + module + String("`") } }));
 		} else {
 			owner_by_module_class[key] = path;
 		}
@@ -1277,11 +1260,8 @@ void VerseScriptLanguage::report_name_collisions(const PackedStringArray &p_sour
 			const std::string global_key(godot_name.utf8().get_data());
 			const auto registered = owner_by_global_name.find(global_key);
 			if (registered != owner_by_global_name.end()) {
-				UtilityFunctions::push_error(path + String(" and ") + registered->second
-						+ String(" both register the Godot class name `") + godot_name
-						+ String("`. ClassDB is one flat namespace and a module is deliberately not part ")
-						+ String("of it, so two @global_class classes may not share a name however far apart ")
-						+ String("they are. Rename one of the files."));
+				UtilityFunctions::push_error(verse_diagnostic(verse_diag::VG5003, { { "path", path },
+						{ "other", registered->second }, { "name", godot_name } }));
 			} else {
 				owner_by_global_name[global_key] = path;
 			}
@@ -1306,10 +1286,8 @@ void VerseScriptLanguage::report_name_collisions(const PackedStringArray &p_sour
 					for (int64_t c = 0; c < candidates.size(); c++) {
 						listed += (c == 0 ? String() : String(", ")) + candidates[c];
 					}
-					UtilityFunctions::push_warning(path + String(" derives from `") + base
-							+ String("`, and more than one script answers to that name (") + listed
-							+ String("). The build resolves it through modules; the class picker cannot, ")
-							+ String("so until this build finishes it offers Node as this script's base type."));
+					UtilityFunctions::push_warning(verse_diagnostic(verse_diag::VG5006, { { "path", path },
+							{ "base", base }, { "candidates", listed } }));
 				}
 			}
 		}
@@ -1363,16 +1341,7 @@ void VerseScriptLanguage::warn_incomplete_roster() const {
 			named += String(" (") + info->script_path + String(")");
 		}
 	}
-	UtilityFunctions::push_warning(String(
-			"Verse: this build ran against an incomplete binding roster, so its errors are withheld "
-			"for one pass. ") + named + String(" is declared with no members, because the script it "
-			"stands for names a Verse class -- loading it to describe it while a .verse is loading "
-			"would be a cyclic load, so it is held back instead. A Verse file that names one of its "
-			"*methods* does not compile on this pass, and a node that loses its script over it is "
-			"reported by GDScript as a null value with nothing said about Verse. The next build "
-			"describes it in full; what no build can repair is a node the scene has already "
-			"finished instantiating. Reach the method through `Call`/`Callv` (R-INT-2) rather than "
-			"naming it, and the cycle is broken."));
+	UtilityFunctions::push_warning(String("Verse: ") + verse_diagnostic(verse_diag::VG5007, { { "classes", named } }));
 }
 
 bool VerseScriptLanguage::refresh_bindings() {
@@ -1687,11 +1656,7 @@ void VerseScriptLanguage::refresh_script_warnings(const String &p_path) const {
 		warning["rightmost_column"] = (int64_t)entry["column"] + 1;
 		warning["code"] = 0;
 		warning["string_code"] = String("VERSE_EXPORT_NOT_PERSISTED");
-		warning["message"] = name
-				+ String(" can be assigned in the inspector but not saved. Its class is not the one ")
-				+ String("named after its file, so it has no script -- and a value survives a save ")
-				+ String("only through one. Saving writes an empty sub-resource and the member ")
-				+ String("reloads empty. Move the class into a file of its own.");
+		warning["message"] = verse_diagnostic(verse_diag::VG1008, { { "name", name } });
 		warnings.push_back(warning);
 	}
 
@@ -1749,81 +1714,74 @@ namespace {
 // there by accident look identical from the editor, and only one of them is worth working around.
 // The reason strings are gen_verse_api.py's own, so a new one shows up as an unexplained skip here
 // rather than being silently rendered as nothing.
-String skipped_member_explanation(const verse_api::skipped_member &p_entry) {
-	const String reason = String(p_entry.reason);
-	const String detail = String(p_entry.detail);
-	if (reason == "superseded_by_property") {
-		return String("it is reachable as the property ") + detail + ".";
+verse_diag skipped_member_row(const String &p_reason) {
+	if (p_reason == "superseded_by_property") {
+		return verse_diag::VG5101;
 	}
-	if (reason == "property_renamed") {
-		return String("a Verse function already answers to that name, so it is the property ")
-				+ detail + ".";
+	if (p_reason == "property_renamed") {
+		return verse_diag::VG5102;
 	}
 	// The mirror emits the method under another name, so the author who typed Godot's is one word
 	// from working code rather than looking at a gap. Only the *lost* spelling has a row: the name
 	// the rename took resolves, so a row keyed on it could answer nothing but itself.
-	if (reason == "method_renamed") {
-		return String("it is reachable as ") + detail + ".";
+	if (p_reason == "method_renamed") {
+		return verse_diag::VG5103;
 	}
-	if (reason == "superseded_by_free_function") {
-		return String("it is reachable as ") + detail + ", which is also what string interpolation uses.";
+	if (p_reason == "superseded_by_free_function") {
+		return verse_diag::VG5104;
 	}
-	if (reason.begins_with("property_")) {
-		return String("it cannot be a property, so Godot's own ") + detail + " carry it instead.";
+	if (p_reason.begins_with("property_")) {
+		return verse_diag::VG5105;
 	}
 	// Since Phase 4 a virtual is *emitted* rather than skipped, so this reason no longer appears
 	// for one Godot describes. What is still skipped is a virtual whose return type has no default
 	// a script could write -- an object, a typed container -- because an unoverridden one has to
 	// answer something and there is nothing to answer with.
-	if (reason == "virtual_no_default") {
-		return String("it is a Godot virtual returning ") + detail
-				+ ", and an unoverridden virtual has to answer a value there is no way to write (R-NODE-7).";
+	if (p_reason == "virtual_no_default") {
+		return verse_diag::VG5106;
 	}
-	if (reason == "static") {
-		return "it is static, and a static call has no Verse spelling yet (R-NODE-4).";
+	if (p_reason == "static") {
+		return verse_diag::VG5107;
 	}
-	if (reason == "vararg") {
-		return "it takes a variable number of arguments, which the bridge cannot carry.";
+	if (p_reason == "vararg") {
+		return verse_diag::VG5108;
 	}
-	if (reason == "unmarshallable_pointer") {
-		return "it takes a raw C pointer, which no scripting language can pass.";
+	if (p_reason == "unmarshallable_pointer") {
+		return verse_diag::VG5109;
 	}
-	if (reason == "unsupported_type") {
-		return String("nothing can carry its ") + detail + " across the boundary.";
+	if (p_reason == "unsupported_type") {
+		return verse_diag::VG5110;
 	}
-	if (reason == "shadow") {
-		return "a name it shares with an inherited member won.";
+	if (p_reason == "shadow") {
+		return verse_diag::VG5111;
 	}
 	// The math types are ordinary Verse rather than a mirror over an ABI (OQ-11), so a missing
 	// method is not a bridge limitation -- it is a body nobody has written yet, and the fix is to
 	// write it. Said plainly, because "unsupported" would be false and would stop someone who could
 	// have added it in ten minutes.
-	if (reason == "math_not_written") {
-		return String("the math types are ordinary Verse rather than calls into Godot, and this one ")
-				+ String("has not been written yet -- host/Verse/GodotMath.native.verse is where it goes.");
+	if (p_reason == "math_not_written") {
+		return verse_diag::VG5112;
 	}
 	// R-AUD-2's rule made visible: where Verse and Godot differ only in spelling, Verse's wins, and
 	// this is where an author who typed Godot's finds that out. 86 of the 114 utilities answer here.
-	if (reason == "utility_has_verse_spelling") {
-		return String("Verse spells it ") + detail + String(".");
+	if (p_reason == "utility_has_verse_spelling") {
+		return verse_diag::VG5113;
 	}
 	// A `variant` is deliberately unspellable by a script (R-TYPE-7 keeps the packers module-scoped),
 	// so these have no signature a script could call even if the bridge dispatched them.
-	if (reason == "utility_variant_only") {
-		return String("its parameter or result is a Variant, which a script cannot spell -- the ")
-				+ String("packers are module-scoped by R-TYPE-7, so there is no signature for it to have.");
+	if (p_reason == "utility_variant_only") {
+		return verse_diag::VG5114;
 	}
 	// Currently unreachable, and deliberately kept: the generator's three tables cover all 114 of
 	// Godot's utilities today, so this is what a utility a *future* Godot adds would fall to until
 	// someone classifies it. An unexplained skip is the failure mode R-SCN-2 exists to prevent.
-	if (reason == "utility_not_dispatched") {
-		return String("it has no Verse counterpart and is not dispatched to Godot yet.");
+	if (p_reason == "utility_not_dispatched") {
+		return verse_diag::VG5115;
 	}
-	if (reason == "math_operator_not_written") {
-		return String("this operator has not been written for those operands yet -- the math types are ")
-				+ String("ordinary Verse, and host/Verse/GodotMath.native.verse is where it goes.");
+	if (p_reason == "math_operator_not_written") {
+		return verse_diag::VG5116;
 	}
-	return String("it was skipped: ") + reason + ".";
+	return verse_diag::VG5117;
 }
 
 // The Godot member a script named that the mirror does not carry, searched up the class chain.
@@ -1959,8 +1917,9 @@ void VerseScriptLanguage::explain_skipped_members(const String &p_path, const Ty
 		// The class is named only where the diagnostic named one. For an unqualified call it is not
 		// known which class was meant, and every class that skips this name skips it alike.
 		const String owner = verse_class.is_empty() ? String() : String(entry->godot_class) + ".";
-		error["message"] = String(error["message"]) + " Godot has " + owner
-				+ String(entry->godot_name) + ", but " + skipped_member_explanation(*entry);
+		const String reason = String(entry->reason);
+		error["message"] = String(error["message"]) + " " + verse_diagnostic(skipped_member_row(reason),
+				{ { "member", owner + String(entry->godot_name) }, { "detail", String(entry->detail) }, { "reason", reason } });
 	}
 }
 
@@ -1994,10 +1953,8 @@ void VerseScriptLanguage::note_missing_imports(const String &p_path, const Typed
 		for (int64_t m = 0; m < modules.size(); m++) {
 			listed += (m == 0 ? String() : String(" or ")) + String("`using { /user@localhost/") + modules[m] + String(" }`");
 		}
-		error["message"] = String(error["message"]) + String("\nIt is declared in ")
-				+ (modules.size() == 1 ? String("a module this file does not import; add ")
-									   : String("more than one module, so which was meant is yours to say; add "))
-				+ listed + String(" at the top of the file.");
+		error["message"] = String(error["message"]) + String("\n")
+				+ verse_diagnostic(modules.size() == 1 ? verse_diag::VG5201 : verse_diag::VG5202, { { "using", listed } });
 
 		// One insertion waits for _frame at a time; the next analysis reports whatever is left.
 		if (modules.size() != 1 || !pending_import_path.is_empty()) {

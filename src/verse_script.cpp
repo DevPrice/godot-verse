@@ -1,6 +1,7 @@
 #include "verse_script.h"
 
 #include "verse_class_decl.h"
+#include "verse_diagnostic_prose.h"
 #include "verse_doc_markup.h"
 #include "verse_runtime.h"
 #include "verse_signature.h"
@@ -127,7 +128,7 @@ Error VerseScript::compile() {
 		// filesystem scan) would otherwise spam the log once per resource.
 		static bool warned = false;
 		if (!warned) {
-			UtilityFunctions::push_warning("VerseScript: VerseRuntime singleton is not available");
+			UtilityFunctions::push_warning(String("VerseScript: ") + verse_diagnostic(verse_diag::VG4114));
 			warned = true;
 		}
 		return ERR_UNAVAILABLE;

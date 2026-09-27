@@ -1,5 +1,6 @@
 #include "verse_convert_menu.h"
 
+#include "verse_diagnostic_prose.h"
 #include "verse_bindings.h"
 #include "verse_gd_convert.h"
 
@@ -519,7 +520,7 @@ void VerseConvertMenu::apply_files(const Dictionary &p_files) {
 		}
 		Ref<FileAccess> file = FileAccess::open(path, FileAccess::WRITE);
 		if (file.is_null()) {
-			UtilityFunctions::push_error("Convert to Verse: could not write " + path + ".");
+			UtilityFunctions::push_error(String("Convert to Verse: ") + verse_diagnostic(verse_diag::VG6301, { { "path", path } }));
 			continue;
 		}
 		file->store_string(content);

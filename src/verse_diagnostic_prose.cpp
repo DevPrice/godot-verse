@@ -1,6 +1,7 @@
 #include "verse_diagnostic_prose.h"
 
-#include "verse_diagnostics.h"
+#include <string>
+#include <vector>
 
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
@@ -19,6 +20,21 @@ String string_of(const std::string &p_text) {
 }
 
 } // namespace
+
+String verse_diagnostic(verse_diag p_id, std::initializer_list<std::pair<const char *, String>> p_args) {
+	std::vector<std::string> values;
+	values.reserve(p_args.size());
+	for (const std::pair<const char *, String> &arg : p_args) {
+		values.push_back(utf8_of(arg.second));
+	}
+	std::vector<verse_diag_arg> args;
+	args.reserve(p_args.size());
+	size_t index = 0;
+	for (const std::pair<const char *, String> &arg : p_args) {
+		args.push_back({ arg.first, values[index++] });
+	}
+	return string_of(verse_diag_text(p_id, args.data(), args.size()));
+}
 
 String export_rejection_message(vh_export_reject p_reject, vh_export_hint p_hint,
 		const String &p_name, const String &p_class_name, const String &p_native_class) {

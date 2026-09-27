@@ -1,5 +1,6 @@
 #include "verse_module_menu.h"
 
+#include "verse_diagnostic_prose.h"
 #include "verse_module_map.h"
 
 #include <godot_cpp/classes/dir_access.hpp>
@@ -38,22 +39,20 @@ void VerseModuleMenu::make_module(const Variant &p_paths) {
 	const String marker = directory.path_join(suggested + String(".vmodule"));
 
 	if (FileAccess::file_exists(marker)) {
-		UtilityFunctions::push_warning(marker + String(" already exists, so this directory is already a Verse module."));
+		UtilityFunctions::push_warning(verse_diagnostic(verse_diag::VG6201, { { "marker", marker } }));
 		return;
 	}
 
 	Ref<FileAccess> file = FileAccess::open(marker, FileAccess::WRITE);
 	if (file.is_null()) {
-		UtilityFunctions::push_error(String("Could not create ") + marker + ".");
+		UtilityFunctions::push_error(verse_diagnostic(verse_diag::VG6202, { { "marker", marker } }));
 		return;
 	}
 	// Empty on purpose: everything the marker says, it says with its name.
 	file->close();
 
 	if (!verse_is_valid_module_name(std::string(suggested.utf8().get_data()))) {
-		UtilityFunctions::push_warning(marker + String(" is named after its directory, and `") + suggested
-				+ String("` is not a Verse module name. Rename the file -- a letter or underscore followed ")
-				+ String("by letters, digits or underscores -- and the directory can keep the name it has."));
+		UtilityFunctions::push_warning(verse_diagnostic(verse_diag::VG6203, { { "marker", marker }, { "name", suggested } }));
 	}
 
 	EditorInterface::get_singleton()->get_resource_filesystem()->scan();

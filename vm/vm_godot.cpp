@@ -163,10 +163,9 @@ std::string call_sentence(const char *p_verb, const std::string &p_member, int64
 // §8.31's two sentences.
 std::string reference_sentence(const char *p_verb, int64_t p_ref) {
 	if (p_ref == 0) {
-		return std::string(p_verb) + " a Godot container that names nothing. A container built in Verse -- `godot_array{}` and the like -- holds no Godot value; one has to come back from Godot.";
+		return verse_diag_text(verse_diag::VG4005, { { "verb", p_verb } });
 	}
-	return std::string(p_verb) + " a Godot container the bridge no longer holds (reference " + std::to_string(p_ref) +
-			"). A reference is released when the Verse value holding it is collected, so this is a handle kept past the object that owned it.";
+	return verse_diag_text(verse_diag::VG4006, { { "verb", p_verb }, { "ref", std::to_string(p_ref) } });
 }
 
 // The editor's own sentence for the refusal, so a raise names the rule and the fix the gutter did.
@@ -1393,7 +1392,7 @@ void GodotBridge::ensure_event_connections(vh_instance *p_instance) {
 		}
 		if (callable_ref == 0 || status != VH_CALL_OK) {
 			if (report_error) {
-				report_error("The signal `" + row->name + "` was registered but could not be connected, so awaiting it would never resume.");
+				report_error(verse_diag_text(verse_diag::VG2113, { { "signal", row->name } }));
 			}
 			continue;
 		}
@@ -1915,8 +1914,7 @@ Outcome type_mismatch_native(NativeCall &r_call) {
 	if (bridge == nullptr || !string_bytes(argument(r_call, 0), expected) || !bridge->read_variant(argument(r_call, 1), lanes)) {
 		return Outcome::Invalid;
 	}
-	return raise(r_call, "Godot returned a value tagged " + std::to_string(lanes.tag) + " where the Verse bridge expected `" + expected +
-					"`. The type table in tools/gen_verse_api.py and this build of Godot disagree.");
+	return raise(r_call, verse_diag_text(verse_diag::VG4007, { { "tag", std::to_string(lanes.tag) }, { "expected", expected } }));
 }
 
 // §8.4 and §8.7: the same call behind both specifiers.
@@ -1934,7 +1932,7 @@ Outcome call_value_native(NativeCall &r_call) {
 	}
 	const vh_godot_api &api = bridge->interpreter.godot;
 	if (api.CallMethod == nullptr) {
-		return raise(r_call, "Called `" + method + "` on Godot object " + std::to_string(handle) + ", but this embedder cannot call Godot methods.");
+		return raise(r_call, verse_diag_text(verse_diag::VG4008, { { "member", method }, { "handle", std::to_string(handle) } }));
 	}
 	ScopedArena arena;
 	vh_value result = {};
@@ -2136,13 +2134,13 @@ Outcome callable_from_native(NativeCall &r_call) {
 // Emission on a binding row, shared by §8.14 and §8.17.
 Outcome emit_binding(NativeCall &r_call, GodotBridge &r_bridge, const GodotBridge::SignalBinding &p_row, Value p_payload) {
 	if (p_row.reject != VH_SIGNAL_OK) {
-		return raise(r_call, "The signal `" + p_row.name + "` was never registered with Godot: " + reject_reason(p_row.name, p_row.reject, p_row.reject_detail) +
-						" Nothing was emitted.");
+		return raise(r_call, verse_diag_text(verse_diag::VG2101,
+									 { { "signal", p_row.name }, { "reason", reject_reason(p_row.name, p_row.reject, p_row.reject_detail) } }));
 	}
 	ScopedArena arena;
 	std::vector<vh_value> args;
 	if (p_row.shape == nullptr || !r_bridge.payload_to_wire(p_payload, *p_row.shape, arena.get(), args)) {
-		return raise(r_call, "The payload of signal `" + p_row.name + "` has no representation on the Godot wire, so nothing was emitted.");
+		return raise(r_call, verse_diag_text(verse_diag::VG2104, { { "signal", p_row.name } }));
 	}
 	const vh_godot_api &api = r_bridge.interpreter.godot;
 	if (api.EmitSignal != nullptr) {
@@ -2154,7 +2152,8 @@ Outcome emit_binding(NativeCall &r_call, GodotBridge &r_bridge, const GodotBridg
 
 Outcome subscribe_binding(NativeCall &r_call, GodotBridge &r_bridge, const GodotBridge::SignalBinding &p_row, Value p_callback) {
 	if (p_row.reject != VH_SIGNAL_OK) {
-		return raise(r_call, "Cannot subscribe to `" + p_row.name + "`: " + reject_reason(p_row.name, p_row.reject, p_row.reject_detail));
+		return raise(r_call, verse_diag_text(verse_diag::VG2102,
+									 { { "signal", p_row.name }, { "reason", reject_reason(p_row.name, p_row.reject, p_row.reject_detail) } }));
 	}
 	const int64_t callable_ref = r_bridge.make_method_callable(p_callback, p_row.shape, false);
 	if (callable_ref == 0) {
@@ -2176,7 +2175,7 @@ Outcome signal_emit_native(NativeCall &r_call) {
 	}
 	const GodotBridge::SignalBinding *row = id != 0 ? bridge->binding(id) : nullptr;
 	if (row == nullptr) {
-		return raise(r_call, "A signal was emitted through an unbound `signal`. One a script built for itself rather than declared as a member of a class Godot instantiated names nothing, the way `godot_array{}` does.");
+		return raise(r_call, verse_diag_text(verse_diag::VG2105));
 	}
 	const GodotBridge::SignalBinding copy = *row;
 	return emit_binding(r_call, *bridge, copy, argument(r_call, 1));
@@ -2193,7 +2192,7 @@ Outcome signal_subscribe_native(NativeCall &r_call) {
 	}
 	const GodotBridge::SignalBinding *row = id != 0 ? bridge->binding(id) : nullptr;
 	if (row == nullptr) {
-		return raise(r_call, "Subscribe was called on an unbound `signal`, which names nothing.");
+		return raise(r_call, verse_diag_text(verse_diag::VG2106));
 	}
 	const GodotBridge::SignalBinding copy = *row;
 	return subscribe_binding(r_call, *bridge, copy, argument(r_call, 1));
@@ -2225,7 +2224,7 @@ Outcome event_emit_native(NativeCall &r_call) {
 	const int64_t id = event.is_cell() ? bridge->event_binding(event.as_cell()) : 0;
 	const GodotBridge::SignalBinding *row = id != 0 ? bridge->binding(id) : nullptr;
 	if (row == nullptr) {
-		return raise(r_call, "Emit was called on an `event` that is not an `@export_signal` member of a class Godot instantiated, so it names no Godot signal. An event a script builds for itself is a Verse event and nothing more -- `Signal` is how tasks are resumed through one.");
+		return raise(r_call, verse_diag_text(verse_diag::VG2107));
 	}
 	const GodotBridge::SignalBinding copy = *row;
 	return emit_binding(r_call, *bridge, copy, argument(r_call, 1));
@@ -2243,7 +2242,7 @@ Outcome event_subscribe_native(NativeCall &r_call) {
 	const int64_t id = event.is_cell() ? bridge->event_binding(event.as_cell()) : 0;
 	const GodotBridge::SignalBinding *row = id != 0 ? bridge->binding(id) : nullptr;
 	if (row == nullptr) {
-		return raise(r_call, "Subscribe was called on an `event` that is not an `@export_signal` member of a class Godot instantiated, so it names no Godot signal.");
+		return raise(r_call, verse_diag_text(verse_diag::VG2108));
 	}
 	const GodotBridge::SignalBinding copy = *row;
 	return subscribe_binding(r_call, *bridge, copy, argument(r_call, 1));
@@ -2280,10 +2279,11 @@ Outcome signal_await_native(NativeCall &r_call) {
 	int_to_int64(bridge->field_value(signal, "Id"), id, error);
 	const GodotBridge::SignalBinding *row = id != 0 ? bridge->binding(id) : nullptr;
 	if (row == nullptr) {
-		return raise(r_call, "Await was called on an unbound `signal`, which names nothing and so will never be emitted.");
+		return raise(r_call, verse_diag_text(verse_diag::VG2109));
 	}
 	if (row->reject != VH_SIGNAL_OK) {
-		return raise(r_call, "Cannot await `" + row->name + "`: " + reject_reason(row->name, row->reject, row->reject_detail));
+		return raise(r_call, verse_diag_text(verse_diag::VG2103,
+									 { { "signal", row->name }, { "reason", reject_reason(row->name, row->reject, row->reject_detail) } }));
 	}
 	const int64_t handle = row->handle;
 	const std::string name = row->name;
@@ -2332,7 +2332,7 @@ Outcome signal_ref_await_native(NativeCall &r_call) {
 	int64_t handle = 0;
 	std::string name;
 	if (!signal_target(*bridge, ref, handle, name)) {
-		return raise(r_call, "Await was called on a Signal value that names no object and signal.");
+		return raise(r_call, verse_diag_text(verse_diag::VG2110));
 	}
 	r_call.result = make_int(r_call.heap, bridge->begin_await(argument(r_call, 1), handle, name, 0, true));
 	return Outcome::Ok;
@@ -2350,11 +2350,11 @@ Outcome signal_ref_subscribe_native(NativeCall &r_call) {
 	int64_t handle = 0;
 	std::string name;
 	if (!signal_target(*bridge, ref, handle, name)) {
-		return raise(r_call, "Subscribe was called on a Signal value that names no object and signal.");
+		return raise(r_call, verse_diag_text(verse_diag::VG2111));
 	}
 	const int64_t callable_ref = bridge->make_method_callable(argument(r_call, 1), nullptr, true);
 	if (callable_ref == 0) {
-		return raise(r_call, "Subscribe was given a Verse function that is not a method bound to a live script instance, which is the only shape a Godot Callable can carry without outliving what it names.");
+		return raise(r_call, verse_diag_text(verse_diag::VG2112));
 	}
 	r_call.result = make_int(r_call.heap, bridge->subscribe(handle, name, callable_ref));
 	return Outcome::Ok;
@@ -2615,7 +2615,7 @@ Outcome ref_call(NativeCall &r_call, bool p_answer) {
 		const int32_t status = api.RefCall(api.Ctx, ref, method.data(), int32_t(method.size()), args.values.data(), int32_t(args.values.size()),
 				arena.get(), &result);
 		if (status == VH_CALL_NO_SUCH_MEMBER) {
-			return raise(r_call, "Godot has no method `" + method + "` on the value reference " + std::to_string(ref) + " names.");
+			return raise(r_call, verse_diag_text(verse_diag::VG4009, { { "member", method }, { "ref", std::to_string(ref) } }));
 		}
 		if (status != VH_CALL_OK) {
 			return raise(r_call, reference_sentence("Called a method on", ref));

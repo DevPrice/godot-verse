@@ -1,5 +1,6 @@
 #include "verse_debugger.h"
 
+#include "verse_diagnostic_prose.h"
 #include "verse_runtime.h"
 #include "verse_script_language.h"
 
@@ -195,11 +196,7 @@ void VerseDebugger::sync_attachment() {
 	// what verse/host/enable_debugger asked for. Said once rather than every frame.
 	if (!runtime->debug_set_enabled(wanted)) {
 		if (wanted) {
-			UtilityFunctions::push_warning(
-					"Verse: Godot's debugger is active, but the Verse VM already has a debugger "
-					"attached -- verse/host/enable_debugger opened Epic's socket debugger at "
-					"startup. Breakpoints in the script editor will not fire. Turn that setting "
-					"off to debug through Godot instead.");
+			UtilityFunctions::push_warning(String("Verse: ") + verse_diagnostic(verse_diag::VG6001));
 		}
 		debugger_attached = wanted; // do not ask again every frame
 		return;

@@ -1,5 +1,6 @@
 #include "verse_editor_plugin.h"
 
+#include "verse_diagnostic_prose.h"
 #include "verse_host_paths.h"
 #include "verse_runtime.h"
 #include "verse_script.h"
@@ -70,7 +71,7 @@ void VerseEditorPlugin::_process(double p_delta) {
 	if (was_playing && !playing) {
 		const String record = VerseRuntime::take_fatal_record();
 		if (!record.is_empty()) {
-			UtilityFunctions::push_error(String("The game ended in a Verse host fatal error:\n") + record);
+			UtilityFunctions::push_error(verse_diagnostic(verse_diag::VG4113, { { "record", record } }));
 		}
 	}
 	was_playing = playing;

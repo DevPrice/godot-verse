@@ -1498,7 +1498,10 @@ signal payload, and asserts `=` on what comes back.
 
 ## 14. Exact error-string inventory (for cross-checking against `tests/`)
 
-Every user-visible string quoted verbatim in §8–§9 above, gathered in one place:
+Every user-visible string quoted verbatim in §8–§9 above, gathered in one place. The interpreter
+prints each from `include/verse_diagnostics.def`, prefixed with its registry ID (`VG4001: ...`,
+`docs/diagnostics.md`); the text after the ID is what is quoted here, and the UE host prints it
+with no ID:
 
 1. `%s `%hs` on Godot object %lld, which Godot has already freed. Test IsInstanceValid[...] before reaching through a reference the scene may have dropped.`
 2. `%s `%hs` on Godot object %lld, and the value has no representation on the Verse bridge. This is a gap in the type table in tools/gen_verse_api.py.`

@@ -1,7 +1,8 @@
 #pragma once
 
 // Every diagnostic this bridge authors, by ID (docs/diagnostics.md), and the sentences for the ABI's
-// rejection and call-failure codes.
+// rejection and call-failure codes. A new bridge diagnostic gets a row in verse_diagnostics.def and
+// a test that asserts its ID; nothing prints a sentence of its own.
 //
 // Shared by src/ and vm/, and inline C++ rather than a C table because nothing here crosses a
 // binary boundary: each side compiles its own copy, so this is not ABI and need not be C the way
@@ -48,12 +49,17 @@ struct verse_diag_arg {
 	std::string_view value;
 };
 
-// The row's text with every `{name}` replaced by the argument of that name. A placeholder with no
-// argument is left as written, so a missing one is visible in the output rather than silently empty.
-inline std::string verse_diag_text(verse_diag p_id, std::initializer_list<verse_diag_arg> p_args = {}) {
-	const std::string_view text = verse_diag_row_of(p_id).text;
+// The row's ID, `: `, and the row's text, with every `{name}` replaced by the argument of that name. The ID is
+// the author's to see and a test's to assert (docs/diagnostics.md), so it leads the sentence, after
+// whatever location or tag the caller puts in front. A placeholder with no argument is left as
+// written, so a missing one is visible in the output rather than silently empty.
+inline std::string verse_diag_text(verse_diag p_id, const verse_diag_arg *p_args, size_t p_count) {
+	const verse_diag_row &row = verse_diag_row_of(p_id);
+	const std::string_view text = row.text;
 	std::string out;
-	out.reserve(text.size() + 64);
+	out.reserve(row.id.size() + 2 + text.size() + 64);
+	out.append(row.id);
+	out.append(": ");
 	size_t at = 0;
 	while (at < text.size()) {
 		if (text[at] == '{') {
@@ -64,10 +70,9 @@ inline std::string verse_diag_text(verse_diag p_id, std::initializer_list<verse_
 			if (end > at + 1 && end < text.size() && text[end] == '}') {
 				const std::string_view name = text.substr(at + 1, end - at - 1);
 				const verse_diag_arg *found = nullptr;
-				for (const verse_diag_arg &arg : p_args) {
-					if (arg.name == name) {
-						found = &arg;
-						break;
+				for (size_t index = 0; index < p_count && found == nullptr; index++) {
+					if (p_args[index].name == name) {
+						found = &p_args[index];
 					}
 				}
 				if (found != nullptr) {
@@ -81,6 +86,10 @@ inline std::string verse_diag_text(verse_diag p_id, std::initializer_list<verse_
 		at++;
 	}
 	return out;
+}
+
+inline std::string verse_diag_text(verse_diag p_id, std::initializer_list<verse_diag_arg> p_args = {}) {
+	return verse_diag_text(p_id, p_args.begin(), p_args.size());
 }
 
 // The attribute an author wrote, named back to them. R-EXP-1's five are told apart by the hint

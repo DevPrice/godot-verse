@@ -33,6 +33,7 @@ into a project.godot any more (R-DIST-12).
 import argparse
 import json
 import os
+import re
 import shutil
 import struct
 import subprocess
@@ -153,9 +154,23 @@ def stream(argv: list[str], cwd: Path | None = None) -> tuple[int, str]:
     return process.returncode, "".join(lines)
 
 
+def said(output: str, expected: "str | re.Pattern[str]") -> bool:
+    return expected.search(output) is not None if isinstance(expected, re.Pattern) else expected in output
+
+
+def diag(diagnostic_id: str, *placeholders: str) -> "str | re.Pattern[str]":
+    """A bridge diagnostic by its ID (include/verse_diagnostics.def), with the placeholder values
+    that prove it was said about the right thing -- matched on one line, in order, and never on the
+    sentence's own wording, so rewording a sentence cannot break the assertion or satisfy it."""
+    if not placeholders:
+        return f"{diagnostic_id}: "
+    return re.compile(re.escape(f"{diagnostic_id}: ") + "".join(
+        "[^\\n]*?" + re.escape(value) for value in placeholders))
+
+
 def run(name: str, argv: list[str], results: Results, cwd: Path | None = None,
-        require_line: str | None = None, require_all: list[str] | None = None,
-        refute_all: list[str] | None = None, cases: str | None = None) -> bool:
+        require_line: str | None = None, require_all: "list[str | re.Pattern[str]] | None" = None,
+        refute_all: "list[str | re.Pattern[str]] | None" = None, cases: str | None = None) -> bool:
     """Runs a test binary, echoing its own per-case lines. Exit code decides pass or fail.
 
     `cases` is the tag the binary prints its case lines under (`test_records.PLAIN` for the
@@ -181,17 +196,19 @@ def run(name: str, argv: list[str], results: Results, cwd: Path | None = None,
         ok = False
         print(f"[run_tests] {name}: exited 0 without printing {require_line!r} -- it stopped early")
     for expected in require_all or []:
-        if expected in output:
-            print(f"[run_tests] {name}: said {expected!r}")
+        shown = expected.pattern if isinstance(expected, re.Pattern) else expected
+        if said(output, expected):
+            print(f"[run_tests] {name}: said {shown!r}")
         else:
             ok = False
-            print(f"[run_tests] {name}: never said {expected!r}")
+            print(f"[run_tests] {name}: never said {shown!r}")
     for unwanted in refute_all or []:
-        if unwanted in output:
+        shown = unwanted.pattern if isinstance(unwanted, re.Pattern) else unwanted
+        if said(output, unwanted):
             ok = False
-            print(f"[run_tests] {name}: said {unwanted!r}, which it must not")
+            print(f"[run_tests] {name}: said {shown!r}, which it must not")
         else:
-            print(f"[run_tests] {name}: never said {unwanted!r}")
+            print(f"[run_tests] {name}: never said {shown!r}")
     if cases is not None:
         before = len(results.records)
         parsed = results.take_cases(name, output, cases)
@@ -216,6 +233,7 @@ def run_units(results: Results, do_build: bool) -> None:
         ("verse_doc_markup_test.exe", "build_doc_markup_test.py"),
         ("verse_signature_test.exe", "build_signature_test.py"),
         ("verse_bindings_test.exe", "build_bindings_test.py"),
+        ("verse_diagnostics_test.exe", "build_diagnostics_test.py"),
         ("verse_vm_test.exe", "build_vm_test.py"),
         ("verse_gd_convert_test.exe", "build_gd_convert_test.py"),
     ):
@@ -236,6 +254,9 @@ def run_units(results: Results, do_build: bool) -> None:
 
     records_test = REPO / "tests" / "test_records" / "test_test_records.py"
     run("test_test_records.py", [sys.executable, str(records_test)], results, cases="test_records")
+
+    registry_test = REPO / "tests" / "verse_diagnostics" / "test_verse_diagnostics.py"
+    run("test_verse_diagnostics.py", [sys.executable, str(registry_test)], results, cases="verse_diagnostics")
 
 
 def run_abi(results: Results, engine: Path | None, do_build: bool) -> None:
@@ -675,8 +696,7 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
         return
 
     run_host_fatal(results, godot, project)
-    reports_fatal = (["The previous run ended in a Verse host fatal error"]
-                     if INTEGRATION_CRASH_LOG.exists() else [])
+    reports_fatal = ([diag("VG4110")] if INTEGRATION_CRASH_LOG.exists() else [])
 
     run(
         "integration",
@@ -689,38 +709,40 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
             # prints one stack and says how many it dropped, in the wording Godot uses for its own
             # throttles. Asserted here rather than in the project because the thing being tested is
             # what reaches the output log, and a script cannot read that.
-            "stack trace(s) from this error were dropped",
+            diag("VG4203"),
             # The note that a raise rolls back its call, printed with each stack. GDScript keeps
             # writes made before an error, so an author needs telling that this does not.
-            "The call that raised this was rolled back",
+            diag("VG4204"),
             # Everything refresh_script_warnings produces, which reached no log until it got a
             # second reporter and so was asserted nowhere -- a `_validate` warning goes to the
-            # editor's gutter and stops there. One line per category rather than per sentence, and
-            # the reason rather than the whole sentence, the way the coverage_diagnostic ones are.
+            # editor's gutter and stops there. One line per category, each by its ID and the member
+            # it is about (docs/diagnostics.md), never by its wording.
             #
-            # R-EXP-2, an export the inspector cannot draw:
-            "is an option around a value the inspector has no empty slot for",
+            # R-EXP-2, an export the inspector cannot draw (settings_resource.verse):
+            diag("VG1002", "Maybe"),
             # B19 Stage C, an export it draws and cannot save:
-            "can be assigned in the inspector but not saved",
-            # R-SIG-1, a signal declaration Godot is never told about:
-            "is a `var`, and a signal is an identity rather than a value",
+            diag("VG1008", "Stowaway"),
+            # R-SIG-1, a signal declaration Godot is never told about (signal_rejects.verse):
+            diag("VG2001", "Reassignable"),
             # R-SIG-1's other half: `@export_signal` is what registers a member, so a `signal(t)`
             # without it is listed and refused rather than skipped. The one reject whose fixture is
             # well formed in every other way, which is what makes it the test of the rule rather
             # than of the ladder above it.
-            "carries no `@export_signal`, so Godot is never told about it",
-            # R-EXP-9, an `@rpc` whose words Godot does not know:
-            "is not an @rpc word",
-            # R-EXP-1, an inspector hint on a type it cannot describe:
-            "which describes an `int` -- and this member is not one",
+            diag("VG2006", "Forgotten"),
+            # R-EXP-9, an `@rpc` whose words Godot does not know (rpcs.verse):
+            diag("VG3001", "Misspelled"),
+            # R-EXP-1, an inspector hint on a type it cannot describe (hints.verse), and the hint
+            # named back correctly:
+            diag("VG1003", "Mismatched", "`@export_flags`", "an `int`"),
             # R-INT-10, a Verse class extending the binding for a *script* class. The one
             # inheritance case that cannot work, and the only one the compiler is happy with:
             # `extends_binding.verse` compiles, so nothing but this sentence says it is wrong.
-            "which is the generated binding for a class a *script* declares",
+            diag("VG5005", "`extends_binding`", "`mob`"),
             # R-EXP-3, ABI 12.2: an `@export` typed as a generated-binding class, refused with its
-            # own reason (VH_EXPORT_BINDING_CLASS_UNSUPPORTED) rather than the generic sentence
-            # every other unsupported type gets (architecture-review.md).
-            "and `@export` cannot carry a GDScript class reached through a generated binding yet",
+            # own reason (VH_EXPORT_BINDING_CLASS_UNSUPPORTED) rather than VG1007, the generic
+            # sentence every other unsupported type gets, and naming the base to export instead
+            # (architecture-review.md). VG1006 would be the same refusal with no base found.
+            diag("VG1005", "SomeMob", "mob"),
         ] + reports_fatal,
         # The bridge reports every Verse runtime error itself, rate limited. Unreal's own echo of
         # the same error, stack and all on every repeat, is silenced in vh_init's -LogCmds; the
@@ -741,31 +763,29 @@ def run_integration(results: Results, engine: Path | None, godot: Path | None) -
 # ask -- `_validate` is an extension virtual with no bound counterpart -- so the only way to read what
 # the author would see is to read what the editor prints. R-SCN-2: a reason recorded in a report file
 # in this repository is read by whoever wrote the generator and by nobody else.
+#
+# The bridge's own sentences are asserted by ID and by the names they were said about (`diag`);
+# the compiler's are its text, because that text is all the editor shows and there is no ID to have.
 COVERAGE_EXPLANATIONS = [
-    "Godot has get_position, but it is reachable as the property `Position`.",
+    diag("VG5101", "get_position", "`Position`"),
     # `virtual_no_default` has no row to assert: every one of Godot's 1413 virtuals is generated
     # now, because the two return kinds that had nothing to answer with both got one -- an object
     # return is an option defaulting to `false`, and a parametric container has its generated maker.
     # The reason is still in the generator and in the explanation, so a future Godot type with no
     # default reappears here rather than going quiet.
-    "Godot has VisualShaderNodeFloatParameter.max, but a Verse function already answers to that "
-    "name, so it is the property `Maximum`.",
-    "Godot has VisualShaderNodeFloatParameter.get_max, but it is reachable as the property `Maximum`.",
-    "Godot has Object.to_string, but it is reachable as `ToString(Value)`",
+    diag("VG5102", "VisualShaderNodeFloatParameter.max,", "`Maximum`"),
+    diag("VG5101", "VisualShaderNodeFloatParameter.get_max,", "`Maximum`"),
+    diag("VG5104", "Object.to_string,", "`ToString(Value)`"),
     # R-SCN-5's other half, and the phase's one deliberate break: the enum is the type, so the
     # integer that used to compile does not.
     "This assignment expects a value of type node_process_mode, but the assigned value is an "
     "incompatible value of type type{2}.",
-    # The four module diagnostics (phase-3-design.md section 2.4). Each is asserted on the part of
-    # the sentence that says *why*, not on the file names, whose order is the filesystem's.
-    '"my-stuff" is not a Verse module name',
-    'gameplay.vmodule, not my-stuff.vmodule',
-    "both declare `collide` in the root module",
-    'choose "Make Verse Module"',
-    "both register the Godot class name `Widget`",
-    "ClassDB is one flat namespace and a module is deliberately not part of it",
-    "derives from `widget`, and more than one script answers to that name",
-    "it offers Node as this script's base type",
+    # The four module diagnostics (phase-3-design.md section 2.4), on what each was said about
+    # and not on the file names beside it, whose order is the filesystem's.
+    diag("VG5001", '"my-stuff"'),
+    diag("VG5002", "`collide`", "the root module"),
+    diag("VG5003", "`Widget`"),
+    diag("VG5006", "`widget`"),
     # The `no_rollback` trap, which the bridge no longer annotates: the appended sentence was
     # keyed on glitch 3512 and the callee's package alone, never on which effect had been refused,
     # so a `suspends` refusal from a Godot signal took the `transacts` branch and told the author
@@ -777,9 +797,8 @@ COVERAGE_EXPLANATIONS = [
     "by its context",
     # R-TOOL-12's sentence, in both shapes: the one module that would fix it, and the two that
     # leave the choice to the author.
-    "It is declared in a module this file does not import; add "
-    "`using { /user@localhost/solo }` at the top of the file.",
-    "It is declared in more than one module, so which was meant is yours to say",
+    diag("VG5201", "`using { /user@localhost/solo }`"),
+    diag("VG5202"),
     # A compiler warning, pinned to its severity: the build logs a warning as a warning, where an
     # analysis logs nothing at any severity. Every diagnostic is filed through one sink now, so a
     # warning that leaked around it would print as this line without the prefix.
@@ -790,9 +809,7 @@ COVERAGE_EXPLANATIONS = [
     # over in silence. Asserted on the reason rather than on the whole sentence, the way the module
     # ones are. The editor also puts this on the attribute's line through `_validate`; only the
     # build's copy reaches a log, which is why this is the half a test can read.
-    "`@global_class` on `sidecar` registers nothing",
-    "Godot collects one global class per script file",
-    "still exports, filtered by its nearest Godot base class",
+    diag("VG5004", "`sidecar`"),
 ]
 
 
@@ -839,7 +856,7 @@ BINDING_CYCLE_REFUSALS = [
     "Unknown member `Doubled`",
     # And the consequence of the line above, which is the part an author actually pays: a build that
     # published nothing because of a diagnostic that was already false.
-    "the project did not build",
+    diag("VG5009"),
 ]
 
 
@@ -1604,7 +1621,7 @@ def _check_web_refuses_host(godot: Path, project: Path) -> bool:
              "--export-release", "Web", str(Path(work_str) / "index.html")],
             capture_output=True, text=True, errors="replace")
     output = (completed.stdout or "") + (completed.stderr or "")
-    if "Verse needs the vm backend on Web" in output:
+    if said(output, diag("VG6101", '"host"')):
         print("[web] a Web export with backend.web=\"host\" is refused: ok")
         return True
     print("[web] a Web export with backend.web=\"host\" is refused: FAIL -- its last lines:")

@@ -5,6 +5,7 @@
 #endif
 
 #include "verse_callable.h"
+#include "verse_diagnostic_prose.h"
 #include "verse_export_paths.h"
 #include "verse_host_paths.h"
 #include "verse_ref_table.h"
@@ -305,13 +306,13 @@ Error VerseRuntime::load_host() {
 		}
 #else
 		if (backend == "vm") {
-			UtilityFunctions::push_warning("VerseRuntime: verse/runtime/backend is 'vm', but this build has no interpreter compiled in (build with `scons verse_vm=yes`); using the host instead.");
+			UtilityFunctions::push_warning(String("VerseRuntime: ") + verse_diagnostic(verse_diag::VG4103));
 		}
 #endif
 		if (OS::get_singleton()->has_feature("web")) {
 			if (!host_init_refused) {
 				host_init_refused = true;
-				refuse_to_start(String("Verse needs the vm backend on Web, and this game was exported with verse/runtime/backend.web set to \"") + backend + String("\": the UE host is a native DLL a browser cannot load."));
+				refuse_to_start(verse_diagnostic(verse_diag::VG4104, { { "backend", backend } }));
 			}
 			return ERR_UNAVAILABLE;
 		}
@@ -439,8 +440,8 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 		host_loaded = host.load(p_dll_path, error_message);
 	}
 	if (!host_loaded) {
-		UtilityFunctions::push_error(String("VerseRuntime: failed to load host library: ") + error_message);
-		refuse_to_start(String("Verse could not load ") + p_dll_path + String(": ") + error_message);
+		UtilityFunctions::push_error(String("VerseRuntime: ") + verse_diagnostic(verse_diag::VG4105, { { "error", error_message } }));
+		refuse_to_start(verse_diagnostic(verse_diag::VG4106, { { "dll", p_dll_path }, { "error", error_message } }));
 		return ERR_CANT_OPEN;
 	}
 
@@ -455,9 +456,10 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 	const int32_t wanted = OS::get_singleton()->has_feature("template") ? (int32_t)VH_HOST_RUNTIME : (int32_t)VH_HOST_EDITOR;
 	const int32_t kind = host.host_kind();
 	if (kind != wanted) {
-		UtilityFunctions::push_error(String("VerseRuntime: ") + p_dll_path + String(" is ") + host_kind_name(kind) + String("; ") + (wanted == (int32_t)VH_HOST_EDITOR ? String("the Godot editor needs the editor host. Build it with `python tools/build_host.py`.") : String("an exported game needs the runtime host. Build it with `python tools/build_host.py --target VerseHostRuntime`.")));
+		UtilityFunctions::push_error(String("VerseRuntime: ") + verse_diagnostic(wanted == (int32_t)VH_HOST_EDITOR ? verse_diag::VG4107 : verse_diag::VG4108,
+				{ { "dll", p_dll_path }, { "kind", String(host_kind_name(kind)) } }));
 		host.unload();
-		refuse_to_start(String("Verse shipped the wrong host: ") + p_dll_path + String(" is ") + host_kind_name(kind) + String("."));
+		refuse_to_start(verse_diagnostic(verse_diag::VG4109, { { "dll", p_dll_path }, { "kind", String(host_kind_name(kind)) } }));
 		return ERR_INVALID_DATA;
 	}
 
@@ -496,7 +498,7 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 
 	const String previous_fatal = take_fatal_record();
 	if (!previous_fatal.is_empty()) {
-		UtilityFunctions::push_error(String("The previous run ended in a Verse host fatal error. What it recorded:\n") + previous_fatal);
+		UtilityFunctions::push_error(verse_diagnostic(verse_diag::VG4110, { { "record", previous_fatal } }));
 	}
 	const String fatal_log_path = fatal_record_path();
 	DirAccess::make_dir_recursive_absolute(fatal_log_path.get_base_dir());
@@ -549,11 +551,11 @@ Error VerseRuntime::load_host_internal(const String &p_dll_path, const String &p
 		OS::get_singleton()->set_environment(test_fatal_variable, test_fatal);
 	}
 	if (status != VH_OK) {
-		UtilityFunctions::push_error(String("VerseRuntime: vh_init failed with status ") + String::num_int64(status));
+		UtilityFunctions::push_error(String("VerseRuntime: ") + verse_diagnostic(verse_diag::VG4111, { { "status", String::num_int64(status) } }));
 		host_init_refused = true;
 		host.unload();
 		refuse_to_start(last_error_message.is_empty()
-						? String("Verse could not start (vh_init returned ") + String::num_int64(status) + String(").")
+						? verse_diagnostic(verse_diag::VG4112, { { "status", String::num_int64(status) } })
 						: last_error_message);
 		return FAILED;
 	}
@@ -1423,7 +1425,7 @@ int32_t VerseRuntime::api_call_utility(void *p_ctx, const char *p_name_utf8, int
 
 void VerseRuntime::tick(double p_budget_seconds) {
 	if (!host.is_loaded()) {
-		UtilityFunctions::push_warning("VerseRuntime: tick called with no host loaded");
+		UtilityFunctions::push_warning(String("VerseRuntime: ") + verse_diagnostic(verse_diag::VG4201));
 		return;
 	}
 
@@ -1451,11 +1453,8 @@ void VerseRuntime::tick(double p_budget_seconds) {
 	// is over budget on every frame, and one line per frame would bury every other message in the
 	// output. The first says it, and then one per 600 frames -- about ten seconds at 60fps.
 	if (overrun_frames % 600 == 0) {
-		UtilityFunctions::push_warning(
-				String("Verse: the frame budget (") + String::num(p_budget_seconds * 1000.0, 1) +
-				" ms, verse/runtime/frame_budget_ms) ran out with " + String::num_int64(stats.JobsPending) +
-				" queued job(s) left. They run next frame. The budget governs queued work only -- a task "
-				"awaiting a Godot signal resumes inside the emission and is not budgeted.");
+		UtilityFunctions::push_warning(String("Verse: ") + verse_diagnostic(verse_diag::VG4202,
+				{ { "budget", String::num(p_budget_seconds * 1000.0, 1) }, { "jobs", String::num_int64(stats.JobsPending) } }));
 	}
 	overrun_frames++;
 }
@@ -2048,9 +2047,8 @@ void VerseRuntime::flush_suppressed_raises() {
 		if (it->second.suppressed > 0) {
 			// Godot's own wording for the same thing (remote_debugger.cpp's n_errors_dropped), so
 			// the two read alike in one log.
-			UtilityFunctions::print(
-					String("    (") + String::num_int64(it->second.suppressed) +
-					" more stack trace(s) from this error were dropped.)");
+			UtilityFunctions::print(String("    (")
+					+ verse_diagnostic(verse_diag::VG4203, { { "count", String::num_int64(it->second.suppressed) } }) + String(")"));
 		}
 		it = raise_sites.erase(it);
 	}
@@ -2131,10 +2129,7 @@ void VerseRuntime::on_runtime_error(void *p_ctx, const vh_runtime_error *p_error
 	}
 	// Unlike GDScript, where writes made before an error stay made. Without this, an error in
 	// _Process that undoes the very write that would have stopped it reads as a bridge fault.
-	UtilityFunctions::print(
-			"    (The call that raised this was rolled back, so what it changed before the error is undone, "
-			"except by the Godot methods listed in docs/nonatomic-methods.md. An error in a function Godot "
-			"calls every frame can repeat for that reason.)");
+	UtilityFunctions::print(String("    (") + verse_diagnostic(verse_diag::VG4204) + String(")"));
 }
 
 vh_handle VerseRuntime::api_get_singleton(void *p_ctx, const char *p_name_utf8, int32_t p_name_len) {
