@@ -1626,6 +1626,12 @@ AUTORTFM_DISABLE bool GodotVerse::CompileProject(const TArray<FScriptSource>& So
     TArray<FCapturedDiagnostic> BuildDiagnostics;
     GSnapshotTakenDuringBuild = false;
 
+    // Before either road rather than after a success: a build that fails in IR generation, assembly
+    // or the link has already hung an IR package off every module, and the position walks assert
+    // on one. A build that fails earlier leaves a program they could walk, and the next analysis --
+    // which the consumer asks for on VH_ERR_NOT_ANALYSED -- replaces it anyway.
+    GProgramIsAnalysisOnly = false;
+
     bool bBuilt = false;
     if (bReuseHeldProgram)
     {
@@ -1808,7 +1814,14 @@ AUTORTFM_DISABLE bool RunCheck(const FUtf8String& Path, const FUtf8String& Sourc
                                                                                      : "analysis (foreground)",
                            FPlatformTime::Seconds() - AnalysisStarted);
     }
-    GProgramIsAnalysisOnly = GProgramIsAnalysisOnly || bAnalysed;
+    // BuildAll starts from a new program whenever the IDE has a build manager, so the program held
+    // now is this analysis's whatever it concluded -- a failed one included, which is most of them
+    // while an author is typing. Arming this only on a clean analysis left every hover after a Play
+    // answering "not analysed yet" for as long as the buffer did not compile.
+    if (GIde->GetBuildManager().IsValid())
+    {
+        GProgramIsAnalysisOnly = true;
+    }
 
     // What lets the next build skip straight to code generation, if nothing is edited before it
     // comes. Only a clean analysis arms it, and only a build disarms it.

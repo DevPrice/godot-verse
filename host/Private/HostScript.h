@@ -141,11 +141,11 @@ AUTORTFM_DISABLE void WaitForBackgroundCheck();
 /// false is also the guarantee that the record is visible.
 AUTORTFM_DISABLE bool ProgramDescribes(const FUtf8String& Path, const FUtf8String& SourceText);
 
-/// Whether the program the IDE holds came from an analysis rather than from a build that generated
-/// code. Code generation hangs an IR package off every module and the AST walk asserts rather than
-/// degrades when it meets one, so a position question has to be declined until the next analysis
-/// puts an AST back -- which is a "not yet", not a "no such symbol", and VH_ERR_STATE is how the
-/// ABI already spells that for these three entry points.
+/// Whether the program the IDE holds came from an analysis -- clean or not -- rather than from a
+/// build, which may have generated code. Code generation hangs an IR package off every module and
+/// the AST walk asserts rather than degrades when it meets one, so a position question has to be
+/// declined until the next analysis puts an AST back -- which is a "not yet", not a "no such
+/// symbol", and VH_ERR_NOT_ANALYSED is how the ABI spells that for these three entry points.
 AUTORTFM_DISABLE bool ProgramIsAnalysisOnly();
 
 /// What WaitForBackgroundCheck has cost the calling thread since this was last asked, and clears
