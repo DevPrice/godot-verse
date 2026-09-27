@@ -55,6 +55,10 @@ func _on_verse_touched(body: Node2D) -> void:
 	_signal_object = body
 
 
+func _on_verse_sighted(body: Object) -> void:
+	_signal_object = body
+
+
 # Three parameters against a one-struct payload: the struct decomposed on the way out, which is
 # what puts `damage`/`by`/`point` in the connect dialog instead of a single unnamed value.
 func _on_verse_reported(damage: int, by: String, point: Vector2) -> void:
@@ -1301,6 +1305,35 @@ func begin() -> void:
 		emitter_node.connect("Touched", _on_verse_touched)
 		emitter_node.call("EmitTouched", emitter_node)
 		_check("an object payload crosses as the node it names", _signal_object == emitter_node)
+
+		# architecture-review.md item 1 step 1, commit 6: the same for a payload typed as a
+		# *generated binding* class (`mob`) rather than a mirrored one. PayloadArgCrosses used to
+		# fall through a switch default for VH_EXPORT_BINDING_CLASS_UNSUPPORTED (ABI 12.2); the
+		# first proof is that the signal registered at all -- a payload it actually refused would
+		# leave Sighted absent from get_signal_list() the way a truly unsupported type is.
+		_check("a generated-binding class payload is registered as a signal",
+				by_name.has("Sighted"))
+		if by_name.has("Sighted"):
+			var sighted_args: Array = by_name["Sighted"]["args"]
+			_check_eq("a generated-binding class payload is one argument", sighted_args.size(), 1)
+
+			var sighted_mob: Node2D = Mob.new()
+			tree.root.add_child(sighted_mob)
+			sighted_mob.tag = "sighted"
+
+			_signal_object = null
+			emitter_node.connect("Sighted", _on_verse_sighted)
+			emitter_node.call("EmitSighted", sighted_mob)
+			_check("the GDScript receiver gets the same object", _signal_object == sighted_mob)
+
+			emitter_node.call("SubscribeToSighted")
+			emitter_node.call("EmitSighted", sighted_mob)
+			var read_back: Variant = emitter_node.call("ReadLastSighted")
+			_check("the Verse receiver gets the same object too", read_back == sighted_mob)
+			_check_eq("with the identity intact, not a copy or a downcast",
+					(read_back as Object).get("tag"), "sighted")
+
+			sighted_mob.queue_free()
 
 		# A struct payload: one argument per top-level field, named by the field. The whole reason
 		# the mapping is not "one payload, one argument" -- these are the names the connect dialog

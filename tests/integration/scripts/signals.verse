@@ -2,6 +2,8 @@ using { /Godot.org/Godot }
 # `listenable` alone needs this. `event` and `cancelable` arrive through the Godot package's own
 # imports; /Verse.org/Concurrency does not, and the compiler names the using when it is missing.
 using { /Verse.org/Concurrency }
+# `mob`, for the Sighted signal below: R-INT-7's generated binding for res://mob.gd.
+using { /Godot.org/Bindings }
 
 # R-SIG-1/2/3/4/6: a signal a script declares, emits, and subscribes to.
 #
@@ -41,6 +43,29 @@ signals := class(node2d):
     # An object payload, which is what `body_entered` shaped signals carry.
     @export_signal
     Touched<public>:event(node2d) = event(node2d){}
+
+    # architecture-review.md item 1 step 1, commit 6: an object payload typed as a *generated
+    # binding* class rather than a mirrored one. PayloadArgCrosses used to fall through a switch's
+    # default for VH_EXPORT_BINDING_CLASS_UNSUPPORTED (ABI 12.2); it is refused there only because
+    # ClassDB has no picker for the name, which a signal argument never asks for -- the handle
+    # still crosses. Held in a member rather than only read by a handler, so the emitted object,
+    # the GDScript receiver's object and the Verse receiver's object can all be compared for
+    # identity from the outside.
+    @export_signal
+    Sighted<public>:event(mob) = event(mob){}
+
+    var LastSighted:?mob = false
+
+    OnSighted<public>(M:mob)<transacts>:void =
+        set LastSighted = option{M}
+
+    SubscribeToSighted<public>()<transacts>:void =
+        Sighted.Subscribe(OnSighted)
+
+    EmitSighted<public>(M:mob)<transacts>:void = Sighted.Emit(M)
+
+    # `?mob` crossing back out: the same downcast R-SCN-6 gives every binding handle, in reverse.
+    ReadLastSighted<public>()<transacts>:?mob = LastSighted
 
     # A struct payload: one Godot argument per top-level field, *named by the field*. This is the
     # spelling that gives the connect dialog and "Make Function" real names instead of `Arg0`, and

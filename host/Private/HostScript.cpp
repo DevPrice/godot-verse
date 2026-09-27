@@ -6136,14 +6136,17 @@ AUTORTFM_DISABLE FUtf8String SignalArgName(const FMemberType& Arg, int32 Index, 
 /// Whether the wire can carry one payload argument of this declared type, and it is deliberately
 /// *not* `Described.Reject == VH_EXPORT_OK`.
 ///
-/// Three of the export rejections are rules about the inspector rather than about the wire, and a
+/// Four of the export rejections are rules about the inspector rather than about the wire, and a
 /// signal argument is subject to none of them:
 ///
 ///   - VH_EXPORT_OBJECT_NOT_OPTIONAL is "the inspector can leave a slot empty". Nothing leaves a
 ///     signal argument empty -- the emitter supplies it -- and ValueToWire has the bare-object
 ///     branch for exactly this case, added when `signal(node2d)` emitted nothing.
-///   - VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL is "ClassDB cannot filter a picker by this name". An
-///     emission carries a handle; nobody filters anything.
+///   - VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL and VH_EXPORT_BINDING_CLASS_UNSUPPORTED are both
+///     "ClassDB cannot filter a picker by this name" -- the latter for a generated-binding class
+///     rather than an unregistered project one. An emission carries a handle; nobody filters
+///     anything, and DeclaredReferenceClass's FindBindingClass arm resolves the class the same way
+///     an ordinary method argument does.
 ///   - VH_EXPORT_UNSUPPORTED_TYPE over a *reference* wrapper is "the inspector has no editor for
 ///     an arbitrary Array". The id crosses perfectly well, which is why DescribeExportType types
 ///     it before rejecting it.
@@ -6152,17 +6155,22 @@ AUTORTFM_DISABLE FUtf8String SignalArgName(const FMemberType& Arg, int32 Index, 
 /// cleared option as a null reference, so `?int` would arrive as nothing), and a type with no lane.
 AUTORTFM_DISABLE bool PayloadArgCrosses(const FMemberType& Arg)
 {
-    switch (Arg.Described.Reject)
+    VH_EXHAUSTIVE_SWITCH_BEGIN
+    switch (static_cast<vh_export_reject>(Arg.Described.Reject))
     {
     case VH_EXPORT_OK:
     case VH_EXPORT_OBJECT_NOT_OPTIONAL:
     case VH_EXPORT_SCRIPT_CLASS_NOT_GLOBAL:
+    case VH_EXPORT_BINDING_CLASS_UNSUPPORTED:
         return true;
     case VH_EXPORT_UNSUPPORTED_TYPE:
         return Arg.Described.Type == VH_TYPE_REF;
-    default:
+    case VH_EXPORT_OPTION_NOT_OBJECT:
+    case VH_EXPORT_HINT_WRONG_TYPE:
         return false;
     }
+    VH_EXHAUSTIVE_SWITCH_END
+    return false;
 }
 
 /// A user struct a payload decomposes into arguments, or null for anything else.
