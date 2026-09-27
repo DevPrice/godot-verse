@@ -208,6 +208,10 @@ private:
 	// what makes one flat scope livable while modules wait (R-LANG-6).
 	bool has_own_class = false;
 
+	// Inside _reload's compile(), which re-attaches every instance itself once the compile has
+	// succeeded -- so refresh_from_analysis must not do it a first time.
+	bool reloading = false;
+
 	// Documentation handed back verbatim from _get_documentation, in place of scanning the source.
 	// Non-empty only on the language's API doc carrier (set_injected_documentation).
 	godot::TypedArray<godot::Dictionary> injected_documentation;

@@ -2080,17 +2080,21 @@ editor's own C++ for the gutter and the warnings panel, and that half is now the
 **attribute's** row, not the class's, clears as the attribute is deleted and comes back as it is
 retyped, and only one of a file's two `@global_class` attributes is flagged.
 
-### R-EXP-7's two editor-side halves · **automated, one known defect**
+### R-EXP-7's two editor-side halves · **automated**
 
 `editor` layer, `_autoloads` cases: adding `settings_resource.verse` (a `Resource`) as an autoload
 through `EditorAutoloadSettings.autoload_add` is refused with Godot's own sentence and makes no
-node, while `game_state.verse` is accepted; a `@tool` autoload is instantiated in the editor and
-answers a method from the last built generation. Known defect, named skip
-(`TOOL_AUTOLOAD_DEFECT`): the `@tool` autoload actually holds a **placeholder** rather than a real
-instance, because `tool_probe.verse` answers `can_instantiate()` false even after the session's own
-builds — `VerseScript::_can_instantiate` is `is_compiled() && is_tool()`, and it is `is_compiled()`
-that is false — so a call on it answers "Attempt to call a method on a placeholder instance" and
-its `_Ready` never runs.
+node, while `game_state.verse` is accepted; a `@tool` autoload is instantiated in the editor,
+answers a method from the last built generation, and its `_Ready` runs.
+
+It used to hold a **placeholder**. `tool_probe.verse` was loaded fresh for the autoload while the
+project's last analysis was of B3's non-compiling stub, which described no class at all, so it
+compiled as having none and Godot gave the node a placeholder — and nothing ever replaced it:
+`set_script` is what picks the kind of instance and nobody called it again, and `_reload`'s
+re-attach runs only when `compile()` succeeds, which it cannot while its own analysis is still
+queued. A script whose analysis lands and makes it instantiable now re-attaches whatever
+placeholders it holds (`refresh_from_analysis`), which also covers a save that fixes a broken
+`@tool` file. The case breaks `tool_probe.verse`, adds the autoload, and fixes the file.
 
 ### The named-argument popup, and when it opens · **automated**
 

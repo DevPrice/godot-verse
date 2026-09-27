@@ -226,6 +226,7 @@ void VerseScript::refresh_from_analysis() {
 	// mistake -- so reporting it broken was wrong, and this is R-LANG-6's third clause.
 	valid = language->ensure_project_built() == OK
 			&& language->diagnostics_for(get_path()).is_empty();
+	const bool could_instantiate = _can_instantiate();
 	has_own_class = valid && runtime->has_class(verse_class_name());
 
 	// The method table comes from the same analysis as the exports and is cached for the same
@@ -237,6 +238,16 @@ void VerseScript::refresh_from_analysis() {
 	// The export list only exists once the project has been analysed, and a placeholder created
 	// before that got an empty one.
 	update_placeholders();
+
+	// A placeholder Godot made while this could not instantiate is not replaced by Godot when it
+	// can: set_script is what chooses the kind of instance, and nothing calls it again. _reload does
+	// this for a save whose compile succeeded, but compile() answers the previous verdict while its
+	// analysis is queued, so a save that fixes the file -- or a @tool autoload added while the
+	// project's last analysis described no class -- lands here instead and kept its placeholder
+	// for the session.
+	if (!reloading && !could_instantiate && _can_instantiate() && !placeholders.empty()) {
+		reload_instances();
+	}
 }
 
 String VerseScript::verse_class_name() const {
@@ -680,7 +691,9 @@ Error VerseScript::_reload(bool p_keep_state) {
 		reload_instances();
 	}
 	return status;
+	reloading = true;
 }
+	reloading = false;
 
 bool VerseScript::_has_method(const StringName &p_method) const {
 	return is_compiled() && find_method(p_method) != nullptr;
@@ -1056,6 +1069,13 @@ Dictionary property_for(const Dictionary &p_entry, Variant::Type p_type) {
 			break;
 		case VH_EXPORT_HINT_ENUM:
 			// The enumerators, comma separated in declaration order, which is what Godot's enum hint
+			// Declared as a NodePath, which is what GDScript's `@export_node_path` is: the inspector
+			// builds its node picker only for TYPE_NODE_PATH, whatever the hint, and draws a `string`
+			// as a text field. The member stays a `string` in Verse -- a NodePath crosses into one
+			// already -- and VerseScript::as_declared_type turns what comes back out into a NodePath.
+			if (p_type == Variant::STRING) {
+				property["type"] = (int64_t)Variant::NODE_PATH;
+			}
 			// wants and what the stored ordinal indexes into. Spelled as the author wrote them: the
 			// names are what the dropdown shows and nothing resolves them back.
 			property["hint"] = (int64_t)PROPERTY_HINT_ENUM;
@@ -1069,13 +1089,6 @@ Dictionary property_for(const Dictionary &p_entry, Variant::Type p_type) {
 			// Variant::get_type_name's callers spell it: the element's Variant type, then a colon.
 			if ((int64_t)p_entry["element_variant_tag"] != VH_VARIANT_NIL) {
 				property["hint"] = (int64_t)PROPERTY_HINT_TYPE_STRING;
-			// Declared as a NodePath, which is what GDScript's `@export_node_path` is: the inspector
-			// builds its node picker only for TYPE_NODE_PATH, whatever the hint, and draws a `string`
-			// as a text field. The member stays a `string` in Verse -- a NodePath crosses into one
-			// already -- and VerseScript::as_declared_type turns what comes back out into a NodePath.
-			if (p_type == Variant::STRING) {
-				property["type"] = (int64_t)Variant::NODE_PATH;
-			}
 				property["hint_string"] = String::num_int64((int64_t)p_entry["element_variant_tag"]) + String(":");
 			} else {
 				property["hint"] = (int64_t)PROPERTY_HINT_NONE;

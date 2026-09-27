@@ -11,7 +11,13 @@ using { /Godot.org/Godot }
 @tool
 tool_probe := class(node2d):
 
+    # Counted as well as printed, so the editor layer can ask the node rather than read a log.
+    var Readied:int = 0
+
     _Ready<override>():void =
+        set Readied += 1
         Print("tool_probe ready")
 
     Which<public>()<transacts>:string = "tool"
+
+    ReadyCount<public>()<transacts>:int = Readied
