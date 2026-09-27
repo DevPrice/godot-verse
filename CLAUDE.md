@@ -68,133 +68,87 @@ Three documents are not phase records and are the ones to read before adding a f
   Seven of the eight are down; the table says which, and §"After Phase 4"/§"After Phase 5" say what
   each diff came to. The one standing is the `<transacts>` trap (wall 8), narrowed twice and not
   removed.
-- **`docs/by-hand-findings.md`** — what the by-hand editor sessions found. Most of what `EngineDebugger`
-  and the editor UI inward used to have no automated test for is now covered by the `editor`,
-  `debug-wire` and `multiplayer` layers (`docs/editor-test-audit.md`); its own "What is still
-  checked by hand" section is the residual list. B1–B9, B15–B18,
-  B20, B22–B35, B37 and B39–B42 are defects, all fixed, and B36 is reported rather than closed; B12 is a Verse fact; B13 a latency finding; B14 the
-  sandboxed export run. **B30 is the one to read before calling `ResourceLoader` from anything a
-  resource load can reach**: Godot answers a cyclic load `ERR_BUSY` and a null `Ref` silently
-  (contract: godot/cyclic_resource_load_answers_null, godot/b30_cyclic_load_log_sentence), so
-  the only thing printed is the asking side's own sentence — which names the resource *asked for*
-  and never the one it collided with, and reads as that resource being broken. A `.verse` load
-  builds the project, a build generates the bindings, and generating them loads every `class_name`
-  script, so a GDScript naming a Verse class reaches itself.
-  **B38 is the one to read before touching where a script's documentation is registered, the
-  name it is registered under, or what counts as the comment above a declaration**: Godot draws a
-  script-class member's tooltip from the *registered* script doc and from nothing else — the
-  lookup result's `description` is read for the two local results alone — and `EditorHelp` queues
-  a doc registered before its own regeneration has finished and discards that queue when the
-  regeneration starts, so B20's once-per-re-arm pass could land and be thrown away. A lookup that
-  names a script class registers that script's doc first (`ensure_script_doc_published`), the
-  name is module-qualified on both sides (`left/widget`, which `OwnerNameOf` now answers for a
-  class scope), and the comment reader lexes because two of Verse's three comment forms span
-  lines. Verse has no doc-comment syntax: the comment above a declaration is the documentation,
-  which is Epic's own convention, and a script may write `@doc("...")` with
-  `using { /Verse.org/Native }`.
-  **B39 is the one to read before touching what a placeholder answers for an export it cannot
-  currently evaluate**: a default lives nowhere but in generated code, so a failed or pending
-  build cannot read one, and answering `_get_property_default_value` with a bare null let the
-  scene saver decide the live value differed from the default and write `Speed = null` over it —
-  for an *inherited* export, which B26 did not cover. The placeholder is frozen in its last good
-  configuration now: `last_good_defaults` caches each default read successfully and is served
-  when the build cannot, and the fallback is left *off* once a build has ever succeeded
-  (`had_successful_exports`) rather than switched on by any diagnostic, so a known member never
-  reads null. It also closes B26's step 3, where a break in a *different* file dropped the default.
-  **B40 is the one to read before touching how a Godot-package function hovers**: an extension
-  method on a Verse type Godot has no page for — `event(t).Emit`, `signal_ref.Subscribe`,
-  `variant.AsInt` — hovered as a "Local Constant" whose type was the whole function type, because
-  Godot's only prose-carrying results without a registered doc are the two locals. A page is
-  registered on demand instead: `EditorHelp` is not exposed, so the one door is
-  `ScriptEditor::update_docs_from_script`, fed by a hidden carrier script (`api_doc_carrier`, kept
-  out of `live_scripts`) whose documentation is a page per receiver a hover has asked about
-  (`publish_api_method`). The lookup answers `CLASS_METHOD` under the receiver's own name whether or
-  not an editor is present, so it is testable headless; the drawing is by hand. The method's
-  arguments and return come from `verse_signature`, and the declared type carries no parameter
-  names, so the drawn signature is `Emit(: t) -> void` until the host carries a spelled signature.
-  **B41 is the one to read before touching where a parameter's documentation comes from**: a
-  parameter's comment — a `#` line above it or an inline `<# doc #>` before it — did not reach its
-  hover, because the consumer re-reads the source by line and a parameter's line is the one its
-  function opens on, so "the comment above it" is the function's. The host reads it instead
-  (`DocOf` on the parameter's own VST node, filled by `LookupSymbol`), and the hover draws the
-  host's `doc` for a parameter while leaving the line-based path for everything else. Both forms
-  the parser keeps on the parameter node are covered, the first parameter included. Measured in
-  `tests/integration` (`hover_probe.verse`'s `Marks`), not by hand, because the host is loaded in a
-  headless run.
-  **B37 is the one to read before declaring a Godot parameter anywhere**: Verse has no null and
-  a class has no value for one, so an object argument is declared `?class` unless Godot's own
-  dump marks it `"meta": "required"` (godotengine/godot#86079) — <!--fact:mirror.object_args_required-->112 of the mirror's <!--fact:mirror.object_args_total-->1020 are
-  marked, and they are the ones written most, so `AddChild(Child)` is unchanged and the
-  yardstick needed no edit. A plain value does **not** coerce to an option, so the rest cost
-  their callers an `option{}`; options *are* covariant, so one `VhFromMaybeObject(?object)`
-  packs every one. A generated binding has no metadata in either source, so all of its object
-  arguments are optional. The same metadata reads the other way for a *result*:
-  `RequiredResult<T>` takes `<decides>` off <!--fact:mirror.object_returns_required-->38 of the mirror's <!--fact:mirror.object_returns_total-->715 object returns, so the Tween
-  chain and `SceneTree.GetRoot` are ordinary calls. **A virtual reads both halves**, because
-  Godot's declaration is a promise the override keeps — which is what finally gave the <!--fact:mirror.object_returning_virtuals-->43
-  object-returning virtuals a default body and took them off the skip list: <!--fact:mirror.object_returning_virtuals_optional-->41 are `?class`
-  defaulting to `false`, and the <!--fact:mirror.object_returning_virtuals_required-->2 Godot marks keep the class and default to `Err`. A signal's
-  payload is still not spelled for null and can carry it. The **singletons** are not this rule
-  and have no metadata to read: the dump's table is a name and a type, and which two can be
-  absent comes from `"api_type": "editor"`.
-  **B36 is the one to read before changing when the bindings are generated**: a GDScript that
-  names a Verse class is held back during a `.verse` load to avoid B30's cycle, and its binding
-  is then declared with no members — so a Verse file naming one of its *methods* fails to
-  compile, the script never becomes valid, and the node the scene meant to give it to silently
-  gets nothing. It is not a first-build state: such a script names the class on every load. A
-  generation taken during a load no longer unsays what a complete one said, which covers a
-  session that has already built and not a cold start, and the withheld build now says all of
-  this rather than leaving GDScript's “on a base object of type 'Nil'” as the only sentence.
-  **B35 is the one to read before touching what a generated binding can name**: a method the
-  generator cannot type is left out of the binding, so a GDScript method taking its own
-  `class_name` was simply absent — and one *answering* a class the mirror carries was worse,
-  emitted with a declared result over a `variant` body, which refuses the whole bindings
-  package and with it every Verse script in the project. A binding may name a binding: Verse
-  resolves module-scope definitions in any order, so the roster is collected before anything
-  is typed, and an object result is `<decides>` over `AsObject[]` and a downcast because a
-  class has no value standing for “Godot answered nothing”.
-  **B34 is the one to read before touching how an argument reaches the VM**: `WireToValue`
-  decided which class a declaration named *before* looking at whether a value had arrived, so
-  an optional parameter of any class but the mirror's refused Godot's own null — the one value
-  every object slot can hold. Null is answered first now, and the class lookup behind it is
-  per package (`FindMirroredClass`, `FindGodotClass`, `FindBindingClass`), which is the rule
-  `WriteInstanceFieldInstance` already followed for a member.
-  **B31 is the one to read before drawing a type's own name anywhere**: a type has no
-  type to spell, so `vh_lookup_desc::TypeUtf8` is empty for one, and the kind cannot stand in
-  for it either — a class, a struct and an interface all arrive as `VH_LOOKUP_CLASS`. The word
-  comes from the declaration, which is what `verse_scan_type_keyword` reads.
-  **B27 is the one to read before adding a completion option that inserts
-  anything but a bare name**: Godot re-asks for completion after confirming one only when the
-  inserted text's last character is in `code_completion_prefixes`, and that re-ask is the whole of
-  how the argument hint appears — so every `<decides>` call, inserting a `[`, silently got none.
-  Its second half is why `request_check` keeps a slot per kind: one slot let `_validate` displace
-  the analysis a hint was waiting on, and only a completion analysis re-asks. **B28 is the one to
-  read before walking a class ancestry from a mirrored name**: `verse_api::classes` carries the
-  sixteen math types and `rid` beside the <!--fact:mirror.classes-->1036 classes, ClassDB has heard of none of them, and
-  `godot_classdb_class_for` is the test every such walk has to make first. **B26 is the one to read before touching `_reload`, the placeholder path or
-  anything a script answers about a default**: a placeholder's `values` map is the only copy a
-  non-tool script's exported values have in the editor, Godot refuses to store one for a name
-  `_has_property_default_value` says no to, and B8's re-attach destroyed both — so a save during a
-  failed compile emptied the node it was meant to carry across. **B22 is the one to read before adding anything to the native root**: a hook
-  with no row in `LIFECYCLE_METHODS` is never offered as an override and never hovers, and four of
-  the five sat that way for a phase because only `_Notification` had a row. **B23 is the one to read
-  before adding a type to the mirror**: the editor learns what a type *is* from three generated
-  tables, and a public type with a row in none of them is drawn as plain text, offered by no
-  completion and hovered as a local constant — which `variant` was for a phase. **B24 is the one to
-  read before adding anything to the generated mirror that a script cannot write**: a fifth of every
-  completion popup was the mirror's own class var accessors, 7344 names no author can spell, because
-  `DescribeCompletion` describes any function that fits the filter and the fact that separates them
-  was already in hand for a narrower purpose. **B25 is the one to read before asking the compiler
-  anything about where a definition was written**: Verse's own library documents itself with a
-  `@doc` attribute rather than a comment, a parametric class is a `CFunction` so a walk that stops
-  at functions loses every member of one, and an instantiated definition is not the one that was
-  written — `PrototypeOf` is the answer to the last. **B21 is the one
-  open defect**: asking Godot for the `IP` singleton — which the
-  generated accessor does whether or not it then succeeds — segfaults the process *after* everything
-  has shut down, so it reads as a whole suite failing with nothing in the log. **B20 is the one to
-  read before touching `_get_documentation`**: Godot asks for a
-  script's documentation once per session and off the game thread, where every ABI read is refused.
-  Its "What is still checked by hand" section is where the residual by-hand checks live.
+- **`docs/by-hand-findings.md`** — what the by-hand editor sessions found. Its "What is still
+  checked by hand" section is the residual list; everything else it names is a case in the
+  `editor`, `debug-wire` or `multiplayer` layer (`docs/editor-test-audit.md`) or below. B1, B3–B9,
+  B15, B17, B18, B20, B22–B35 and B37–B42 are defects, all fixed; B21 is open, B36 is said rather
+  than closed, and B43's evidence path is fixed with its cause open. B2 and B12 are Verse facts,
+  B10 and B11 are about the checklist, B13 is latency, B14 the sandboxed export run and B16 a
+  measurement. Read the entry before touching what it names:
+  - **B20** — `_get_documentation`: Godot asks once per session and off the game thread, where
+    every ABI read is refused.
+  - **B21**, open — asking Godot for the `IP` singleton, which the generated accessor does whether
+    or not it then succeeds, segfaults the process *after* shutdown, so a whole suite reads as
+    failing with nothing in the log.
+  - **B22** — the native root: a hook with no `LIFECYCLE_METHODS` row is never offered as an
+    override and never hovers.
+  - **B23** — a new type in the mirror: the editor learns what a type *is* from three generated
+    tables, and a type in none of them is plain text, completed nowhere and hovered as a local.
+  - **B24** — anything generated that a script cannot write: `DescribeCompletion` offers any
+    function that fits the filter, which once put 7344 class var accessors in every popup.
+  - **B25** — asking where a definition was written: Verse's own library documents itself with
+    `@doc`, a parametric class is a `CFunction`, and an instantiated definition answers through
+    `PrototypeOf`.
+  - **B26** — `_reload`, the placeholder path, or anything a script answers about a default: a
+    placeholder's `values` map is a non-tool script's only copy of its exported values, and Godot
+    stores none for a name `_has_property_default_value` refuses.
+  - **B27** — a completion option that inserts more than a bare name: Godot re-asks, which is the
+    whole of how the argument hint appears, only when the inserted text ends in a
+    `code_completion_prefixes` character; and `request_check` keeps a slot per kind so `_validate`
+    cannot displace the analysis a hint is waiting on.
+  - **B28** — an ancestry walk from a mirrored name: `verse_api::classes` carries the sixteen math
+    types and `rid` beside the <!--fact:mirror.classes-->1036 classes, ClassDB knows none of them, and
+    `godot_classdb_class_for` is the test to make first.
+  - **B30** — `ResourceLoader` from anything a resource load can reach: Godot answers a cyclic load
+    `ERR_BUSY` and a null `Ref` silently
+    (contract: godot/cyclic_resource_load_answers_null, godot/b30_cyclic_load_log_sentence), and
+    the one sentence printed names the resource *asked for*, never the one it collided with. A
+    `.verse` load builds, a build generates the bindings, and generating them loads every
+    `class_name` script, so a GDScript naming a Verse class reaches itself; `tests/binding_cycle`
+    holds it.
+  - **B31** — drawing a type's own name: `vh_lookup_desc::TypeUtf8` is empty for a type and
+    `VH_LOOKUP_CLASS` covers a class, a struct and an interface alike, so the word comes from the
+    declaration (`verse_scan_type_keyword`).
+  - **B34** — how an argument reaches the VM: `WireToValue` answers Godot's null before it looks up
+    the declared class, and the lookup is per package (`FindMirroredClass`, `FindGodotClass`,
+    `FindBindingClass`).
+  - **B35** — what a generated binding can name: a binding may name a binding, because the roster is
+    collected before anything is typed, and an object result is `<decides>` over `AsObject[]` and a
+    downcast. One method typed wrong refuses the whole bindings package, and every Verse script
+    with it.
+  - **B36**, said rather than closed — when the bindings are generated: a GDScript naming a Verse
+    class is held back during a `.verse` load to avoid B30's cycle and its binding has no members,
+    so a Verse file naming one of its *methods* fails to compile on every load. A generation taken
+    during a load does not unsay a complete one, which covers a session that has built and not a
+    cold start.
+  - **B37** — declaring a Godot parameter anywhere: Verse has no null, so an object argument is
+    `?class` unless Godot's dump marks it `"meta": "required"` (godotengine/godot#86079) —
+    <!--fact:mirror.object_args_required-->112 of the mirror's <!--fact:mirror.object_args_total-->1020 are, and they are the ones written most. A plain value does
+    **not** coerce to an option; options *are* covariant, so one `VhFromMaybeObject(?object)` packs
+    every one. A generated binding has no metadata, so all its object arguments are optional. For a
+    result, `RequiredResult<T>` takes `<decides>` off <!--fact:mirror.object_returns_required-->38 of the mirror's <!--fact:mirror.object_returns_total-->715 object returns.
+    A virtual reads both halves: of the <!--fact:mirror.object_returning_virtuals-->43 object-returning virtuals, <!--fact:mirror.object_returning_virtuals_optional-->41 are `?class`
+    defaulting to `false` and the <!--fact:mirror.object_returning_virtuals_required-->2 Godot marks keep the class and default to `Err`. A signal's
+    payload can still carry null, and which two singletons can be absent comes from
+    `"api_type": "editor"`.
+  - **B38** — where a script's documentation is registered, under what name, or what counts as the
+    comment above a declaration: Godot draws a script-class member's tooltip from the registered
+    script doc alone, and `EditorHelp` discards a doc registered before its own regeneration
+    finishes. A lookup naming a script class registers that script's doc first
+    (`ensure_script_doc_published`), the name is module-qualified on both sides (`left/widget`,
+    `OwnerNameOf`), and the comment reader lexes, because two of Verse's three comment forms span
+    lines.
+  - **B39** — what a placeholder answers for an export it cannot evaluate: a default lives only in
+    generated code, and a bare null let the scene saver write `Speed = null` over the value.
+    `last_good_defaults` serves the last default read, and the fallback stays off once a build has
+    ever succeeded (`had_successful_exports`).
+  - **B40** — how a Godot-package function hovers: an extension method on a Verse type with no
+    Godot page gets one on demand, from a hidden carrier script (`api_doc_carrier`, out of
+    `live_scripts`) that `publish_api_method` feeds to `ScriptEditor::update_docs_from_script`. The
+    declared type carries no parameter names, so it draws as `Emit(: t) -> void`.
+  - **B41** — where a parameter's documentation comes from: the host's `DocOf` on the parameter's
+    own VST node, because a parameter's line is its function's and the comment above it by line is
+    the function's (`tests/integration`, `hover_probe.verse`'s `Marks`).
 
 **`docs/gdscript-conversion.md`** is "Convert to Verse" (R-TOOL-13): the requirements as the owner
 settled them, every GDScript construct and what it becomes, and the five Verse spellings the
@@ -218,64 +172,31 @@ C++ ABI. It is staged into the host's `Public/` by `build_host.py`, so both comp
 a major bump is a layout or meaning change and both sides must be rebuilt; a minor bump adds
 something an older consumer can ignore behind a `StructSize` check. A change to the header means
 bumping it and rebuilding **both** sides — the mismatch surfaces at `vh_init`, not at compile time.
-**A callback added at a minor must be cleared past the consumer's own `StructSize`**: `vh_init`
-copies the whole `vh_godot_api` out of the descriptor, so everything past what a consumer built at a
-lower minor actually wrote is that consumer's stack, not a null pointer, and "check the pointer
-before calling" would pass. `InitHost` zeroes the tail; nothing before 8.3 needed it.
-**`vh_complete_item` is the struct a minor can never grow**: the items are handed back as an array,
-so a field at the end changes the stride an older consumer indexes by, and the mismatch would read
-as corruption rather than as a refusal. 9.0 added `IsNamed` there for that reason alone.
-**10.0 changed no layout**: it is a major because `vh_compile_project` stopped leaving an
-analysis-only program behind it, so the three position entry points answer `VH_ERR_STATE` after
-a build until a consumer asks for an analysis. An older consumer would have read that as "no
-such symbol" and drawn nothing, silently.
-**12.4 is where "not analysed yet" became its own answer**: `VH_ERR_NOT_ANALYSED`, appended to
-`vh_status`, is what the five entry points that read an analysis -- `vh_lookup_symbol`,
-`vh_complete_symbol`, `vh_signature_at`, `vh_class_members`, `vh_class_override_candidates` --
-answer when no analysis can answer yet, where the three position ones used to say `VH_ERR_STATE`
-and the two class reads `VH_ERR_NOT_FOUND` before the first snapshot, which told an editor the class
-had no members. A minor and not a major because **the host answers a consumer by the minor it
-declared**: `vh_init_desc::AbiVersion` below 12.4 gets the two old codes back, which is the
-policy's "fall back rather than fail" for a new enumerator an older consumer cannot ignore. The
-reasons behind it are `EHostFailure` (`host/Private/HostResult.h`), and `VerseHost.cpp`'s
-`StatusFor` is the one place any of them becomes a status.
-**12.3 is where a layout mismatch is refused by name**: `vh_init_desc` grew `LayoutDigest`, the
-`VH_LAYOUT_DIGEST` the consumer compiled, and a host whose own differs answers `VH_ERR_ABI` with a
-sentence naming both. The digest is over the sizes and offsets `include/verse_host_abi_layout.h`
-pins with `static_assert`s for every struct handed over as an array — fifteen of them, in three
-layouts (64-bit; 32-bit with 8-byte `int64` alignment; i386 System V) — so a layout change without
-a major bump fails in whichever build compiles first, and two binaries that each compiled cleanly
-are refused rather than read as corruption. **A host reads the field only when `AbiVersion`'s
-minor is at least 3**, not on `StructSize` alone: on 64-bit it sits in `ShowFatalDialog`'s trailing
-padding, so an older descriptor's size already covers it. `tools/gen_abi_layout.py` rewrites the
-pins from clang's own layout dump after a struct changes.
-**12.2 is where `@export` learned to name a generated-binding class as its own reason.**
-`vh_export_reject` grew `VH_EXPORT_BINDING_CLASS_UNSUPPORTED`, appended rather than folding that
-case into `VH_EXPORT_UNSUPPORTED_TYPE`, so an older consumer reads it as the generic sentence
-that reason already had and a current one can say which of the two this member actually is.
-**12.1 is where a host fatal error is recorded**: `vh_init_desc` grew `FatalLogPathUtf8` and
-`ShowFatalDialog` (`by-hand-findings.md` B43).
-**12.0 is what a parameter says about the class it declares**: `vh_param_desc` grew
-`ClassUtf8` and a `ClassKind` beside it, and `vh_method_desc` the same pair for its result, so
-a consumer can tell Godot that `Fire(Target:timer)` takes a **Timer** rather than an Object.
-A signal argument is a `vh_param_desc` and came along with it. It had to be a major because
-**both of those structs are handed over as arrays**, which makes them the third and fourth
-whose stride a minor can never change. A script class the consumer has not registered is
-reported as its nearest mirrored ancestor rather than by a name nothing can resolve — the rule
-`vh_export_desc::NativeClassUtf8` already followed, and GDScript's own.
-**11.1 is generated bindings' half of the wire**: `vh_set_bindings`, the `vh_binding_class`
-row and a `GetScriptClassOf` callback appended to `vh_godot_api`. A minor, because a consumer
-that never calls it is unaffected — but `vh_binding_class` is the *second* struct a minor can
-never grow, for `vh_complete_item`'s reason exactly: the rows are handed over as an array, so a
-field appended at the end changes the stride the host indexes by and the mismatch reads as
-corruption rather than as a refusal.
-**11.0 grew `vh_lookup_desc`**, which carries a definition's documentation now (`DocUtf8`) — and it
-had to be a major because that struct had no `StructSize`, so there was nothing a consumer could
-check before reading a field appended after the version it was built for. The size field went in
-with it, so the next addition there can be a minor.
+What each version added is in `git log -p include/verse_host_abi.h`; the rules it left are these:
 
-`vh_host_kind()` is readable before `vh_init` and answers editor, runtime or cooker; the eleven
-compiler-side entry points answer `VH_ERR_UNSUPPORTED` in a runtime host.
+- **A struct handed over as an array can never grow at a minor**, because a field at the end changes
+  the stride the other side indexes by. `include/verse_host_abi_layout.h` (`tools/gen_abi_layout.py`,
+  from clang's own layout dump) `static_assert`s the size and offsets of all fifteen, in three
+  layouts (64-bit; 32-bit with 8-byte `int64` alignment; i386 System V), so a layout change without
+  a major bump fails whichever build compiles first; and `vh_init` refuses a consumer whose
+  `LayoutDigest` differs from the host's `VH_LAYOUT_DIGEST` with `VH_ERR_ABI` and a sentence naming
+  both. A host reads `LayoutDigest` only when `AbiVersion`'s minor is at least 3, not on
+  `StructSize` alone: on 64-bit it sits in `ShowFatalDialog`'s trailing padding.
+- **A callback added at a minor must be cleared past the consumer's own `StructSize`**: `vh_init`
+  copies the whole `vh_godot_api`, so everything past what an older consumer wrote is its stack,
+  not a null pointer. `InitHost` zeroes the tail.
+- **The host answers a consumer by the minor it declared.** A failure is an `EHostFailure`
+  (`host/Private/HostResult.h`) and `StatusFor` is the one place it becomes a status, so a consumer
+  below 12.4 gets `VH_ERR_STATE`/`VH_ERR_NOT_FOUND` where a current one gets `VH_ERR_NOT_ANALYSED`;
+  `verse_host_unit` asserts every reason at both minors.
+- **`VH_ENTRY_POINTS(X)` is the one list of the 44 entry points**, with each one's presence and
+  role; the consumer's loader, the host's and `vm/`'s `static_assert`s and the test resolvers all
+  expand it. `vh_host_kind()` is readable before `vh_init` and answers editor, runtime or cooker,
+  and the twelve rows marked `VH_ENTRY_COMPILER` answer `VH_ERR_UNSUPPORTED` in a host without a
+  compiler.
+- A script class the consumer has not registered is reported as its nearest mirrored ancestor
+  (`vh_param_desc::ClassUtf8`, `vh_method_desc`, `vh_export_desc::NativeClassUtf8`) rather than by a
+  name nothing can resolve, which is GDScript's own rule.
 
 ### `src/` — the GDExtension
 
@@ -284,20 +205,20 @@ compiler-side entry points answer `VH_ERR_UNSUPPORTED` in a runtime host.
 | `register_types.cpp` | registration order: language before resource loader |
 | `verse_host.{h,cpp}` | `GetProcAddress` loader over the ABI; no Verse logic |
 | `verse_host_paths.{h,cpp}` | where this machine's Unreal checkout, host DLL and cooker are: environment, then EditorSettings, then the legacy project settings (R-DIST-12) |
-| `verse_runtime.{h,cpp}` | the `VerseRuntime` singleton — `vh_init_desc`, the Godot callback table, `verse/host/enable_debugger`, and finding `verse_data` in an export |
+| `verse_runtime.{h,cpp}` | the `VerseRuntime` singleton — `vh_init_desc`, the Godot callback table, `verse/host/enable_debugger`, and finding `verse_data` in an export. `diagnostic_sink` is never re-entered, and `DEV_ASSERT`s so |
 | `verse_value.{h,cpp}` | `Variant` ⇄ `vh_value`, arena-allocated. `variant_type_for` is where a declared type becomes a Godot one, and `VH_TYPE_VARIANT` → `Variant::NIL` is only half an answer: the descriptions pair it with `PROPERTY_USAGE_NIL_IS_VARIANT`, without which NIL means "must be null" and Godot refuses the call before the VM sees it |
 | `verse_ref_table.{h,cpp}` | the id → `Variant` table the `Ref` lane names: Array, Dictionary, Callable, Signal and the packed arrays, which cross as references rather than copies |
 | `verse_callable.{h,cpp}` | the mirror image: a Godot `Callable` that calls a Verse function. Only a function **bound to a script instance** is accepted, which is the half of Godot's own design that does not leak (GH-102327) |
 | `verse_script.{h,cpp}` | a `.verse` file as a Godot `Resource`; valid only if it defines its own class |
 | `verse_script_instance.{h,cpp}` | one script bound to one node; raw `GDExtensionScriptInstanceInfo3` vtable, not a `godot::Object` |
 | `verse_script_language.{h,cpp}` | the `ScriptLanguage`: `_validate`, `_complete_code`/`_lookup_code`, `_frame` (which pumps `vh_tick`, drives `VerseProjectState`, `VerseDebugger` and `VerseProfiler`), and every virtual godot-cpp requires a declaration for on this class itself, each a one-line delegation to the owning object |
-| `verse_debugger.{h,cpp}` | R-DIAG-4's whole state and behaviour, owned by `VerseScriptLanguage` as a mutable `VerseDebugger debugger` member: which frame stopped and why, `should_break`/`break_here` (the ABI callbacks' consumer half), the `_debug_get_*` bodies the language's virtuals delegate to, and `res_path_for_source` — the debugger's own; nothing in the profiler resolves a source path today |
+| `verse_debugger.{h,cpp}` | R-DIAG-4's whole state and behaviour, owned by `VerseScriptLanguage` as a mutable `VerseDebugger debugger` member: which frame stopped and why, `should_break`/`break_here` (the ABI callbacks' consumer half), the `_debug_get_*` bodies the language's virtuals delegate to, and `res_path_for_source` |
 | `verse_profiler.{h,cpp}` | the profiler, owned by `VerseScriptLanguage` as a `VerseProfiler profiler` member: `profiling_active`, the `ProfilingInfo` stride trap and the `_profiling_*` bodies the language's virtuals delegate to |
-| `verse_api_lookup.{h,cpp}` | every lookup keyed by a mirrored Godot or Verse name: `verse_godot_class_for`/`verse_godot_class_name` (shared with `verse_script.cpp` and `verse_runtime.cpp`), `godot_classdb_class_for` (B28's ClassDB-first rule over a math type's non-membership), `mirrored_class`'s reverse of the first, and the method/global/enum/statics/singleton/primitive-doc tables `_lookup_code` resolves a symbol against. One linear scan over `verse_api::classes` per question rather than the six this and three more in `verse_syntax_highlighter.cpp` used to keep separately; `verse_bindings_gen.cpp` keeps its own binary search over the same table, sorted for its per-generation roster cost, and says why beside it. `verse_godot_class_for` and `mirrored_class` are thin wrappers over `verse_api_lookup_core.h`'s `verse_api_godot_name_for`/`verse_api_verse_name_for` -- the class-name scan alone, with no godot::String and no ClassDB, which is what lets `verse_api_lookup_test` exercise it (docs/architecture-review.md item 3 step 5); the rest of this file calls ClassDB or otherwise needs a running Godot and stays untested below the integration layer |
+| `verse_api_lookup.{h,cpp}` | every lookup keyed by a mirrored Godot or Verse name: `verse_godot_class_for`/`verse_godot_class_name` (shared with `verse_script.cpp` and `verse_runtime.cpp`), `godot_classdb_class_for` (B28's ClassDB-first rule over a math type's non-membership), `mirrored_class`'s reverse of the first, and the method/global/enum/statics/singleton/primitive-doc tables `_lookup_code` resolves a symbol against. One scan per question; `verse_bindings_gen.cpp` keeps its own binary search over the same table and says why. The class-name scan alone is `verse_api_lookup_core.h`, godot-cpp-free and unit-tested (`verse_api_lookup_test`) |
 | `verse_completion.{h,cpp}` | `_complete_code` and `probe_complete`'s whole bodies, and the completion/signature caches, owned by a `VerseCompletion completion` member; `completing_in_comment`/`completing_in_string` are free functions here too, shared with `verse_hover.cpp`'s `_lookup_code` |
-| `verse_hover.{h,cpp}` | `_lookup_code` and `probe_hover`'s whole bodies, `publish_api_method` and the `api_doc_carrier`/`api_doc_pages` it fills, owned by a `VerseHover hover` member. `ensure_script_doc_published` stays a `VerseScriptLanguage` method instead of moving here, and is public for it: both it and `republish_script_docs`, which stays private and unmoved, walk `live_scripts` directly, and only the first is a hover helper |
+| `verse_hover.{h,cpp}` | `_lookup_code` and `probe_hover`'s whole bodies, `publish_api_method` and the `api_doc_carrier`/`api_doc_pages` it fills, owned by a `VerseHover hover` member. `ensure_script_doc_published` is a public `VerseScriptLanguage` method, because it walks `live_scripts` |
 | `verse_diagnostic_prose.{h,cpp}` | `src/`'s godot::String face of `include/verse_diagnostics.h`: `verse_diagnostic(verse_diag::VGnnnn, {{"name", value}})` for any registry row, the three `*_rejection_message` wrappers and their warning `string_code`s (`export_rejection_code`, `signal_rejection_code`, `rpc_rejection_code`), and `verse_formatted_diagnostic`/`verse_flattened_diagnostics`, the shape one diagnostic and one analysis' diagnostics are logged and compared as |
-| `verse_project_state.{h,cpp}` | the build-and-analysis pump: `build_project`, the two analysis slots and the in-flight check, `poll_check`, the diagnostics tables and the two generation epochs. The build lifecycle is one `BuildState` enum and its transition table is at the top of the header — read it before changing when a build or an analysis runs (`by-hand-findings.md` B13, B20, B26, B27, B36, B38, B39 all live in this sequencing) |
+| `verse_project_state.{h,cpp}` | the build-and-analysis pump: `build_project`, the two analysis slots and the in-flight check, `poll_check`, the diagnostics tables and the two generation epochs, all the main thread's (`DEV_ASSERT(verse_on_main_thread())`). The build lifecycle is one `BuildState` enum and its transition table is at the top of the header — read it before changing when a build or an analysis runs (`by-hand-findings.md` B13, B20, B26, B27, B36, B38, B39 all live in this sequencing) |
 | `verse_resource_format.{h,cpp}` | load/save, without which a `.verse` cannot be attached to a node |
 | `verse_lexer.{h,cpp}` | resumable per-line lexer, and `verse_repair_completion_buffer` — which finishes off the caret's line so a half-written `if` does not cost the whole file its AST. No godot-cpp dependency, so both are unit-testable standalone |
 | `verse_class_decl.{h,cpp}` | scans the top-level class **named after the file** and its `@global_class` attribute out of the text; defers comments and strings to the lexer, and shares its lack of godot-cpp |
@@ -352,11 +273,12 @@ off the game thread, reachable only under its lock (`FLockedCallbacks`, which `c
 `InstanceToString`, the member reads and writes, the declared-default reader, and the Callables
 that name a script method -- with `EnterVerseOn`, the one entry that pushes an instance's own task
 scope; `HostPeers` is R-NODE-3's peer and identity half -- `NewHostObject`, the one host-side
-construction of a `vh_object`, `AdoptOrMintPeer` and `ReleaseMintedPeer`, `ObjectForHandle` and
-the handle-to-class caches -- split from `HostInstances` because the natives reach it for objects
-that are not script instances at all, and a collected object's `BeginDestroy` reaches it with no
-instance in sight; the public halves of both are declared in `HostScript.h`;
-`HostVerseEntry.h` is the one `EnterVerse`; `HostScriptState.h` and `HostBuild.h` are the
+construction of a `vh_object`, `AdoptOrMintPeer` (game thread only, and `checkf`s it) and `ReleaseMintedPeer`, `ObjectForHandle`
+and the handle-to-class caches -- apart from `HostInstances` because the natives and a collected
+object's `BeginDestroy` reach it with no instance in sight; the public halves of both are declared in `HostScript.h`;
+`HostVerseEntry.h` is the one `EnterVerse`; `HostResult.h` is `TResult<T, EHostFailure>`, the
+host's internal answer, and `VH_UNREPORTED(reason)`, which every failure path that carries no
+reason passes through and which says so once per site in a Development host; `HostScriptState.h` and `HostBuild.h` are the
 accessors every other unit reads that state through (`CurrentSemanticProgram`, `IdeBuildManager`,
 `DescribeMemberType`, `RecordedSignalShapes`, `RecordedMethodTypes`, `ContentScopeOuter`, the
 binding roster and the class finders);
@@ -476,6 +398,7 @@ reviewed files of `docs/web-vm/spec/` alone. Keep it that way — do not bring V
     python tools/build_bindings_test.py   # naming-rule differential test, against tools/gen_verse_api.py's vectors
     python tools/build_api_lookup_test.py # class-name lookup round trip, verse_api_lookup_core.h's godot-cpp-free half
     python tools/build_gd_convert_test.py # GDScript converter test binary
+    python tools/build_diagnostics_test.py # diagnostic registry test binary
     python tools/build_bench.py           # host benchmark (timings, not pass/fail)
     python tools/build_verse_probe.py     # the Verse probe (asks the compiler a question)
     python tools/build_cooked_probe.py    # the cooked probe (asks a runtime host what an export sees)
@@ -531,38 +454,27 @@ FAIL fails its suite even when the binary exits 0.
 (`tools/godot_env.py`, `godot_isolated_env()` here): APPDATA and LOCALAPPDATA — the XDG_* trio off
 Windows, unexercised today — redirected into `bin/godot_home/`, so nothing here writes into the
 real `editor_settings-4.7.tres`, `projects.cfg` or the per-project shader/import caches. The
-directory is persistent across runs, not wiped per invocation, so a run does not pay Godot's
-first-run hardware detection and shader warmup on every layer; delete it by hand if it is ever
-suspected of holding something stale. An export layer still finds Devin's real export templates
-without copying them: `_isolate_export_templates` makes a Windows directory junction from the
-isolated profile's `export_templates/<version>` onto the real one, once, rather than rewriting any
-`export_presets.cfg` — which would mean an uncommitted line in `dodge-the-creeps/export_presets.cfg`
-on every run, the file this same section says is editor-owned. The **editor** layer below is the one
-exception with its own throwaway profile per run, because it has to pin a language and a debug port
-before the editor's first launch; it builds that profile with the same `godot_env.py` functions.
+directory persists across runs, so first-run warmup is paid once; delete it by hand if it is ever
+suspected of holding something stale. The export templates are reached through a directory
+junction onto the real ones (`_isolate_export_templates`) rather than by rewriting any
+`export_presets.cfg`. The **editor** layer is the one exception, with a throwaway profile per run
+that pins a language and a debug port before the editor's first launch.
 
 **units** — lexer, class-declaration scanner, module map, doc-markup converter, signature parser,
-the naming-rule differential test, the class-name lookup round trip, the GDScript converter, generator, `vm/`'s own cases
-(`verse_vm_test`) and `tools/check_host_constructions.py`'s scan of `host/Private`. No Godot, no UE. Every `build_*_test.py` compiles through `tools/unit_build.py`:
+the naming-rule differential test, the class-name lookup round trip, the diagnostic registry (both
+halves), the GDScript converter, generator, `vm/`'s own cases (`verse_vm_test`), `tests/claims`,
+`tests/test_records` and `tools/check_host_constructions.py`'s scan of `host/Private`. No Godot, no UE. Every `build_*_test.py` compiles through `tools/unit_build.py`:
 MSVC on Windows, `$CXX`, g++ or clang++ elsewhere, and the binary is named `.exe` everywhere because
 that is what `run_tests.py` runs. The converter's goldens are whole files
 (`tests/verse_gd_convert/fixtures/*.expected`); `bin/verse_gd_convert_test.exe --update` rewrites
 them, and the diff is the review.
 
-**`verse_bindings_test`** reads `tests/verse_bindings/naming_vectors.txt` -- (rule, input, expected)
-lines `gen_verse_api.py` writes from `extension_api.json` for every naming rule `src/verse_bindings.cpp`
-ports from this file's own (class, member, constant and enum names, `enumerator_names`, container
-property types, the predicate rule) -- and runs each through the matching C++ function. It is the
-differential test `docs/generated-bindings.md` §4 promised and §10.9 found never built: the C++ side
-has no JSON parser, so it cannot read `extension_api.json` itself, and the flat vectors file is what
-stands in for one.
-
-**`verse_api_lookup_test`** (docs/architecture-review.md item 3 step 5) sweeps every row of
-`verse_api::classes` through `verse_api_lookup_core.h`'s `verse_api_godot_name_for` and
-`verse_api_verse_name_for` -- the godot-cpp-free half of `src/verse_api_lookup.cpp`'s
-`verse_godot_class_for` and `mirrored_class` -- both directions, plus the sixteen math types and
-`rid` (B28: in `verse_api::classes`, not in ClassDB) and a name in neither table. The rest of
-`verse_api_lookup.cpp` calls `ClassDB` or otherwise needs a running Godot and has no unit test.
+**`verse_bindings_test`** holds `src/verse_bindings.cpp` to `gen_verse_api.py`'s naming rules
+through `tests/verse_bindings/naming_vectors.txt`, (rule, input, expected) lines the generator
+writes from `extension_api.json`, because the C++ side has no JSON parser. **`verse_api_lookup_test`**
+sweeps every row of `verse_api::classes` through `verse_api_lookup_core.h` in both directions, plus
+the math types, `rid` and a name in neither table; the rest of `verse_api_lookup.cpp` needs a
+running Godot.
 
 **abi** — `host_smoke`, the whole C ABI with no Godot, plus a `verse_cook` case that cooks
 `tests/host_smoke`'s fixtures and asserts the packages, the container, the sidecar and the
@@ -596,64 +508,44 @@ fails at generation time on any hand table row — `CONST_OVERRIDES`, `PREDICATE
 `METHOD_RENAMES` and the rest — that no longer names anything in `extension_api.json`, which
 `tests/verse_api_gen` exercises directly rather than through this layer. The third step is every
 `tests/verse_probe` fixture, held to a golden transcript under `tests/verse_probe/expected/` by
-`tools/run_probe_contracts.py` (item 4 step 1): `verse_probe` itself still asserts nothing, so this
-is what re-runs it and fails when the compiler or the VM answers differently than the recording did.
-Needs only the host, so it is skipped on the same UE-checkout test the other two steps use, plus
-`bin/verse_probe.exe`.
+`tools/run_probe_contracts.py`; it needs the host and `bin/verse_probe.exe`, and skips without them.
 
-A probe golden is normalized before it is written and before it is compared, the same way both
-times, so a worktree's own absolute path never shows up as a diff: the repo root and the engine
-checkout become `<repo>`/`<engine>`, a hex address becomes `<addr>` -- both `0x`-prefixed and a bare
-8-16 hex-digit token, which is what `AutoRTFM::FunctionMapLookupExhaustive`'s "Could not find
-function ADDRESS" prints -- a generation number becomes `<gen>`, and an engine or host C++ source
-location (`Foo.cpp:123`, `Bar.h:45:9`) has its line and column stripped to just `Foo.cpp`, because
-that number is the *host's* and any host edit shifts it; a `.verse` location is left exact, since
-that line is the fixture's own content; and `epoch N = X` becomes `epoch N = <epoch>`,
-`GetSecondsSinceEpoch()`'s wall-clock answer in `vm_natives_probe.verse`, unreachable before the
-`Warn(...)` fix below stopped that fixture fatal-erroring partway through. Two fixtures are excluded
-rather than recorded --
-`vm_tasks_subscribe_probe.verse` (several `Subscribe` handlers on one signal deliver in a different
-order every process) and `vm_values_probe.verse` (`CrossKind`'s false-string/empty-string map key
-lookup answers differently run to run) -- both measured nondeterministic across three runs of the
-same unchanged binary, with the reason recorded in `tools/run_probe_contracts.py`'s own manifest
-rather than papered over with a looser check.
-
-Two more are `known_defect`: `vm_objects_wideint_probe.verse` and `vm_values_false_probe.verse` each
-end the process in a UE **fatal error**, a VM-internal assertion in both cases -- which is a host
-defect, not a fact about the language. `vm_natives_probe.verse` used to be a third: `Warn(...)` raised
-a Verse runtime diagnostic from inside closed AutoRTFM code, because the delegate lambdas
-`VerseHost.cpp` bound for reporting a runtime error inherited its `AUTORTFM_DISABLE` from being
-written inline in `InitHost` and so had no closed clone at all -- fixed by moving them to ordinary
-functions that each open explicitly around the one Godot call they make. Each remaining fixture's
-golden is truncated at the first fatal line's own message; the callstack
-after it is the host's line numbers and addresses, not the fixture's answer, so it is neither
-recorded nor checked. A match still prints, but as a skip (`known defect: ...`) rather than `ok`, so
-it stays visible in every run rather than blending into the passes; a host fix that stops one
-crashing will fail its truncated comparison, which is the cue to give it back a full golden.
-`--record` rewrites every golden; run it after a change to `host/Verse` that is meant to change what
-a fixture answers.
+A probe golden is normalized the same way when it is written and when it is compared — repo and
+engine paths, hex addresses, generation numbers, the line of a C++ source location (a `.verse` one
+stays exact) and `vm_natives_probe.verse`'s wall-clock epoch — so no worktree or host edit shows up
+as a diff. `tools/run_probe_contracts.py`'s manifest names every fixture it does not simply compare,
+with the reason: two excluded as measured nondeterministic (`vm_tasks_subscribe_probe.verse`'s
+`Subscribe` delivery order, `vm_values_probe.verse`'s `CrossKind` map key), and two `known_defect`s
+(`vm_objects_wideint_probe.verse`, `vm_values_false_probe.verse`) whose VM-internal fatal error ends
+the process. A known defect's golden stops at the fatal line and a match prints as a skip, so a host
+fix that stops the crash fails the comparison, which is the cue to record a full one. `--record`
+rewrites every golden; run it after a change to `host/Verse` meant to change what a fixture answers.
+A lambda written inline in an `AUTORTFM_DISABLE` function inherits it and has no closed clone, so
+Verse cannot call it from closed code; `VerseHost.cpp`'s runtime-error delegates are ordinary
+functions for that reason (contract: probe/vm_natives_probe.verse).
 
 Beside the goldens run **the tripwires** (item 4 step 4, `docs/tripwires.md`), driven by
 `tools/run_tripwires.py`: four limitations of Epic's that the bridge works around -- an attribute
 takes one argument, Verse has no doc-comment syntax, `subscribable_event` is unreleased, nothing
 links uLangLSP -- each asserted to *still hold*, through the engine's own files, a probe fixture's
 refusal and `verse_host_unit --tripwires`. A FAIL line names the adapter to retire and the section
-that explains it; a check whose input is absent skips alone. CLAUDE.md cites each in the
-contract form with a `tripwire/` prefix, and `tests/claims` holds every id to a citation.
+that explains it; a check whose input is absent skips alone.
+
+**`tests/claims`** (units layer) holds this file to those layers: every `<!--fact:KEY-->N` number
+against `docs/facts.json`, which `gen_verse_api.py` rewrites on every run, and every
+`contract:` citation — `probe/`, `godot/` or `tripwire/` — against a golden, a `godot_contract`
+case or a tripwire, each tripwire cited at least once. Keep both forms with their sentence when editing.
 
 The fourth step is `tests/godot_contract` (item 4 step 3), driven by `tools/run_godot_contract.py`:
 a headless Godot project that loads no GDExtension at all — no `addons/`, no
 `extension_list.cfg` — so it needs only the Godot binary and never touches `verse_host.dll`, and is
-what to re-run on an `api_version` bump rather than the other three steps here. It asserts what
-plain GDScript can observe on its own (`Variant::booleanize()` of an empty Variant; B30's cyclic
-`ResourceLoader` load answering a null `Ref`, with `tools/run_godot_contract.py` also holding the
-run to B30's own printed sentence; the GDCLASS/GDSOFTCLASS split for `IP`, `NavigationServer2D` and
-`DisplayServer`, exercising the same singleton B21 warns about, safely, because this project never
-installs godot-cpp's instance-binding callback) plus two facts that live only in Godot's own C++ and
-need a Godot *source* checkout at `../godot` (skipped like the two table checks above when it is
-absent): the `ScriptLanguageExtensionProfilingInfo` stride trap's registration string, read from a
-fresh `--dump-extension-api` of the binary under test rather than the pinned copy in
-`godot-cpp/gdextension`, and the dictionary key `script_path` B29 says a newer Godot renamed.
+what to re-run on an `api_version` bump. It asserts what plain GDScript can observe (an empty
+Variant's `booleanize()`, B30's cyclic load and its printed sentence, the GDCLASS/GDSOFTCLASS split
+for `IP`, `NavigationServer2D` and `DisplayServer` — `IP` safely, because nothing installs
+godot-cpp's instance-binding callback) and, when a Godot *source* checkout is at `../godot`, two
+facts in Godot's own C++: the `ProfilingInfo` registration string, read from a fresh
+`--dump-extension-api` of the binary under test, and B29's `script_path` key. CLAUDE.md cites its
+cases as `godot/<case>`.
 
 **integration** — three headless Godot projects. `tests/integration` for behaviour;
 `tests/coverage_diagnostic` for the R-SCN-2 diagnostics, which is its own project because its one
@@ -683,7 +575,7 @@ rejection, Stage C's cannot-be-saved and Stage B's inert `@global_class`, each o
 and clearing once fixed) — the build copy proves the sentence and the line, the editor layer proves
 the panel draws both.
 
-**export-vm** and **web** are the same `tests/integration` on the interpreter, each from a
+**export-vm** (run by the export layer, after it) and **web** are the same `tests/integration` on the interpreter, each from a
 throwaway copy of the project (a committed `project.godot` is never touched; `override.cfg` is
 ignored while exporting). export-vm's copy sets `verse/runtime/backend="vm"`, is exported for
 Windows and held to the editor run's case list exactly as the export layer is. web's copy sets
@@ -704,19 +596,15 @@ it the test driver's `--verse-check` gate never opens and the game sits idle, wh
 **export** — exports `tests/integration` headless, asserts the *tree* it produced, then **launches
 it** in B14's environment (`scrubbed_game_env`: `UE_ROOT`, `VERSE_HOST_DLL` and `VERSE_COOKER`
 unset, `PATH` cut to Windows' own two directories, the export's directory as the working directory,
-and export-vm's launch likewise) and holds what its cases reported to **the editor run's own case list**, so a case that stops
-running in an export reads as a failure, by name, rather than as a shorter log. Every case the
-editor run printed must be printed by the export too, passing or skipped with a reason
-`test_cases.gd` marks editor-only (`EDITOR_ONLY`, or a reason beginning `editor only: `); a case the
-export prints and the editor did not fails as well. A block the export replaces with one skip is
-bracketed in the editor run by `_begin_editor_only(title)`/`_end_editor_only()`, and that one skip,
-named `title`, stands for every case inside it — the hover section is the one. The per-layer line
-to read is `[export] held to the editor run's N cases: ...`. The list comes from the integration
-layer when it ran in the same invocation, and otherwise **the editor integration project is run
-first** (its cases only, without host_fatal or the log assertions), so `--only export` is still
-compared rather than trusted. Adding a case needs no edit to `run_tests.py`. (Observed at 2026-09:
-577 editor cases, 519 passed, 0 failed, 11 skipped in the export.) It is the only layer that exercises the cooked path end to end; everything else compiles at
-startup. It needs more staged than the other layers do, because what it is exporting *is* them —
+and export-vm's launch likewise) and holds what its cases reported to **the editor run's own case
+list**: every case the editor run printed must be printed by the export too, passing or skipped with
+a reason `test_cases.gd` marks editor-only (`EDITOR_ONLY`, or a reason beginning `editor only: `),
+and a case only the export prints fails as well. A block the export replaces with one skip is
+bracketed by `_begin_editor_only(title)`/`_end_editor_only()` in the editor run. The line to read is
+`[export] held to the editor run's N cases: ...`; under `--only export` the editor integration
+project is run first to get the list. Adding a case needs no edit to `run_tests.py`. (Observed at
+2026-09: 577 editor cases, 519 passed, 0 failed, 11 skipped in the export.) It is the only layer
+that exercises the cooked path end to end. It needs more staged than the other layers do, because what it is exporting *is* them —
 `godot-verse.dll` (`scons target=template_release`), `verse_host_runtime.dll`
 (`build_host.py --target VerseHostRuntime`) and `tbbmalloc.dll` in `demo/addons` — and skips itself
 with the reason when one is missing. One assertion reads the `.pck` directly (`read_pck`, the format is Godot's
@@ -741,15 +629,11 @@ fails the run by the step's name rather than hanging. **A case that presses Play
 `play_scene`**, which refuses unless `main_run_args` carries `--headless` — Godot forwards none of
 its own command line to the game. A new group of cases is a function in `editor_cases.gd` awaited from
 `run()`; `run_tests.py` needs no edit. It loads the host, so it runs under the host token like
-integration. Its last group plays `tests/integration/debugger/debug_play.tscn` and drives Godot's
-own Debugger panel: gutter breakpoints, the stack panel, Stack Variables, the step buttons, Skip
-Breakpoints, a live toggle and the Profiler tab, on `scripts/debug_play.verse` beside a GDScript
-control. A lambda captures a local **by value**, so a `wait_until` condition gathers into an array
-or a dictionary it mutates rather than assigning one. Its step-6 group reads the inspector's
-controls for R-EXP-8's hints, `@icon` in the Scene dock and the create dialog (the only caller of
-`_get_class_icon_path`), the Node dock's signal list with a `<private>` one and a persisted
-connection, B3's "Make Function" stub through `script_add_function_request`, and R-EXP-7's
-autoload list through `EditorAutoloadSettings.autoload_add`. **A second session** (`editor host
+integration. Its groups reach the inspector, the docks, the create dialog, "Make Function" and the
+autoload list, and its last plays `tests/integration/debugger/debug_play.tscn` and drives Godot's
+own Debugger panel and Profiler tab on `scripts/debug_play.verse` beside a GDScript control. A
+lambda captures a local **by value**, so a `wait_until` condition gathers into an array or a
+dictionary it mutates rather than assigning one. **A second session** (`editor host
 fatal`) reopens the same copy with `VERSE_HOST_TEST_FATAL=check` in the editor's own environment
 and `--verse-editor-fatal`, and runs B43 alone: the game Play starts dies, the record is written,
 the editor reports it when Play ends and survives, and nothing repeats on the next Play. Each
@@ -831,8 +715,11 @@ The binaries still run standalone, which is what to reach for when bisecting one
     bin/verse_bindings_test.exe [naming_vectors.txt path]  # defaults to tests/verse_bindings/naming_vectors.txt
     bin/verse_api_lookup_test.exe
     bin/verse_gd_convert_test.exe
+    bin/verse_diagnostics_test.exe
     python tests/verse_api_gen/test_gen_verse_api.py
     python tests/test_records/test_test_records.py
+    python tests/verse_diagnostics/test_verse_diagnostics.py
+    python tests/claims/test_claims.py
 
 ### Instruments, which are not tests
 
@@ -843,11 +730,9 @@ tuple-parameter callback?") something you *run* rather than something you read o
 `SemanticAnalyzer.cpp`. Six of Phase 4's design decisions and all twelve of Phase 5 §2's answers came
 out of it; the fixtures beside `example.verse` are kept so every claim can be re-run rather
 than recalled. `async_reject.verse` compiles **nothing** on purpose — it is the file of refusals, and
-the *text* of each refusal is its result. **The `contract` layer is what asserts them now**
-(`tools/run_probe_contracts.py`, docs/architecture-review.md item 4 step 1): every fixture's
-transcript is held to a golden recording, so a fixture can still be read by hand exactly as before,
-but an engine drop that changes what one answers now fails a test rather than going unnoticed. Take
-the path as absolute; the probe resolves nothing relative to `bin/`:
+the *text* of each refusal is its result. The `contract` layer holds every fixture's transcript to
+its golden, so an engine drop that changes an answer fails a test. Take the path as absolute; the
+probe resolves nothing relative to `bin/`:
 
     bin/verse_probe.exe <engine>/Engine/Binaries/Win64/verse_host.dll <engine>/Engine \
         tests/verse_probe/example.verse --class example
@@ -995,15 +880,12 @@ layer, and is skipped there when `../godot` is absent.
   another, exported values carried across by hand.
 - **`vh_init` gets one attempt per process.** It boots `FEngineLoop` and the host module never
   unloads, so a second call runs `PreInit` again and asserts. `VerseRuntime` remembers a refusal and
-  answers it without re-entering — without which a stamp mismatch, which is meant to be a sentence,
-  took the game down on the second script. `vh_shutdown` tears the engine down; the DLL stays
+  answers it without re-entering, so a stamp mismatch stays a sentence. `vh_shutdown` tears the engine down; the DLL stays
   resident.
 - **The host's build stamp is a digest of the staged host sources**, so a change under `host/` or
   to `include/verse_host_abi.h` invalidates all three host binaries and a commit that touched
-  neither — a doc commit — invalidates nothing. It used to key on `HEAD`, which both over- and
-  under-reported: every doc commit relinked three targets and refused every cook taken before it,
-  while an uncommitted edit to `host/` left a stale cook loadable. Rebuild all three after touching
-  the host. `build_host.py` and `scons` stage different halves of
+  neither — a doc commit — invalidates nothing, while an uncommitted edit to `host/` does. Rebuild
+  all three after touching the host. `build_host.py` and `scons` stage different halves of
   `addons/godot-verse` — the host and the library — so both have to run before an export is
   trustworthy. `build_host.py` refreshes every copy of the addon, not just `demo/`'s.
 - **Loading the host moves the process working directory, and the bridge moves it back.** The
@@ -1037,8 +919,7 @@ layer, and is skipped there when `../godot` is absent.
   `vh_has_class`, the method, signal, static and member lists, abstractness, the export list with
   its Reject reasons and every export's declared default — answers from the **snapshot** the last
   analysis left (`FindSnapshotClass`; a buffer that does not parse leaves the last good description
-  in place, marked `Stale`), and 0.0 ms during one is the whole point: ~22 of these used to begin with a
-  `std::thread::join` and cost the main thread 1.7 s apiece. The three that resolve a *position*
+  in place, marked `Stale`), and 0.0 ms during one is the whole point. The three that resolve a *position*
   cannot be snapshotted, because a position resolves against the AST the worker is rebuilding:
   `vh_lookup_symbol`, `vh_complete_symbol` and `vh_signature_at` answer `VH_ERR_NOT_ANALYSED` while
   one runs, and the consumer's recourse is to queue that buffer and ask again. **Only the entry points
@@ -1048,10 +929,9 @@ layer, and is skipped there when `../godot` is absent.
   `FGodotSnapshotInjection` — uLang's `IPostSemAnalysisInjection`, which runs after the last
   semantic pass and before IR generation — so every class-describing read answers about the
   generation the moment `vh_compile_project` returns. What a build does *not* leave is a program a
-  *position* can be resolved against: IR generation hangs an IR package off every module. A build
-  used to end with a whole analysis-only pass to put one back, which was ~770 ms of the ~1.6 s
-  between Play and the game; the consumer queues one from `_frame` instead
-  (`VerseProjectState::build_project`), and `probe_hover`, which has no frames, flushes it itself.
+  *position* can be resolved against: IR generation hangs an IR package off every module. The
+  consumer queues an analysis from `_frame` after a build (`VerseProjectState::build_project`), and
+  `probe_hover`, which has no frames, flushes it itself.
   **A hook of uLang's own is the only place a code-generating build is still describable** — add
   anything that needs the build's AST there, not after `BuildAll`.
 - **Ask a definition's *prototype* where it was written, what it says and what it is called.**
@@ -1071,15 +951,12 @@ layer, and is skipped there when `../godot` is absent.
   host holds: those definitions come from the real engine files, loci and attributes intact.
 - **Nothing may read declared types off the live semantic program.** IR generation *rewrites* the
   program the build was holding: a method answering a struct gets a coerced override generated
-  beside it, decorating to the same name with one synthetic `Argument` parameter. `InstanceCall`
-  walked the class live, found a one-parameter signature for `_GetMinimumSize()`, refused the call
-  as `VH_ERR_NOT_FOUND`, and `Control.get_minimum_size()` answered Godot's own default with nothing
-  said anywhere. Declared types come from the snapshot (`RecordedTypes`), which is the same table a
-  runtime host reads out of the cook.
-- **A consumer that begins an analysis must poll it to completion.** Nothing else reaps one:
-  `BeginBackgroundCheck` answers `AnalysisNotReaped` (`VH_ERR_STATE`) until `vh_check_project_poll`
-  has delivered the last one, and a wait that joins the worker does not deliver it. The bench relied
-  on a later wait to do the reaping and refused forever once the waits were gone.
+  beside it, decorating to the same name with one synthetic `Argument` parameter, so a live walk
+  refuses `_GetMinimumSize()` and Godot's default answers silently. Declared types come from the
+  snapshot (`RecordedTypes`), the same table a runtime host reads out of the cook.
+- **A consumer that begins an analysis must poll it to completion**: `BeginBackgroundCheck` answers
+  `AnalysisNotReaped` (`VH_ERR_STATE`) until `vh_check_project_poll` has delivered the last one, and
+  a wait that joins the worker does not deliver it.
 - **The mirror is read from its digest after the first successful build**, which is half the
   per-keystroke cost, and a digest drops exactly two things: every definition's **file and line**
   (a digest is one synthetic snippet at a path no file is ever written to) and
@@ -1087,12 +964,12 @@ layer, and is skipped there when `../godot` is absent.
   `<getter>`/`<setter>` attributes the analyzer reads it off). A side table recorded during the
   first build's own semantic analysis — the last program that reads the mirror's own files, reached
   through `FGodotSnapshotInjection` — restores both,
-  keyed by qualified name plus the function type's code, because `GodotMath.native.verse` declares
-  eight two-parameter `operator'+'` and a verse path alone is ambiguous. **Anything new that reads a
-  mirror definition's location or accessor flag must go through that table** -- `FillLocation`,
-  `OwnerNameOf` and `IsClassVarAccessor` in `HostEngineAdapters.h`, whose row type is opaque -- `GetScopeName()`
-  included: from a digest a top-level definition's Owner and its path are *both* the digest path,
-  so an `Owner == DeclaredIn` test keeps passing while both are wrong.
+  keyed by qualified name plus the function type's code (`GodotMath.native.verse` declares eight
+  two-parameter `operator'+'`). A mirror definition's location, owner and accessor flag are read
+  through `FillLocation`, `OwnerNameOf` and `IsClassVarAccessor` in `HostEngineAdapters.h`, whose
+  row type is opaque, and never off the definition — `GetScopeName()` included: from a digest a
+  top-level definition's Owner and its path are *both* the digest path, so an `Owner == DeclaredIn`
+  test keeps passing while both are wrong.
 - **A build after an analysis runs neither of the phases a build spends its time in.** The program
   a clean analysis leaves *is* the next generation, so `vh_compile_project` generates code straight
   from it — 68 ms against 694. Three things make that legal and each is load-bearing. A build
@@ -1107,10 +984,9 @@ layer, and is skipped there when `../godot` is absent.
   gates read from the CVars BuildAll reads them from. Its tail is *not* reproduced, and does not
   need to be: everything in it is fed by an injection that runs during semantic analysis, which
   this path does not run.
-- **Only the generation's own package may be forced back to Source after a build.** The attribute
-  package used to be too, and that alone made the reuse above impossible: the assembler publishes
-  every Source package the program carries, and publishing one twice asserts inside
-  `AsyncLoading2.cpp` (`LoaderImport`) rather than reporting anything. It is safe to let it go
+- **Only the generation's own package may be forced back to Source after a build**: the assembler
+  publishes every Source package the program carries, and publishing one twice asserts inside
+  `AsyncLoading2.cpp` (`LoaderImport`) rather than reporting anything. It is safe to let the attribute package go
   External because a build generates a digest for every Source package it compiles, this one
   included — 2175 bytes, which `VH_TRACE_ANALYSIS` prints beside the package — so `@export` keeps
   resolving out of the digest.
@@ -1135,22 +1011,17 @@ layer, and is skipped there when `../godot` is absent.
   (**68 ms** when an analysis has landed since the last edit),
   and reads that cost 1.7 s during an analysis cost 0.0 ms. The four commits `dcd517e`, `40d72f4`,
   `8bbba32` and `1469dc1` are the record — that work has no design document, by decision.
-- **Adding `@tool` to an existing script no longer needs the scene reloaded.** Editing a live
-  `@tool` script takes effect on save, and so does adding `@tool` to a script that did not have it
-  — `by-hand-findings.md` B8, automated by the `editor` layer's `_b8` cases, which read a
-  notification only a real instance runs. The old reload workaround still works too and is
-  asserted beside it.
+- **Editing a live `@tool` script, or adding `@tool` to one, takes effect on save** with no scene
+  reload (B8; the `editor` layer's `_b8` cases).
 
 ### Transactions, effects and raising
 
 - **Every Godot callback goes through `AutoRTFM::Open`,** and writes defer to `AutoRTFM::OnCommit`.
   The GDExtension was never instrumented by the AutoRTFM compiler, so calling into it from closed
   Verse code is a fatal "could not find function" at runtime, not a link error.
-- **Calling *into* the VM must be open too.** `vh_instance_call` invokes through
-  `VFunction::Invoke` inside an `AutoRTFM::Open` nested in its transaction, which is what
-  `TVerseFunction::operator()` does for the same reason: a Verse runtime error raised from closed
-  code trips `AutoRTFM::UnreachableIfClosed` in `FContext::RaiseVerseRuntimeError` and takes the
-  process down instead of unwinding. `FVerseEntry` `check`s it on every entry.
+- **Calling *into* the VM must be open too**, as `TVerseFunction::operator()` is: a Verse runtime
+  error raised from closed code trips `AutoRTFM::UnreachableIfClosed` and takes the process down
+  instead of unwinding. `FVerseEntry` `check`s it on every entry.
 - **`Verse::Stm::OnRollback` does nothing here.** It is the Solaris *interpreter's* STM and
   `VerseStm.h` says "Noop if StmActive() returns false". The mechanism that works from this bridge is
   `AutoRTFM::OnAbort<AutoRTFM::EOpenBehavior::SameAsClosed>` — `SameAsClosed` is load-bearing,
@@ -1160,13 +1031,11 @@ layer, and is skipped there when `../godot` is absent.
   A failure at any depth drops the deferred writes; a read does not see a write the same computation
   just made; a raise halts only the call that raised.
 - **A raise terminates the *active* content scope, and `EnterVM` then declines to run anything in
-  it** — silently, which is why this was invisible for a phase. That scope is the raising
-  **instance's** (R-ASYNC-4), so the blast radius is that node's suspended work: another instance's
-  next call runs, and so does the raising instance's, because a terminated scope is *replaced* at the
-  next call rather than un-terminated at the next tick. Every entry into the VM goes through
-  `EnterVerse` or `EnterVerseOn`, which is where the scope handling lives — never call
-  `Context.EnterVM` directly. `VH_ERR_HALTED` is what an execution entry point answers when the body
-  genuinely did not run, which is now rare.
+  it** — silently. That scope is the raising **instance's** (R-ASYNC-4), so the blast radius is that
+  node's suspended work, and a terminated scope is *replaced* at the next call. That handling lives
+  in `EnterVerse` (`HostVerseEntry.h`) and `EnterVerseOn`, so every entry goes through one of them
+  and never `Context.EnterVM` directly. `VH_ERR_HALTED` is what an execution entry point answers
+  when the body genuinely did not run.
 - **An explicit effect specifier narrows, and narrowing is contagious downward.** A function with no
   specifier carries the *default* set, which is wider than `<transacts>` — it contains
   `no_rollback`. So a `<transacts>` function may not call a specifier-less one, and anything that
@@ -1177,10 +1046,9 @@ layer, and is skipped there when `../godot` is absent.
   starts the cascade** — a const-and-answering method is `<reads>` — but a helper that writes still
   needs the word, and effects are *contravariant*, so a `<reads>` callee satisfies a `<transacts>`
   caller and a `<transacts>` function type alike.
-- **The bridge annotates a diagnostic only where the bridge is what the author is confused by.**
-  `explain_effect_errors` is gone: it keyed on the code and the callee's package and never on which
-  effect had been refused, so a `suspends` refusal took the `transacts` branch and gave the opposite
-  of correct advice (`by-hand-findings.md` B7). The compiler's own text stands.
+- **The bridge annotates a diagnostic only where the bridge is what the author is confused by**;
+  the compiler's own text stands, and an appender that keyed on the code rather than the refused
+  effect gave the opposite of correct advice (`by-hand-findings.md` B7).
 - **A method's effect is Godot's `is_const`.** <!--fact:mirror.reads_methods-->4019 mirror methods carry `<reads>`, and the test is
   `const` **and answering a value** — Godot's `const` means "does not mutate the C++ object", so the
   <!--fact:mirror.const_void_methods-->38 const-and-void methods are `OS.set_environment`, `CanvasItem.draw_string` and 36 more that
@@ -1188,9 +1056,7 @@ layer, and is skipped there when `../godot` is absent.
   the two have to move together.
 - **The dynamic route has a `<reads>` twin too, and its honesty is the caller's.** `object.Call`
   and `Callv` are generated from Godot's own `call` and `callv`, which are not const, so both are
-  `<transacts>` — which meant R-INT-2's escape hatch could not be used from a `<reads>` function
-  at all, and reading one value off a GDScript node pulled the specifier onto every caller above
-  it. `CallConst` and `CallvConst` in `GodotApi.native.verse` are the twins: same C++ call, six
+  `<transacts>`. `CallConst` and `CallvConst` in `GodotApi.native.verse` are the twins: same C++ call, six
   arities plus the `godot_array` spelling, hand-written because Verse cannot reopen the generated
   `object`. **Nothing checks that the method named is const** — for a mirrored method the
   generator reads Godot's `is_const` and for a generated binding it reads `METHOD_FLAG_CONST`
@@ -1289,16 +1155,13 @@ layer, and is skipped there when `../godot` is absent.
 - **An `@export_signal` event member holds one Godot connection for the instance's life**, because a
   bare `event(t)`'s `Await` is Verse's own native and offers no hook to connect from. It is made at
   the **first entry into the instance** (`EnsureEventConnections`, from `InstanceCall`) and cannot be
-  made earlier: `vh_instantiate` runs before the consumer installs the script instance, and
-  `Object::has_signal` answers off the installed instance, so Godot refuses with *"Attempt to connect
-  nonexistent signal"* — as it does at the end of the consumer's `create()` too, since the object
-  does not hold the instance until `_instance_create` has returned. The failure is silent in the
-  worst shape (registers, emits, never delivers back, every await hangs), so `ConnectDelivery`'s
-  refusal is reported. Every `signal(t)` — declared or engine accessor — keeps connect-while-awaiting, and
-  `tests/integration` asserts the connection count returns to zero on both sides of a `race`.
-  `GEventBindingIds` is what an event has instead of `vh_signal`'s `Id` field; one function,
-  `ReleaseEventBindings` (`HostSignals.h`), is the only release of a binding's row, callback,
-  reference and strong pointer.
+  made earlier: `Object::has_signal` answers off the installed script instance, which the object
+  does not hold until `_instance_create` has returned, so Godot refuses with *"Attempt to connect
+  nonexistent signal"*. That failure is silent in the worst shape (registers, emits, never delivers
+  back, every await hangs), so `ConnectDelivery`'s refusal is reported. Every `signal(t)` keeps
+  connect-while-awaiting, and `tests/integration` asserts the connection count returns to zero on
+  both sides of a `race`. `ReleaseEventBindings` (`HostSignals.h`) is the only release of a
+  binding's row, callback, reference and strong pointer.
 - Verse's own `signalable` cannot be implemented here — its `Signal` is `no_rollback` and every
   Godot callback runs in a transaction. **`listenable` can and is**: it is `awaitable` +
   `subscribable` and does *not* extend `signalable`, so `signal(t)` implements it and a declared
@@ -1313,9 +1176,8 @@ layer, and is skipped there when `../godot` is absent.
   `NewDefaultsObject`. Its members' initializers run in full, so a class with `var Held:node2d =
   node2d{}` minted a real node per exporting class *per analysis* — a leak on the per-keystroke
   path, since a Verse-minted node is deliberately never freed.
-- **`node2d{}` is a live Node2D**, not the handle of 0 it was before 4b. The "reach through a handle
-  of 0" trick three fixtures used to spell a deliberate raise is gone; the replacement is
-  `viewport{}` — an archetype of a class Godot will not instantiate, which raises naming the class.
+- **`node2d{}` is a live Node2D.** A deliberate raise in a fixture is `viewport{}` — an archetype of
+  a class Godot will not instantiate, which raises naming the class.
 - **`godot_array{}` and `dictionary{}` are live, empty Godot containers**, and the mechanism is not
   `node2d{}`'s. A minting `block:` clause is unwritable for a container: a `var` member needs
   `allocates` and an assignment is `transacts` outright, so the class would be `transacts` and would
@@ -1504,30 +1366,14 @@ layer, and is skipped there when `../godot` is absent.
   names and the four native types first. Measured in `tests/verse_probe/variant_any_probe.verse`'s
   header (contract: probe/variant_any_probe.verse); three builds to find, because only the runtime compiler objects.
 
-  **The mechanism, read out of the engine.** Verse's own naming is case-*sensitive* —
-  `CSymbolTable::FindOrAddInternal` compares bytes (`uLangCore/Private/uLang/Common/Text/Symbol.cpp`
-  :88-122) — and so is the native-thunk lookup, `VNativeProcedure::SetThunk` over a `VNameValueMap`
-  that defaults to `ESearchCase::CaseSensitive` (`VVMNativeProcedure.cpp:53-72`,
-  `VVMNameValueMap.h:74-90`). That is why function-versus-function is fine. What is *not*
-  case-sensitive is **`FName`, unconditionally** — "case-insensitive, but case-preserving"
-  (`NameTypes.h:629`), every `operator==` comparing only `ComparisonIndex` — and a Verse **type** in
-  a VNI package is promoted to a real UObject keyed by one: `NewObject<UVerseStruct>(UEPackage,
-  FName(UEName), ...)` (`VVMClass.cpp:1016-1047`). So the type's identity folds case where the
-  function's does not, and they meet.
-  **Epic knows this hazard and used to diagnose it.** The legacy BPVM assembler's
-  `FUObjectGenerator::FindOrCreateUObject` (`VerseUObjectGenerator.inl:44-116`) does a
-  case-insensitive package-scoped `FindObject` and reports *"Found existing type '%s' that is
-  already being created this compile. Please rename the %s to be case insensitive unique."* through
-  `AppendGlitch`. The VerseVM path has **no** equivalent check, and the adjacent bind failure is
-  reported by `UE_LOGF(..., Error, ...)` from a `void` `TryBindVniType`/`TryBindVniModule` whose
-  callers wrap it in `ensure()` and drop the result (`VerseVMEngineEnvironment.cpp:111-125`) — so
-  nothing reaches `uLang::Diagnostics`, which is what the ABI's diagnostic callback listens to.
-  **That is the whole reason it is silent**, and it makes this a diagnostic regression carried over
-  from the BPVM→VerseVM migration rather than a rule anyone chose.
-  Verified against the engine sources except one link: what the *function's* colliding registration
-  is in the current pipeline was not found, only that the collision happens. There is no escape
-  hatch — `cpp_name` overrides a **type**'s C++ identity (`DefinitionInfo.cpp:195-205`) and has no
-  function equivalent — so renaming is the fix, not a workaround.
+  **The mechanism, read out of the engine:** Verse's symbols and the native-thunk lookup are
+  case-sensitive (`Symbol.cpp:88-122`, `VVMNameValueMap.h:74-90`), but a Verse **type** in a VNI
+  package becomes a UObject keyed by an `FName`, which never is (`NameTypes.h:629`,
+  `VVMClass.cpp:1016-1047`). The legacy BPVM assembler diagnosed the collision
+  (`VerseUObjectGenerator.inl:44-116`); the VerseVM path's bind failure is a `UE_LOGF` inside an
+  `ensure()` whose result is dropped (`VerseVMEngineEnvironment.cpp:111-125`), so nothing reaches
+  `uLang::Diagnostics`. What the *function*'s colliding registration is was not found. `cpp_name`
+  renames only a type, so renaming the function is the fix.
 - **Every top-level name must be unique within its module.** A directory is a module only if it
   carries a `<name>.vmodule` marker, and the **marker names the module**, not the directory —
   `res://my-stuff/gameplay.vmodule` is module `gameplay`. Unmarked directories are organisational:
@@ -1538,9 +1384,8 @@ layer, and is skipped there when `../godot` is absent.
   with no class at all is a library file (R-LANG-6). Every `ClassNameUtf8` in the ABI is
   module-qualified: `player` at the root, `gameplay/player` in a module.
   `src/verse_module_map.{h,cpp}` is the whole rule, and it is a unit test away from Godot.
-  **Anything that asks the host for a class must pass the module-qualified name** — `_validate` and
-  the two warning passes each asked by bare stem, and a script under a marker got no method outline
-  and no warnings (`by-hand-findings.md` B4).
+  **Anything that asks the host for a class must pass the module-qualified name**; a bare stem finds
+  nothing for a script under a marker (`by-hand-findings.md` B4).
 - **A virtual is spelled the way Godot spells it — `_Ready`, not `Ready`.** `phase-4-design.md` §7.1
   counts the eight *signal* collisions that decided it. `_notification` is in no part of
   `extension_api.json`, and neither are `_get`, `_set`, `_get_property_list` or
@@ -1629,12 +1474,10 @@ layer, and is skipped there when `../godot` is absent.
   because a tuple, a map, a class of the author's own and an empty array say nothing; it reaches
   int, float, logic, string, a Godot object and the 16 math structs. The five lanes that *share* a
   Verse type — StringName and NodePath with `string`, two integer packings, one float packing —
-  can never be what it picks, and are what the named builders are still for. **`rid` used to be a
-  sixth and is not**: it is its own struct now, names its own class, and `MakeVariant[SomeRid]`
-  reaches it through its own arm in the host — a scalar under `VH_VARIANT_RID` rather than a math
-  type's component array. It also retires
-  `phase-4b-design.md` §15's claim that module-level overloading was to blame —
-  `GodotMath.native.verse` overloads `Abs` across nine receiver types.
+  can never be what it picks, and are what the named builders are still for. `rid` is its own
+  struct, so `MakeVariant[SomeRid]` reaches `VH_VARIANT_RID`. Module-level overloading is not to
+  blame, whatever `phase-4b-design.md` §15 says: `GodotMath.native.verse` overloads `Abs` across
+  nine receiver types.
 - **A reader is spelled on the receiver: `V.AsInt[]`, not `AsInt[V]`.** It is an extension method,
   because `variant` is hand-written and the readers are generated and Verse cannot reopen a class,
   and `<decides>` survives the desugaring. Each lane also keeps a **non-public** `VhUnpack<GodotType>`
@@ -1701,8 +1544,7 @@ layer, and is skipped there when `../godot` is absent.
 - **A bare `logic` in an `if` clause list is evaluated and thrown away.** `if (X)` alone is refused
   — *"Expected an expression that can fail in the 'if' condition clause"* — but as soon as *some*
   clause can fail, a `logic`-valued one beside it is accepted and **not tested**, so the body runs
-  either way with no diagnostic. Measured in `tests/verse_probe` after it produced a passing test
-  that was counting twice (`by-hand-findings.md` B12). **The mirror no longer hands you one**: a
+  either way with no diagnostic (`by-hand-findings.md` B12). **The mirror does not hand you one**: a
   Godot predicate is `<decides>`, so `Button.IsPressed[]` is the only spelling and the brackets
   cannot be forgotten. The trap is still live for a `logic` from anywhere else — a `var` of your
   own, a virtual's return, an accessor with a `set_` twin — and `X?` is what tests one.
@@ -1732,14 +1574,11 @@ layer, and is skipped there when `../godot` is absent.
 
 ## What cannot be tested from here
 
-`docs/editor-test-audit.md` found that a headless editor (`godot --headless --editor`) reaches
-almost everything below that used to need a person or a window, and the `editor`, `debug-wire` and
-`multiplayer` layers (`by-hand-findings.md`'s "What is still checked by hand") are what runs it
-now. What is left:
+A headless editor (`godot --headless --editor`) reaches almost everything that needs a person or a
+window (`docs/editor-test-audit.md`), and the `editor`, `debug-wire` and `multiplayer` layers run
+it. What is left is `by-hand-findings.md`'s "What is still checked by hand":
 
-- **`_CanDropData`** is the one Godot virtual that has never been exercised. (`_HasPoint` was in the
-  same category and is now a case in `tests/integration`, because the engine asks it unprompted as
-  soon as `Input.parse_input_event` supplies a click.) Not visual, but unreachable headless: a
+- **`_CanDropData`** (B11) is the one Godot virtual that has never been exercised. Not visual, but unreachable headless: a
   native window's mouse-enter event is what sets the drag target, and a headless display server
   never sends one.
 - **The tooltip's and the class page's rendering, and the script editor's colour tiers read side by
@@ -1752,9 +1591,8 @@ now. What is left:
 
 Everything from the ABI inward still has `host_smoke` cases, whose `debug_probe.verse` line numbers
 are part of the test — a member declared above line 22 moves an armed breakpoint. The consumer half
-— `EngineDebugger` and the editor UI — is `_make_function`, `_get_class_icon_path`, the debugger and
-profiler panels, the inspector, the docks and Play, and none of those are on this list any more:
-they are the `editor` and `debug-wire` layers' own cases, named in `by-hand-findings.md`.
+— `_make_function`, `_get_class_icon_path`, the debugger and profiler panels, the inspector, the
+docks and Play — is the `editor` and `debug-wire` layers' cases.
 
 Out by decision, so that a gap does not read as an oversight: Linux, macOS, Android and iOS as
 supported platforms — CI compiles them, and only Windows x86_64 and web are supported and
@@ -1774,9 +1612,7 @@ that a release process needs a decision before Phase 8.
   `src/` or `vm/` authors -- a push_error, a `_validate` warning, an export message, a runtime raise
   -- is a `VERSE_DIAG` row in `include/verse_diagnostics.def` and is printed through
   `verse_diag_text` (vm/, and host/ for the VG21xx and VG40xx raises it shares with vm/) or
-  `verse_diagnostic` (src/), which put its `VGnnnn: ` ID in front. `build_host.py` stages the
-  registry into the host's `Public/` beside the ABI header.
-  `docs/diagnostics.md` is the list an author reads and the numbering scheme, and
-  `tests/verse_diagnostics/test_verse_diagnostics.py` holds the registry, the code, the tests and
-  that page to one another. Assert with `diag("VG1002", "Maybe")` in `tools/run_tests.py` -- the ID
+  `verse_diagnostic` (src/), which put its `VGnnnn: ` ID in front. `docs/diagnostics.md` is the
+  list an author reads and the numbering scheme, and `tests/verse_diagnostics/test_verse_diagnostics.py`
+  holds the registry, the code, the tests and that page to one another. Assert with `diag("VG1002", "Maybe")` in `tools/run_tests.py` -- the ID
   and the values the message was about, never its wording. The compiler's own text carries no ID.
